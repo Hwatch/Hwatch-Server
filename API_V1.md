@@ -1,0 +1,356 @@
+# HWatch HTTP API V1
+
+本文档描述当前 HWatch Go 服务供 Web、Android 和其他客户端使用的接口。`V1` 是本接口文档的版本；当前路由仍使用 `/api/...`，没有 `/api/v1` 前缀。
+
+## 1. 连接约定
+
+- 默认地址：`http://<NAS-IP>:8787`
+- API 数据：`application/json; charset=utf-8`
+- 时间：服务端使用 RFC 3339 UTC，例如 `2026-09-11T16:39:37Z`。客户端应按 `dashboard.timezone` 转换后显示。
+- 成功状态通常为 `200`、`201` 或 `202`。
+- 错误格式：`{"error":"错误说明"}`。
+- 当前版本没有登录认证，客户端只应连接可信局域网中的实例，不应直接暴露到公网。
+- ID 和订阅 slug 可能包含冒号，拼接路径时必须进行 URL 编码。
+
+示例：
+
+```text
+rule34video:3144962 -> rule34video%3A3144962
+```
+
+## 2. 通用数据结构
+
+### Video
+
+```json
+{
+  "video_id": "rule34video:3144962",
+  "subscription_slug": "rule34video:akt",
+  "title": "Original title",
+  "translated_title": "中文标题",
+  "translated_tags": ["标签一", "标签二"],
+  "translation_language": "zh-CN",
+  "page_url": "https://rule34video.com/video/3144962/example/",
+  "published_at": "2026-06-10T00:00:00Z",
+  "discovered_at": "2026-09-11T16:39:37Z",
+  "downloaded_at": "2026-09-11T18:00:00Z",
+  "updated_at": "2026-09-11T18:00:00Z",
+  "thumbnail_url": "https://.../3.jpg",
+  "views": 63132,
+  "duration_seconds": 171,
+  "creator_name": "Akt",
+  "creator_url": "https://rule34video.com/models/akt/",
+  "creator_avatar": "https://.../avatar.png",
+  "uploader_name": "uploader",
+  "uploader_url": "https://...",
+  "uploader_avatar": "https://...",
+  "categories": [{"Name":"MMD","URL":"https://...","Image":"https://..."}],
+  "tags": [{"Name":"sound","URL":"https://..."}],
+  "external_links": [],
+  "status": "completed",
+  "aria_gid": "0123456789abcdef",
+  "file_path": "/media/...mp4",
+  "plex_path": "/media/...mp4",
+  "bytes_downloaded": 123456,
+  "total_bytes": 123456,
+  "download_speed": 0,
+  "connections": 0,
+  "video_codec": "h264",
+  "audio_codec": "aac",
+  "container": "mp4",
+  "width": 1920,
+  "height": 1080,
+  "frame_rate": 30,
+  "bit_rate": 4000000,
+  "bit_depth": 8,
+  "media_probed_at": "2026-09-11T18:00:10Z",
+  "transcode_status": "not_requested",
+  "plex_season": 1,
+  "plex_episode": 398,
+  "error": ""
+}
+```
+
+视频状态：
+
+- `discovered`：已发现、尚未选择下载
+- `queued`：持久队列中，正在解析下载源
+- `waiting`：已提交 aria2，等待下载
+- `active`：正在下载
+- `paused`：已暂停
+- `failed`：失败，可重试
+- `completed`：下载完成，可以播放
+
+客户端不要假设状态只会单向变化。429 自动恢复会把任务从 `failed` 或 aria2 错误状态重新变为 `queued`。
+
+### Subscription
+
+```json
+{
+  "id": 1,
+  "slug": "rule34video:akt",
+  "platform": "rule34video",
+  "subscription_type": "creator",
+  "source_id": "akt",
+  "name": "Akt",
+  "url": "https://rule34video.com/models/akt/",
+  "avatar_url": "https://.../avatar.png",
+  "external_links": [],
+  "enabled": true,
+  "baseline_complete": true,
+  "created_at": "2026-09-11T15:32:48Z",
+  "last_checked_at": "2026-09-11T16:13:04Z",
+  "last_error": "",
+  "progress": {
+    "total": 737,
+    "completed": 583,
+    "active": 2,
+    "waiting": 152,
+    "failed": 0,
+    "bytes_downloaded": 1000,
+    "total_bytes": 2000
+  }
+}
+```
+
+## 3. 概览
+
+### `GET /api/dashboard`
+
+查询参数：
+
+- `language`：译文语言，默认 `zh-CN`
+
+返回订阅、最近入库、最近播放、下载统计、流量、磁盘和时区。
+
+重要字段：
+
+```json
+{
+  "subscriptions": [],
+  "videos": [],
+  "recently_played": [],
+  "counts": {"videos":874,"active":2,"waiting":100,"completed":600,"discovered":172},
+  "traffic_bytes": 123,
+  "library_bytes": 456,
+  "current_download_speed": 789,
+  "current_connections": 8,
+  "disk_total": 965554995200,
+  "disk_free": 273582915584,
+  "aria2_online": true,
+  "timezone": "Asia/Shanghai"
+}
+```
+
+## 4. 影视库与搜索
+
+### `GET /api/videos`
+
+分页响应：
+
+```json
+{"items":[],"total":0,"limit":48,"offset":0}
+```
+
+查询参数：
+
+| 参数 | 说明 |
+|---|---|
+| `limit` | 1–200，默认 48 |
+| `offset` | 分页偏移 |
+| `status` | 影视库传 `completed`；未下载页传 `discovered` |
+| `language` | 当前译文语言 |
+| `q` | 标题、译文、作者、上传者、分类、标签或 ID |
+| `scope` | `all`、`translated`、`original` |
+| `creator` | 作者精确名称或订阅 slug |
+| `tags` | 逗号分隔的包含标签 |
+| `tag_mode` | `all`（AND）或 `any`（OR） |
+| `exclude_tags` | 逗号分隔的排除标签 |
+| `codec` | 视频编码，例如 `h264`、`hevc` |
+| `min_height` | 最低高度，例如 1080 |
+| `sort` | 见下方白名单 |
+| `order` | `asc` 或 `desc` |
+
+排序白名单：`downloaded_at`、`published_at`、`views`、`duration`、`size`、`resolution`、`bit_rate`、`title`、`recent_played`、`play_count`。
+
+示例：在简中译文和原文中搜索，同时满足两个标签，并排除一个标签：
+
+```http
+GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,sound&tag_mode=all&exclude_tags=compilation&sort=views&order=desc
+```
+
+### `GET /api/videos/facets`
+
+返回已下载影视库中可用的筛选项及视频数量：
+
+```json
+{
+  "creators": [{"value":"Akt","count":595}],
+  "tags": [{"value":"iwara","count":516}],
+  "codecs": [{"value":"h264","count":500}]
+}
+```
+
+### `GET /media/{video_id}`
+
+播放已下载媒体。支持 Go `http.ServeFile` 提供的 Range 请求，可供 Android Media3/ExoPlayer 使用。成功访问已完成视频时会记录最近播放。
+
+### `GET /thumb/{video_id}`
+
+返回本地 Plex 海报或缓存缩略图。远端不可用时返回 SVG 占位图，因此客户端应按响应 `Content-Type` 解码，不要强制当作 JPEG。
+
+## 5. 下载任务
+
+### `GET /api/tasks`
+
+参数：`limit`（最大 1000）、`offset`、`status`、`language`。不传状态时返回除 `discovered` 外的所有任务。
+
+### `POST /api/videos/download-all`
+
+- 无请求体。
+- 可选 `subscription` 查询参数，只排队该订阅的 `discovered` 视频。
+- 返回 `202`：`{"accepted":388}`。
+
+### `POST /api/videos/{video_id}/{action}`
+
+`action` 支持：
+
+- `download`：加入持久队列
+- `retry`：失败任务重新加入队列
+- `pause`：暂停 aria2 任务
+- `resume`：继续 aria2 任务
+- `delete`：移除任务和媒体/NFO/海报，并恢复为 `discovered`
+
+成功返回 `202`：`{"status":"accepted"}`。
+
+`delete` 是破坏性操作，Android 客户端必须二次确认。
+
+### `GET /api/events`
+
+Server-Sent Events 实时下载状态，响应类型 `text/event-stream`，约每秒一条：
+
+```text
+data: {"tasks":[...],"download_speed":123456,"connections":8}
+```
+
+Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以 `/api/tasks` 做一次全量校准。
+
+## 6. 订阅
+
+### `GET /api/subscriptions`
+
+返回：`{"items":[Subscription...]}`。
+
+### `GET /api/platforms`
+
+返回已注册适配器：`{"items":[{"id":"rule34video","name":"Rule34Video"}]}`。
+
+### `GET /api/creators/search`
+
+参数：
+
+- `q`：至少两个字符
+- `platform`：默认 `rule34video`
+
+返回：
+
+```json
+{"items":[{"platform":"rule34video","source_id":"3382","name":"Akt","url":"https://rule34video.com/models/akt/","avatar_url":"https://...","video_count":877}]}
+```
+
+### `POST /api/subscriptions`
+
+请求：
+
+```json
+{
+  "url": "https://rule34video.com/models/akt/",
+  "type": "creator",
+  "download_existing": false
+}
+```
+
+- `download_existing=false`：只建立现有内容基线，以后发现的新视频自动下载。
+- `download_existing=true`：订阅并将全部现有视频加入持久队列。
+
+返回 `201`：
+
+```json
+{"slug":"rule34video:akt","platform":"rule34video","baselined":737,"queued":0}
+```
+
+### `PATCH /api/subscriptions/{slug}`
+
+请求：`{"enabled":false}`。返回：`{"enabled":false}`。
+
+### `DELETE /api/subscriptions/{slug}`
+
+删除订阅及其数据库视频记录。返回：`{"deleted":true}`。这是破坏性操作，客户端必须二次确认。
+
+### `POST /api/check`
+
+异步检查全部已启用订阅。返回 `202`：`{"status":"started"}`。
+
+### `POST /api/check/{slug}`
+
+异步检查指定订阅，响应同上。
+
+## 7. 设置
+
+### `GET /api/settings`
+
+```json
+{
+  "http_proxy":"",
+  "download_dir":"/media",
+  "aria_rpc_url":"http://127.0.0.1:6800/jsonrpc",
+  "aria_secret":"",
+  "check_time":"04:00",
+  "timezone":"Asia/Shanghai",
+  "plex_language":"zh-CN",
+  "max_concurrent":2,
+  "connections_per_download":4,
+  "download_limit_kbps":0,
+  "min_free_bytes":5368709120
+}
+```
+
+### `PUT /api/settings`
+
+发送需要修改的字段即可，服务端基于现有设置合并。成功返回完整设置。`download_limit_kbps=0` 表示不限速。
+
+警告：当前接口会返回 `aria_secret` 和可能含凭据的 `http_proxy`。Android 客户端不得写入日志、崩溃报告或分析平台；发布公网版本前应等待服务端认证和敏感字段脱敏协议。
+
+## 8. 翻译与 Plex
+
+### `GET /api/translations/export`
+
+参数：`language`，可选 `platform`、`subscription`。返回附件 JSON，结构版本为 1。
+
+### `POST /api/translations/import`
+
+请求体是导出的 JSON 包。客户端填写每项的 `translations.title` 和 `translations.tags`，必须保留 `key`、`source_hash` 和 `fields`。
+
+返回：`{"imported_fields":100,"skipped_items":2}`。原文哈希变化的条目会跳过。
+
+### `POST /api/plex/refresh-nfo`
+
+请求：`{"language":"zh-CN"}`。返回 `202`：`{"accepted":600,"language":"zh-CN"}`。
+
+## 9. HTML 导入
+
+### `POST /api/import/html`
+
+请求：`{"html":"<div id=...>...</div>"}`。返回解析并保存后的 Video。该接口用于手动粘贴页面数据，Android 普通用户流程可以不实现。
+
+## 10. Android 实现建议
+
+- 使用 Media3/ExoPlayer 播放 `/media/{id}`。
+- 列表先加载 `/api/videos`，图片交给 Coil 加载 `/thumb/{id}`。
+- 下载页先请求 `/api/tasks`，再连接 `/api/events` 增量更新。
+- 所有服务端时间先解析为 `Instant`，显示时使用 `dashboard.timezone`。
+- 原文/译文切换只影响显示；搜索范围通过 `scope` 明确传递。
+- `video_id`、`slug` 和所有查询参数都必须 URL 编码。
+- 不要依赖字段顺序；未知字段应忽略。
+- 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
+
