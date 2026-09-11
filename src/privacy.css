@@ -20,6 +20,20 @@
   z-index: 2;
 }
 
+.demo-mode .rows img,
+.demo-mode .creator-results img {
+  clip-path: circle(50% at 50% 50%);
+}
+
+.demo-mode .queue img {
+  clip-path: inset(0 round 7px);
+}
+
+.demo-mode .player > img,
+.demo-mode .player video {
+  clip-path: inset(0 round 8px);
+}
+
 .transfer-total {
   display: flex;
   gap: 12px;
