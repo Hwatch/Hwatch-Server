@@ -293,6 +293,21 @@ nav i { margin-left: auto; }
 .display-setting > span { display: grid; gap: 5px; }
 .display-setting small { margin: 0; }
 
+.sidebar-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #15181e;
+}
+
+.sidebar-options > b,
+.sidebar-options > small { grid-column: 1 / -1; }
+.sidebar-options > small { margin: -4px 0 2px; }
+.sidebar-options label { display: flex; align-items: center; gap: 9px; color: #c5cbd5; }
+.sidebar-options input { width: auto; }
+
 @media (max-width: 680px) {
   .shell aside { width: 238px; padding: 25px 15px; box-shadow: 18px 0 40px #0008; }
   .shell main { margin-left: 0; width: 100%; padding: 76px 16px 60px; }
@@ -312,4 +327,6 @@ nav i { margin-left: auto; }
   .setting-grid { grid-template-columns: 1fr; }
   .setting-head { grid-template-columns: 38px 1fr 24px; padding: 14px; }
   .display-setting { align-items: stretch; flex-direction: column; }
+  .sidebar-options { grid-template-columns: 1fr; }
+  .sidebar-options > b, .sidebar-options > small { grid-column: 1; }
 }
