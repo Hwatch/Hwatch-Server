@@ -15,7 +15,7 @@
 示例：
 
 ```text
-rule34video:3144962 -> rule34video%3A3144962
+source:3144962 -> source%3A3144962
 ```
 
 ## 2. 通用数据结构
@@ -24,28 +24,28 @@ rule34video:3144962 -> rule34video%3A3144962
 
 ```json
 {
-  "video_id": "rule34video:3144962",
-  "subscription_slug": "rule34video:akt",
+  "video_id": "source:3144962",
+  "subscription_slug": "source:creator",
   "title": "Original title",
   "translated_title": "中文标题",
   "translated_tags": ["标签一", "标签二"],
   "translation_language": "zh-CN",
-  "page_url": "https://rule34video.com/video/3144962/example/",
+  "page_url": "",
   "published_at": "2026-06-10T00:00:00Z",
   "discovered_at": "2026-09-11T16:39:37Z",
   "downloaded_at": "2026-09-11T18:00:00Z",
   "updated_at": "2026-09-11T18:00:00Z",
-  "thumbnail_url": "https://.../3.jpg",
+  "thumbnail_url": "",
   "views": 63132,
   "duration_seconds": 171,
-  "creator_name": "Akt",
-  "creator_url": "https://rule34video.com/models/akt/",
-  "creator_avatar": "https://.../avatar.png",
+  "creator_name": "Creator",
+  "creator_url": "",
+  "creator_avatar": "",
   "uploader_name": "uploader",
-  "uploader_url": "https://...",
-  "uploader_avatar": "https://...",
-  "categories": [{"Name":"MMD","URL":"https://...","Image":"https://..."}],
-  "tags": [{"Name":"sound","URL":"https://..."}],
+  "uploader_url": "",
+  "uploader_avatar": "",
+  "categories": [{"Name":"Animation","URL":"","Image":""}],
+  "tags": [{"Name":"sound","URL":""}],
   "external_links": [],
   "status": "completed",
   "aria_gid": "0123456789abcdef",
@@ -88,13 +88,13 @@ rule34video:3144962 -> rule34video%3A3144962
 ```json
 {
   "id": 1,
-  "slug": "rule34video:akt",
-  "platform": "rule34video",
+  "slug": "source:creator",
+  "platform": "source",
   "subscription_type": "creator",
-  "source_id": "akt",
-  "name": "Akt",
-  "url": "https://rule34video.com/models/akt/",
-  "avatar_url": "https://.../avatar.png",
+  "source_id": "creator",
+  "name": "Creator",
+  "url": "",
+  "avatar_url": "",
   "external_links": [],
   "enabled": true,
   "baseline_complete": true,
@@ -197,7 +197,7 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ### `GET /thumb/{video_id}`
 
-返回本地 Plex 海报或缓存缩略图。远端不可用时返回 SVG 占位图，因此客户端应按响应 `Content-Type` 解码，不要强制当作 JPEG。
+返回本地 Plex 海报或缓存缩略图。图片不可用时返回 SVG 占位图，因此客户端应按响应 `Content-Type` 解码，不要强制当作 JPEG。
 
 ## 5. 下载任务
 
@@ -243,19 +243,19 @@ Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以
 
 ### `GET /api/platforms`
 
-返回已注册适配器：`{"items":[{"id":"rule34video","name":"Rule34Video"}]}`。
+返回服务端已注册的适配器：`{"items":[{"id":"source","name":"Source"}]}`。
 
 ### `GET /api/creators/search`
 
 参数：
 
 - `q`：至少两个字符
-- `platform`：默认 `rule34video`
+- `platform`：适配器 ID；省略时使用服务端默认值
 
 返回：
 
 ```json
-{"items":[{"platform":"rule34video","source_id":"3382","name":"Akt","url":"https://rule34video.com/models/akt/","avatar_url":"https://...","video_count":877}]}
+{"items":[{"platform":"source","source_id":"3382","name":"Creator","url":"","avatar_url":"","video_count":877}]}
 ```
 
 ### `POST /api/subscriptions`
@@ -264,7 +264,7 @@ Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以
 
 ```json
 {
-  "url": "https://rule34video.com/models/akt/",
+  "url": "<subscription-url>",
   "type": "creator",
   "download_existing": false
 }
@@ -276,7 +276,7 @@ Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以
 返回 `201`：
 
 ```json
-{"slug":"rule34video:akt","platform":"rule34video","baselined":737,"queued":0}
+{"slug":"source:creator","platform":"source","baselined":737,"queued":0}
 ```
 
 ### `PATCH /api/subscriptions/{slug}`
@@ -353,4 +353,3 @@ Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以
 - `video_id`、`slug` 和所有查询参数都必须 URL 编码。
 - 不要依赖字段顺序；未知字段应忽略。
 - 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
-
