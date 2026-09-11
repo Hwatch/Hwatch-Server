@@ -37,8 +37,11 @@ type Video struct {
 }
 type Settings struct {
 	HTTPProxy, DownloadDir, AriaRPCURL, AriaSecret, CheckTime, Timezone, PlexLanguage string
+	ExcludeTitleKeywords, ExcludeUploaders, ExcludeCategories, ExcludeTags            string
 	MaxConcurrent, ConnectionsPerDownload                                             int
 	MinFreeBytes, DownloadLimitKBPS                                                   int64
+	MaxDurationSeconds                                                                int64
+	RequireCreatorMatch                                                               bool
 }
 type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
@@ -117,7 +120,7 @@ func Open(path string) (*Store, error) {
 	}
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120"}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -161,10 +164,16 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.CheckTime = values["check_time"]
 	cfg.Timezone = values["timezone"]
 	cfg.PlexLanguage = values["plex_language"]
+	cfg.ExcludeTitleKeywords = values["exclude_title_keywords"]
+	cfg.ExcludeUploaders = values["exclude_uploaders"]
+	cfg.ExcludeCategories = values["exclude_categories"]
+	cfg.ExcludeTags = values["exclude_tags"]
+	cfg.RequireCreatorMatch = strings.EqualFold(values["require_creator_match"], "true")
 	_, _ = fmt.Sscan(values["max_concurrent"], &cfg.MaxConcurrent)
 	_, _ = fmt.Sscan(values["connections_per_download"], &cfg.ConnectionsPerDownload)
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
 	_, _ = fmt.Sscan(values["min_free_bytes"], &cfg.MinFreeBytes)
+	_, _ = fmt.Sscan(values["max_duration_seconds"], &cfg.MaxDurationSeconds)
 	return cfg, nil
 }
 func (s *Store) SaveSettings(cfg Settings) error {
@@ -173,7 +182,7 @@ func (s *Store) SaveSettings(cfg Settings) error {
 		return err
 	}
 	defer tx.Rollback()
-	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes}
+	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds}
 	for k, v := range values {
 		if _, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, fmt.Sprint(v)); err != nil {
 			return err
@@ -415,7 +424,7 @@ func (s *Store) QueueDiscovered(subscriptionSlug string) (int64, error) {
 	return result.RowsAffected()
 }
 func (s *Store) QueueVideo(id string) error {
-	result, err := s.DB.Exec("UPDATE videos SET status='queued',aria_gid='',error='',updated_at=? WHERE id=? AND status IN ('discovered','failed')", Now(), id)
+	result, err := s.DB.Exec("UPDATE videos SET status='queued',aria_gid='',error='',updated_at=? WHERE id=? AND status IN ('discovered','failed','excluded')", Now(), id)
 	if err != nil {
 		return err
 	}

@@ -79,6 +79,7 @@ source:3144962 -> source%3A3144962
 - `active`：正在下载
 - `paused`：已暂停
 - `failed`：失败，可重试
+- `excluded`：命中自动排除规则，未提交下载
 - `completed`：下载完成，可以播放
 
 客户端不要假设状态只会单向变化。429 自动恢复会把任务从 `failed` 或 aria2 错误状态重新变为 `queued`。
@@ -311,13 +312,21 @@ Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以
   "max_concurrent":2,
   "connections_per_download":4,
   "download_limit_kbps":0,
-  "min_free_bytes":5368709120
+  "min_free_bytes":5368709120,
+  "require_creator_match":true,
+  "exclude_title_keywords":"compilation,collection,合集,集锦",
+  "exclude_uploaders":"",
+  "exclude_categories":"",
+  "exclude_tags":"",
+  "max_duration_seconds":0
 }
 ```
 
 ### `PUT /api/settings`
 
 发送需要修改的字段即可，服务端基于现有设置合并。成功返回完整设置。`download_limit_kbps=0` 表示不限速。
+
+自动排除规则在任务提交下载器前执行。多个文本规则使用逗号、中文逗号、分号或换行分隔；标题规则使用不区分大小写的包含匹配，上传者、分类和标签使用对应字段匹配。`require_creator_match=true` 会排除实际创作者与订阅作者不一致的视频，`max_duration_seconds=0` 表示不限制时长。已下载文件不会因新增规则而自动删除。
 
 警告：当前接口会返回 `aria_secret` 和可能含凭据的 `http_proxy`。Android 客户端不得写入日志、崩溃报告或分析平台；发布公网版本前应等待服务端认证和敏感字段脱敏协议。
 

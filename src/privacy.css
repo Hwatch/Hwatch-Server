@@ -79,6 +79,19 @@ nav i { margin-left: auto; }
 .filter-panel label { display: grid; gap: 6px; color: #aeb4bf; font-size: 0.82rem; }
 .filter-panel select[multiple] { min-height: 122px; }
 
+.exclude-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid #343a46;
+  border-radius: 10px;
+}
+
+.exclude-settings legend { color: #e5b951; padding: 0 7px; }
+.exclude-settings .check-row { grid-column: 1 / -1; display: flex; align-items: center; }
+.exclude-settings .check-row input { width: auto; }
+
 .sub-progress {
   display: grid;
   gap: 5px;
@@ -161,4 +174,5 @@ nav i { margin-left: auto; }
   nav button { gap: 0; }
   nav i { position: absolute; margin: -24px 0 0 22px; font-size: 0.62rem; }
   .filter-panel { grid-template-columns: 1fr; }
+  .exclude-settings { grid-template-columns: 1fr; }
 }

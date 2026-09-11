@@ -463,6 +463,9 @@ func (a *App) startQueueWorker() {
 			video := videos[0]
 			if err = a.queue(video.ID); err != nil {
 				log.Printf("persistent queue %s: %v", video.ID, err)
+				if strings.HasPrefix(err.Error(), "excluded: ") {
+					continue
+				}
 				if isRateLimited(err.Error()) || strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(err.Error(), "Timeout") {
 					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
 					if isRateLimited(err.Error()) {
@@ -551,10 +554,16 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "check_time", &cfg.CheckTime)
 	assignString(input, "timezone", &cfg.Timezone)
 	assignString(input, "plex_language", &cfg.PlexLanguage)
+	assignString(input, "exclude_title_keywords", &cfg.ExcludeTitleKeywords)
+	assignString(input, "exclude_uploaders", &cfg.ExcludeUploaders)
+	assignString(input, "exclude_categories", &cfg.ExcludeCategories)
+	assignString(input, "exclude_tags", &cfg.ExcludeTags)
+	assignBool(input, "require_creator_match", &cfg.RequireCreatorMatch)
 	assignInt(input, "max_concurrent", &cfg.MaxConcurrent)
 	assignInt(input, "connections_per_download", &cfg.ConnectionsPerDownload)
 	assignInt64(input, "download_limit_kbps", &cfg.DownloadLimitKBPS)
 	assignInt64(input, "min_free_bytes", &cfg.MinFreeBytes)
+	assignInt64(input, "max_duration_seconds", &cfg.MaxDurationSeconds)
 	if cfg.HTTPProxy != "" {
 		u, e := url.Parse(cfg.HTTPProxy)
 		if e != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -587,7 +596,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, settingsMap(cfg))
 }
 func settingsMap(c store.Settings) map[string]any {
-	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes}
+	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds}
 }
 func assignString(m map[string]any, k string, v *string) {
 	if x, ok := m[k].(string); ok {
@@ -602,6 +611,11 @@ func assignInt(m map[string]any, k string, v *int) {
 func assignInt64(m map[string]any, k string, v *int64) {
 	if x, ok := m[k].(float64); ok {
 		*v = int64(x)
+	}
+}
+func assignBool(m map[string]any, k string, v *bool) {
+	if x, ok := m[k].(bool); ok {
+		*v = x
 	}
 }
 
@@ -809,12 +823,20 @@ func (a *App) queue(id string) error {
 	if cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes {
 		return errors.New("磁盘可用空间低于保留值")
 	}
-	if v.DurationSeconds == 0 {
+	if v.DurationSeconds == 0 || v.CreatorURL == "" {
 		adapter, _ := a.adapters.ByID(v.Platform)
 		if detail, e := adapter.FetchDetails(context.Background(), v, cfg.HTTPProxy); e == nil {
 			v = detail
 			_ = a.store.UpdateDetails(v)
 		}
+	}
+	sub, err := a.store.Subscription(v.SubscriptionSlug)
+	if err != nil {
+		return err
+	}
+	if reason := exclusionReason(v, sub, cfg); reason != "" {
+		_ = a.store.UpdateTask(id, "excluded", "", "", "", reason, 0, 0)
+		return errors.New("excluded: " + reason)
 	}
 	if v.PlexEpisode == 0 {
 		episode, e := a.store.NextEpisode(v.SubscriptionSlug)
@@ -826,10 +848,6 @@ func (a *App) queue(id string) error {
 		}
 		v.PlexSeason = 1
 		v.PlexEpisode = episode
-	}
-	sub, err := a.store.Subscription(v.SubscriptionSlug)
-	if err != nil {
-		return err
 	}
 	adapter, err := a.adapters.ByID(v.Platform)
 	if err != nil {
@@ -851,6 +869,53 @@ func (a *App) queue(id string) error {
 		return err
 	}
 	return a.store.UpdateTask(id, "waiting", gid, "", layout.FullPath, "", 0, 0)
+}
+func exclusionReason(v store.Video, sub store.Subscription, cfg store.Settings) string {
+	creatorURL := strings.TrimRight(strings.ToLower(v.CreatorURL), "/")
+	subURL := strings.TrimRight(strings.ToLower(sub.URL), "/")
+	if cfg.RequireCreatorMatch && creatorURL != "" && subURL != "" && creatorURL != subURL {
+		return "实际创作者与订阅作者不一致: " + v.CreatorName
+	}
+	if matchedRule(v.Title, cfg.ExcludeTitleKeywords) {
+		return "标题命中排除规则"
+	}
+	if matchedRule(v.UploaderName, cfg.ExcludeUploaders) {
+		return "上传者命中排除规则"
+	}
+	if matchedJSONNames(v.CategoriesJSON, cfg.ExcludeCategories) {
+		return "分类命中排除规则"
+	}
+	if matchedJSONNames(v.TagsJSON, cfg.ExcludeTags) {
+		return "标签命中排除规则"
+	}
+	if cfg.MaxDurationSeconds > 0 && v.DurationSeconds > cfg.MaxDurationSeconds {
+		return "视频时长超过限制"
+	}
+	return ""
+}
+func exclusionRules(raw string) []string {
+	return strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool { return r == ',' || r == '\n' || r == ';' || r == '，' })
+}
+func matchedRule(value, rawRules string) bool {
+	value = strings.ToLower(value)
+	for _, rule := range exclusionRules(rawRules) {
+		if rule = strings.TrimSpace(rule); rule != "" && strings.Contains(value, rule) {
+			return true
+		}
+	}
+	return false
+}
+func matchedJSONNames(rawJSON, rawRules string) bool {
+	var items []struct{ Name string }
+	if json.Unmarshal([]byte(rawJSON), &items) != nil {
+		return false
+	}
+	for _, item := range items {
+		if matchedRule(item.Name, rawRules) {
+			return true
+		}
+	}
+	return false
 }
 func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 	id, action := r.PathValue("id"), r.PathValue("action")
