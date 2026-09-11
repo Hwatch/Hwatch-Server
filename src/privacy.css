@@ -1,7 +1,7 @@
 .demo-mode img,
 .demo-mode video {
   filter: blur(18px);
-  transform: scale(1.04);
+  clip-path: inset(0);
   transition: filter 0.2s ease;
 }
 
