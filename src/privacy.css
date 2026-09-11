@@ -5,6 +5,11 @@
   transition: filter 0.2s ease;
 }
 
+.strong-demo img,
+.strong-demo video {
+  filter: blur(30px) saturate(0.25);
+}
+
 .transfer-total {
   display: flex;
   gap: 12px;
