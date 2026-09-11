@@ -41,7 +41,7 @@ type Settings struct {
 	MaxConcurrent, ConnectionsPerDownload                                             int
 	MinFreeBytes, DownloadLimitKBPS                                                   int64
 	MaxDurationSeconds                                                                int64
-	RequireCreatorMatch                                                               bool
+	RequireCreatorMatch, DownloadPaused                                               bool
 }
 type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
@@ -120,7 +120,7 @@ func Open(path string) (*Store, error) {
 	}
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0"}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -169,12 +169,17 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.ExcludeCategories = values["exclude_categories"]
 	cfg.ExcludeTags = values["exclude_tags"]
 	cfg.RequireCreatorMatch = strings.EqualFold(values["require_creator_match"], "true")
+	cfg.DownloadPaused = strings.EqualFold(values["download_paused"], "true")
 	_, _ = fmt.Sscan(values["max_concurrent"], &cfg.MaxConcurrent)
 	_, _ = fmt.Sscan(values["connections_per_download"], &cfg.ConnectionsPerDownload)
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
 	_, _ = fmt.Sscan(values["min_free_bytes"], &cfg.MinFreeBytes)
 	_, _ = fmt.Sscan(values["max_duration_seconds"], &cfg.MaxDurationSeconds)
 	return cfg, nil
+}
+func (s *Store) SetDownloadPaused(paused bool) error {
+	_, err := s.DB.Exec("INSERT INTO settings(key,value) VALUES('download_paused',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", fmt.Sprint(paused))
+	return err
 }
 func (s *Store) SaveSettings(cfg Settings) error {
 	tx, err := s.DB.Begin()

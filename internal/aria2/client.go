@@ -107,6 +107,14 @@ func (c *Client) Resume(ctx context.Context, gid string) error {
 	var out string
 	return c.call(ctx, "unpause", []any{gid}, &out)
 }
+func (c *Client) PauseAll(ctx context.Context) error {
+	var out string
+	return c.call(ctx, "pauseAll", nil, &out)
+}
+func (c *Client) ResumeAll(ctx context.Context) error {
+	var out string
+	return c.call(ctx, "unpauseAll", nil, &out)
+}
 func (c *Client) Remove(ctx context.Context, gid string) error {
 	var out string
 	err := c.call(ctx, "remove", []any{gid}, &out)
