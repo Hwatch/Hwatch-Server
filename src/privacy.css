@@ -164,6 +164,67 @@ nav i { margin-left: auto; }
 }
 
 .download-existing input { width: auto; }
+.settings-page {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 13px;
+}
+
+.setting-card {
+  overflow: hidden;
+  background: #1a1d24;
+  border: 1px solid #343a46;
+  border-radius: 15px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.setting-card.open { border-color: #806c3c; background: #1c1f26; }
+.setting-head {
+  width: 100%;
+  min-height: 82px;
+  padding: 17px 19px;
+  display: grid;
+  grid-template-columns: 42px 1fr 32px;
+  align-items: center;
+  gap: 13px;
+  text-align: left;
+  background: transparent;
+}
+
+.setting-symbol {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #e5b951;
+  background: #2a2822;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.setting-head > span:nth-child(2) { display: grid; gap: 5px; }
+.setting-head b { color: #f1f3f6; font-size: 1rem; }
+.setting-head small { margin: 0; color: #8f97a5; font-size: 0.8rem; }
+.setting-head i { color: #8f97a5; font-size: 1.25rem; font-style: normal; transition: transform 0.18s ease; }
+.setting-card.open .setting-head i { transform: rotate(180deg); color: #e5b951; }
+
+.setting-body {
+  display: grid;
+  gap: 15px;
+  padding: 4px 20px 21px 75px;
+  border-top: 1px solid #292e38;
+}
+
+.setting-body > label,
+.setting-grid label { display: grid; gap: 6px; color: #b8bec8; font-size: 0.83rem; }
+.setting-body small { margin: 0; }
+.setting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.setting-check { grid-template-columns: auto 1fr !important; align-items: center; padding: 12px; border-radius: 9px; background: #15181e; }
+.setting-check input { width: auto; }
+.setting-check span { display: grid; gap: 3px; }
+.save-setting { justify-self: end; min-width: 120px; }
 .recent-heading { margin-top: 30px; }
 .library.compact article { cursor: pointer; }
 
@@ -175,4 +236,7 @@ nav i { margin-left: auto; }
   nav i { position: absolute; margin: -24px 0 0 22px; font-size: 0.62rem; }
   .filter-panel { grid-template-columns: 1fr; }
   .exclude-settings { grid-template-columns: 1fr; }
+  .setting-body { padding: 12px 14px 17px; }
+  .setting-grid { grid-template-columns: 1fr; }
+  .setting-head { grid-template-columns: 38px 1fr 24px; padding: 14px; }
 }
