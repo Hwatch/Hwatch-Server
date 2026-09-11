@@ -65,6 +65,20 @@ nav i { margin-left: auto; }
   font-size: 0.78rem;
 }
 
+.library-toolbar { align-items: center; }
+.library-toolbar > span { white-space: nowrap; color: #9199a7; }
+.library-toolbar button.active { color: #e5b951; outline: 1px solid #e5b951; }
+
+.filter-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 13px;
+  align-items: end;
+}
+
+.filter-panel label { display: grid; gap: 6px; color: #aeb4bf; font-size: 0.82rem; }
+.filter-panel select[multiple] { min-height: 122px; }
+
 .sub-progress {
   display: grid;
   gap: 5px;
@@ -146,4 +160,5 @@ nav i { margin-left: auto; }
   .nav-text { display: none; }
   nav button { gap: 0; }
   nav i { position: absolute; margin: -24px 0 0 22px; font-size: 0.62rem; }
+  .filter-panel { grid-template-columns: 1fr; }
 }

@@ -231,25 +231,42 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
 	diskTotal, diskFree := diskStats(cfg.DownloadDir)
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": a.ariaOnline(cfg)})
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": a.ariaOnline(cfg), "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
 	offset := intParam(r, "offset", 0, 0, 10000000)
 	status := r.URL.Query().Get("status")
-	query := r.URL.Query().Get("q")
-	items, err := a.store.Videos(limit, offset, status, query)
+	values := r.URL.Query()
+	language := values.Get("language")
+	if language == "" {
+		language = "zh-CN"
+	}
+	opts := store.VideoSearch{Status: status, Query: values.Get("q"), Scope: values.Get("scope"), Language: language, TagMode: values.Get("tag_mode"), Creator: values.Get("creator"), Codec: values.Get("codec"), Sort: values.Get("sort"), Order: values.Get("order"), Tags: csvValues(values.Get("tags")), ExcludeTags: csvValues(values.Get("exclude_tags")), MinHeight: intParam(r, "min_height", 0, 0, 10000)}
+	items, total, err := a.store.SearchVideos(limit, offset, opts)
 	if err != nil {
 		fail(w, 500, err)
 		return
 	}
-	total, _ := a.store.CountVideos(status)
-	language := r.URL.Query().Get("language")
-	if language == "" {
-		language = "zh-CN"
-	}
 	translations, _ := a.store.Translations(language)
 	respond(w, 200, map[string]any{"items": translatedVideoMaps(items, language, translations), "total": total, "limit": limit, "offset": offset})
+}
+func csvValues(raw string) []string {
+	out := []string{}
+	for _, value := range strings.Split(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+func (a *App) videoFacets(w http.ResponseWriter, r *http.Request) {
+	items, err := a.store.VideoFacets()
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, items)
 }
 
 func (a *App) listTasks(w http.ResponseWriter, r *http.Request) {
@@ -1191,6 +1208,7 @@ func (a *App) router(dist string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/dashboard", a.dashboard)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
+	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)
 	mux.HandleFunc("GET /api/translations/export", a.exportTranslations)
 	mux.HandleFunc("POST /api/translations/import", a.importTranslations)
