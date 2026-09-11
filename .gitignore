@@ -1,8 +1,8 @@
 node_modules/
 *.tsbuildinfo
 web/dist/
-r34watch
-r34watch-go
+/r34watch
+/r34watch-go
 *.db
 *.db-shm
 *.db-wal

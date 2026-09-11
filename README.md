@@ -1,4 +1,4 @@
-# R34Watch NAS 媒体订阅器
+# HWatch NAS 媒体订阅器
 
 Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体库管理服务。
 
