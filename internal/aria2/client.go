@@ -74,7 +74,7 @@ func (c *Client) Version(ctx context.Context) error {
 	return c.call(ctx, "getVersion", nil, &out)
 }
 func (c *Client) Add(ctx context.Context, uri, dir, name, referer, userAgent, proxy string, connections int) (string, error) {
-	opts := map[string]string{"dir": dir, "out": name, "continue": "true", "auto-file-renaming": "false", "allow-overwrite": "true", "max-tries": "5", "retry-wait": "10", "timeout": "60", "connect-timeout": "20", "lowest-speed-limit": "1K", "summary-interval": "1", "header": "Referer: " + referer + "\nUser-Agent: " + userAgent}
+	opts := map[string]string{"dir": dir, "out": name, "continue": "true", "auto-file-renaming": "false", "allow-overwrite": "true", "max-tries": "12", "retry-wait": "30", "timeout": "60", "connect-timeout": "20", "lowest-speed-limit": "1K", "summary-interval": "1", "header": "Referer: " + referer + "\nUser-Agent: " + userAgent}
 	if connections < 1 {
 		connections = 1
 	}

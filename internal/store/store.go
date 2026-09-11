@@ -313,7 +313,7 @@ func (s *Store) QueueVideo(id string) error {
 	return nil
 }
 func (s *Store) RequeueTransientFailures() (int64, error) {
-	result, err := s.DB.Exec("UPDATE videos SET status='queued',updated_at=? WHERE status='failed' AND (error LIKE '%HTTP 429%' OR error LIKE '%deadline exceeded%' OR error LIKE '%Timeout%')", Now())
+	result, err := s.DB.Exec("UPDATE videos SET status='queued',aria_gid='',updated_at=? WHERE status='failed' AND (error LIKE '%HTTP 429%' OR error LIKE '%status=429%' OR error LIKE '%deadline exceeded%' OR error LIKE '%Timeout%')", Now())
 	if err != nil {
 		return 0, err
 	}

@@ -31,18 +31,22 @@ import (
 const userAgent = "Mozilla/5.0 (compatible; r34watch/2.0; NAS media manager)"
 
 type App struct {
-	store        *store.Store
-	adapters     *adapters.Registry
-	mu           sync.Mutex
-	queueMu      sync.Mutex
-	bulkMu       sync.Mutex
-	bulkRunning  bool
-	thumbMu      sync.Mutex
-	thumbWait    map[string]chan struct{}
-	nfoMu        sync.Mutex
-	nfoRunning   bool
-	checking     map[string]bool
-	lastSchedule string
+	store          *store.Store
+	adapters       *adapters.Registry
+	mu             sync.Mutex
+	queueMu        sync.Mutex
+	bulkMu         sync.Mutex
+	bulkRunning    bool
+	thumbMu        sync.Mutex
+	thumbWait      map[string]chan struct{}
+	rateMu         sync.Mutex
+	consecutive429 int
+	backoffUntil   time.Time
+	last429        time.Time
+	nfoMu          sync.Mutex
+	nfoRunning     bool
+	checking       map[string]bool
+	lastSchedule   string
 }
 
 func New(s *store.Store) *App {
@@ -431,6 +435,10 @@ func (a *App) startQueueWorker() {
 			a.bulkMu.Unlock()
 		}()
 		for {
+			if wait := a.rateLimitWait(); wait > 0 {
+				log.Printf("download queue paused for %s after HTTP 429", wait.Round(time.Second))
+				time.Sleep(wait)
+			}
 			videos, err := a.store.Videos(1, 0, "queued", "")
 			if err != nil || len(videos) == 0 {
 				return
@@ -438,9 +446,11 @@ func (a *App) startQueueWorker() {
 			video := videos[0]
 			if err = a.queue(video.ID); err != nil {
 				log.Printf("persistent queue %s: %v", video.ID, err)
-				if strings.Contains(err.Error(), "HTTP 429") || strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(err.Error(), "Timeout") {
+				if isRateLimited(err.Error()) || strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(err.Error(), "Timeout") {
 					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
-					time.Sleep(20 * time.Second)
+					if isRateLimited(err.Error()) {
+						a.record429()
+					}
 					continue
 				}
 				_ = a.store.UpdateTask(video.ID, "failed", "", "", "", err.Error(), 0, 0)
@@ -448,6 +458,41 @@ func (a *App) startQueueWorker() {
 			time.Sleep(750 * time.Millisecond)
 		}
 	}()
+}
+func isRateLimited(message string) bool {
+	return strings.Contains(message, "HTTP 429") || strings.Contains(message, "status=429")
+}
+func (a *App) record429() time.Duration {
+	a.rateMu.Lock()
+	defer a.rateMu.Unlock()
+	a.consecutive429++
+	a.last429 = time.Now()
+	shift := a.consecutive429 - 1
+	if shift > 5 {
+		shift = 5
+	}
+	delay := 30 * time.Second * time.Duration(1<<shift)
+	if delay > 15*time.Minute {
+		delay = 15 * time.Minute
+	}
+	until := time.Now().Add(delay)
+	if until.After(a.backoffUntil) {
+		a.backoffUntil = until
+	}
+	return delay
+}
+func (a *App) rateLimitWait() time.Duration {
+	a.rateMu.Lock()
+	defer a.rateMu.Unlock()
+	if !a.last429.IsZero() && time.Since(a.last429) > 10*time.Minute {
+		a.consecutive429 = 0
+		a.backoffUntil = time.Time{}
+		a.last429 = time.Time{}
+	}
+	if wait := time.Until(a.backoffUntil); wait > 0 {
+		return wait
+	}
+	return 0
 }
 func intParam(r *http.Request, key string, def, min, max int) int {
 	value, err := strconv.Atoi(r.URL.Query().Get(key))
@@ -928,6 +973,15 @@ func (a *App) pollTasks(ctx context.Context) {
 			errText := status.ErrorMessage
 			if errText == "" && status.ErrorCode != "" && mapped == "failed" {
 				errText = "aria2 error " + status.ErrorCode
+			}
+			if mapped == "failed" && isRateLimited(errText) {
+				removeCtx, removeCancel := context.WithTimeout(ctx, 5*time.Second)
+				_ = client.Remove(removeCtx, v.AriaGID)
+				removeCancel()
+				a.record429()
+				_ = a.store.UpdateTask(v.ID, "queued", "", path, v.PlexPath, errText, status.Completed, status.Total)
+				a.startQueueWorker()
+				continue
 			}
 			_ = a.store.UpdateTask(v.ID, mapped, v.AriaGID, path, v.PlexPath, errText, status.Completed, status.Total)
 			_ = a.store.UpdateTransfer(v.ID, status.DownloadSpeed, status.Connections)
