@@ -1,0 +1,9 @@
+node_modules
+web/dist
+*.db
+*.db-*
+downloads
+media
+r34watch
+r34watch-go
+.git
