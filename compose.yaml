@@ -1,0 +1,13 @@
+services:
+  r34watch:
+    build: .
+    container_name: r34watch
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      R34WATCH_MEDIA_ROOT: /media
+    volumes:
+      - ./data:/data
+      - /path/on/nas/Plex-TV:/media

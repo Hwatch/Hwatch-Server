@@ -1,0 +1,116 @@
+.demo-mode img,
+.demo-mode video {
+  filter: blur(18px);
+  transform: scale(1.04);
+  transition: filter 0.2s ease;
+}
+
+.transfer-total {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.transfer-total > div {
+  min-width: 190px;
+  padding: 15px 18px;
+  background: #1a1d24;
+  border: 1px solid #2b303a;
+  border-radius: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.transfer-total b {
+  color: #e5b951;
+  font-size: 1.35rem;
+}
+
+.transfer-total small { margin: 0; }
+.bottom button:first-child.active { color: #e5b951; }
+
+.language-select {
+  width: 100%;
+  padding: 8px;
+  font-size: 0.78rem;
+}
+
+.sub-progress {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.sub-progress progress {
+  max-width: 430px;
+}
+
+.sub-progress small { margin: 0; }
+.creator-search .inline input { min-width: min(440px, 100%); }
+
+.creator-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 9px;
+  margin: 15px 0;
+}
+
+.creator-results button {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 9px;
+  text-align: left;
+  background: #20242c;
+  border: 1px solid #343a46;
+}
+
+.creator-results button:hover,
+.creator-results button.selected {
+  border-color: #e5b951;
+  background: #2c2921;
+}
+
+.creator-results img,
+.creator-results .avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.creator-results button > span:last-child { display: grid; gap: 4px; }
+.creator-results small { margin: 0; }
+.compact-empty { padding: 18px 0; }
+
+.selected-creator {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  background: #252a32;
+  border-radius: 9px;
+}
+
+.selected-creator > span { display: grid; gap: 3px; }
+.selected-creator small { margin: 0; }
+.download-existing {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d9dce3;
+  font-size: 0.86rem;
+}
+
+.download-existing input { width: auto; }
+.recent-heading { margin-top: 30px; }
+.library.compact article { cursor: pointer; }
+
+@media (max-width: 680px) {
+  .transfer-total { flex-direction: column; }
+  .transfer-total > div { min-width: 0; }
+}

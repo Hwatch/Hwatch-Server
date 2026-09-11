@@ -1,0 +1,47 @@
+package store
+
+import (
+	"path/filepath"
+	"testing"
+)
+
+func TestSQLiteLifecycle(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	sub := Subscription{Slug: "rule34video:artist", Platform: "rule34video", Type: "creator", SourceID: "artist", AdapterConfig: "{}", Cursor: "{}", Name: "Artist", URL: "https://rule34video.com/models/artist/", Enabled: true, BaselineComplete: true, CreatedAt: Now(), ExternalLinks: "[]"}
+	if err = s.AddSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.UpsertDiscovered(Video{ID: "rule34video:123", Platform: "rule34video", SourceID: "123", SubscriptionSlug: sub.Slug, Title: "Episode", PageURL: "https://rule34video.com/video/123/x/"})
+	if err != nil || !created {
+		t.Fatalf("created=%v err=%v", created, err)
+	}
+	created, err = s.UpsertDiscovered(Video{ID: "rule34video:123", Platform: "rule34video", SourceID: "123", SubscriptionSlug: sub.Slug, Title: "Episode"})
+	if err != nil || created {
+		t.Fatalf("duplicate created=%v err=%v", created, err)
+	}
+	episode, err := s.NextEpisode(sub.Slug)
+	if err != nil || episode != 1 {
+		t.Fatalf("episode=%d err=%v", episode, err)
+	}
+	if err = s.SaveTranslation(Translation{EntityID: "rule34video:123", Language: "zh-CN", Field: "title", SourceHash: "sha256:test", Text: "标题"}); err != nil {
+		t.Fatal(err)
+	}
+	translations, err := s.Translations("zh-CN")
+	if err != nil || translations["rule34video:123\x00title"].Text != "标题" {
+		t.Fatalf("translations=%+v err=%v", translations, err)
+	}
+	if err = s.UpdateTask("rule34video:123", "completed", "", "/tmp/video.mp4", "/tmp/video.mp4", "", 10, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.RecordPlayback("rule34video:123"); err != nil {
+		t.Fatal(err)
+	}
+	recent, err := s.RecentlyPlayed(10)
+	if err != nil || len(recent) != 1 || recent[0].ID != "rule34video:123" {
+		t.Fatalf("recent=%+v err=%v", recent, err)
+	}
+}
