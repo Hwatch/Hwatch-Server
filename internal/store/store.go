@@ -40,6 +40,15 @@ type Settings struct {
 	MaxConcurrent, ConnectionsPerDownload                                             int
 	MinFreeBytes, DownloadLimitKBPS                                                   int64
 }
+type VideoSearch struct {
+	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
+	Tags, ExcludeTags                                                    []string
+	MinHeight                                                            int
+}
+type VideoFacet struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
 
 const schema = "PRAGMA journal_mode=WAL;" +
 	"PRAGMA foreign_keys=ON;" +
@@ -280,6 +289,110 @@ func (s *Store) Videos(limit, offset int, status, query string) ([]Video, error)
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+func (s *Store) SearchVideos(limit, offset int, opts VideoSearch) ([]Video, int64, error) {
+	where, args := videoSearchWhere(opts)
+	sortColumns := map[string]string{"downloaded_at": "v.downloaded_at", "published_at": "v.published_at", "views": "v.views", "duration": "v.duration_seconds", "size": "v.total_bytes", "resolution": "v.height", "bit_rate": "v.bit_rate", "title": "COALESCE(tt.translated_text,v.title)", "recent_played": "COALESCE(ph.last_played_at,'')", "play_count": "COALESCE(ph.play_count,0)"}
+	sortColumn := sortColumns[opts.Sort]
+	if sortColumn == "" {
+		sortColumn = "v.downloaded_at"
+	}
+	direction := "DESC"
+	if strings.EqualFold(opts.Order, "asc") {
+		direction = "ASC"
+	}
+	joins := " LEFT JOIN translations tt ON tt.entity_id=v.id AND tt.field='title' AND tt.language=? LEFT JOIN playback_history ph ON ph.video_id=v.id"
+	queryArgs := append([]any{opts.Language}, args...)
+	rows, err := s.DB.Query("SELECT "+prefixedVideoColumns("v")+" FROM videos v"+joins+where+" ORDER BY "+sortColumn+" "+direction+",v.id DESC LIMIT ? OFFSET ?", append(queryArgs, limit, offset)...)
+	items, err := scanVideos(rows, err)
+	if err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	err = s.DB.QueryRow("SELECT count(*) FROM videos v"+joins+where, queryArgs...).Scan(&total)
+	return items, total, err
+}
+func videoSearchWhere(opts VideoSearch) (string, []any) {
+	where := " WHERE 1=1"
+	args := []any{}
+	if opts.Status != "" {
+		where += " AND v.status=?"
+		args = append(args, opts.Status)
+	}
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		like := "%" + q + "%"
+		original := "(v.title LIKE ? OR v.creator_name LIKE ? OR v.uploader_name LIKE ? OR v.categories_json LIKE ? OR v.tags_json LIKE ? OR v.id LIKE ?)"
+		translated := "(tt.translated_text LIKE ? OR EXISTS(SELECT 1 FROM translations tq WHERE tq.entity_id=v.id AND tq.language=? AND tq.field='tags' AND tq.translated_text LIKE ?))"
+		switch opts.Scope {
+		case "original":
+			where += " AND " + original
+			for range 6 {
+				args = append(args, like)
+			}
+		case "translated":
+			where += " AND " + translated
+			args = append(args, like, opts.Language, like)
+		default:
+			where += " AND (" + original + " OR " + translated + ")"
+			for range 6 {
+				args = append(args, like)
+			}
+			args = append(args, like, opts.Language, like)
+		}
+	}
+	if opts.Creator != "" {
+		where += " AND (lower(v.creator_name)=lower(?) OR lower(v.subscription_slug)=lower(?))"
+		args = append(args, opts.Creator, opts.Creator)
+	}
+	if opts.Codec != "" {
+		where += " AND lower(v.video_codec)=lower(?)"
+		args = append(args, opts.Codec)
+	}
+	if opts.MinHeight > 0 {
+		where += " AND v.height>=?"
+		args = append(args, opts.MinHeight)
+	}
+	if len(opts.Tags) > 0 {
+		parts := []string{}
+		for _, tag := range opts.Tags {
+			parts = append(parts, "(EXISTS(SELECT 1 FROM json_each(v.tags_json) j WHERE lower(COALESCE(json_extract(j.value,'$.Name'),json_extract(j.value,'$.name'),j.value))=lower(?)) OR EXISTS(SELECT 1 FROM translations tx,json_each(tx.translated_text) j WHERE tx.entity_id=v.id AND tx.language=? AND tx.field='tags' AND lower(j.value)=lower(?)))")
+			args = append(args, tag, opts.Language, tag)
+		}
+		joiner := " AND "
+		if opts.TagMode == "any" {
+			joiner = " OR "
+		}
+		where += " AND (" + strings.Join(parts, joiner) + ")"
+	}
+	for _, tag := range opts.ExcludeTags {
+		where += " AND NOT (EXISTS(SELECT 1 FROM json_each(v.tags_json) j WHERE lower(COALESCE(json_extract(j.value,'$.Name'),json_extract(j.value,'$.name'),j.value))=lower(?)) OR EXISTS(SELECT 1 FROM translations tx,json_each(tx.translated_text) j WHERE tx.entity_id=v.id AND tx.language=? AND tx.field='tags' AND lower(j.value)=lower(?)))"
+		args = append(args, tag, opts.Language, tag)
+	}
+	return where, args
+}
+func (s *Store) VideoFacets() (map[string][]VideoFacet, error) {
+	out := map[string][]VideoFacet{"creators": {}, "tags": {}, "codecs": {}}
+	queries := map[string]string{
+		"creators": "SELECT creator_name,count(*) FROM videos WHERE status='completed' AND creator_name<>'' GROUP BY creator_name ORDER BY count(*) DESC,creator_name LIMIT 200",
+		"tags":     "SELECT COALESCE(json_extract(j.value,'$.Name'),json_extract(j.value,'$.name'),j.value),count(DISTINCT v.id) FROM videos v,json_each(v.tags_json) j WHERE v.status='completed' GROUP BY 1 ORDER BY 2 DESC,1 LIMIT 500",
+		"codecs":   "SELECT video_codec,count(*) FROM videos WHERE status='completed' AND video_codec<>'' GROUP BY video_codec ORDER BY count(*) DESC",
+	}
+	for key, query := range queries {
+		rows, err := s.DB.Query(query)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var f VideoFacet
+			if err = rows.Scan(&f.Value, &f.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[key] = append(out[key], f)
+		}
+		rows.Close()
+	}
+	return out, nil
 }
 func (s *Store) CountVideos(status string) (int64, error) {
 	var n int64
