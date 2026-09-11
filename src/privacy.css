@@ -261,7 +261,7 @@ nav i { margin-left: auto; }
 
 .sidebar-toggle .nav-icon { width: 20px; height: 20px; }
 .sidebar-collapsed aside { transform: translateX(-100%); visibility: hidden; }
-.sidebar-collapsed main { margin-left: 0; width: 100%; }
+.sidebar-collapsed main { margin-left: 0; width: 100%; max-width: none; }
 .sidebar-collapsed .sidebar-toggle { left: 14px; }
 
 .sidebar-language {
