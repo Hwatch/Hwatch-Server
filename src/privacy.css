@@ -44,6 +44,21 @@
 .transfer-total small { margin: 0; }
 .bottom button:first-child.active { color: #e5b951; }
 
+nav button {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+}
+
+.nav-icon {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+}
+
+.nav-text { flex: 1; }
+nav i { margin-left: auto; }
+
 .language-select {
   width: 100%;
   padding: 8px;
@@ -128,4 +143,7 @@
 @media (max-width: 680px) {
   .transfer-total { flex-direction: column; }
   .transfer-total > div { min-width: 0; }
+  .nav-text { display: none; }
+  nav button { gap: 0; }
+  nav i { position: absolute; margin: -24px 0 0 22px; font-size: 0.62rem; }
 }
