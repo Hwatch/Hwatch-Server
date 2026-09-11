@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import NavIcon from './NavIcon.vue'
 
 type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number}
-const props=defineProps<{settings:Settings;busy:boolean;importHtml:string}>()
-const emit=defineEmits<{save:[];import:[];'update:importHtml':[value:string]}>()
+const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number}>()
+const emit=defineEmits<{save:[];import:[];'update:importHtml':[value:string];toggleDemo:[]}>()
 const open=ref('download')
 const toggle=(name:string)=>open.value=open.value===name?'':name
 </script>
@@ -12,7 +13,7 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
   <div class="settings-page">
     <section class="setting-card" :class="{open:open==='download'}">
       <button class="setting-head" type="button" :aria-expanded="open==='download'" @click="toggle('download')">
-        <span class="setting-symbol">↓</span><span><b>下载与存储</b><small>管理下载目录、并发、连接和空间限制</small></span><i>⌄</i>
+        <span class="setting-symbol"><NavIcon name="downloads"/></span><span><b>下载与存储</b><small>管理下载目录、并发、连接和空间限制</small></span><i>⌄</i>
       </button>
       <form v-if="open==='download'" class="setting-body" @submit.prevent="emit('save')">
         <label>下载与 Plex 媒体目录<input v-model="props.settings.download_dir" placeholder="/volume1/media/HWatch"><small>视频直接按 Plex 电视库结构写入，无需复制第二份。</small></label>
@@ -23,7 +24,7 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
 
     <section class="setting-card" :class="{open:open==='network'}">
       <button class="setting-head" type="button" :aria-expanded="open==='network'" @click="toggle('network')">
-        <span class="setting-symbol">⌁</span><span><b>网络与调度</b><small>管理代理、aria2、检查时间和时区</small></span><i>⌄</i>
+        <span class="setting-symbol"><NavIcon name="network"/></span><span><b>网络与调度</b><small>管理代理、aria2、检查时间和时区</small></span><i>⌄</i>
       </button>
       <form v-if="open==='network'" class="setting-body" @submit.prevent="emit('save')">
         <label>HTTP/HTTPS 代理<input v-model="props.settings.http_proxy" placeholder="http://127.0.0.1:7890"></label>
@@ -36,7 +37,7 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
 
     <section class="setting-card" :class="{open:open==='exclude'}">
       <button class="setting-head" type="button" :aria-expanded="open==='exclude'" @click="toggle('exclude')">
-        <span class="setting-symbol">⊘</span><span><b>自动排除规则</b><small>过滤错误归属、合集和不需要的内容</small></span><i>⌄</i>
+        <span class="setting-symbol"><NavIcon name="exclude"/></span><span><b>自动排除规则</b><small>过滤错误归属、合集和不需要的内容</small></span><i>⌄</i>
       </button>
       <form v-if="open==='exclude'" class="setting-body" @submit.prevent="emit('save')">
         <label class="setting-check"><input v-model="props.settings.require_creator_match" type="checkbox"><span><b>验证实际创作者</b><small>实际创作者与订阅作者不一致时不下载</small></span></label>
@@ -46,9 +47,18 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
       </form>
     </section>
 
+    <section class="setting-card" :class="{open:open==='display'}">
+      <button class="setting-head" type="button" :aria-expanded="open==='display'" @click="toggle('display')">
+        <span class="setting-symbol"><NavIcon name="demo"/></span><span><b>显示与隐私</b><small>控制页面演示模式和敏感内容显示</small></span><i>⌄</i>
+      </button>
+      <div v-if="open==='display'" class="setting-body">
+        <div class="display-setting"><span><b>演示模式</b><small>{{demoMode===0?'当前正常显示':demoMode===1?'当前已模糊图片和视频':'当前已隐藏敏感文字并加强模糊'}}</small></span><button :class="{primary:demoMode>0}" @click="emit('toggleDemo')">{{demoMode===0?'开启演示模式':demoMode===1?'进入强演示模式':'关闭演示模式'}}</button></div>
+      </div>
+    </section>
+
     <section class="setting-card" :class="{open:open==='import'}">
       <button class="setting-head" type="button" :aria-expanded="open==='import'" @click="toggle('import')">
-        <span class="setting-symbol">⇲</span><span><b>数据导入</b><small>粘贴视频详情区域的 HTML 数据</small></span><i>⌄</i>
+        <span class="setting-symbol"><NavIcon name="import"/></span><span><b>数据导入</b><small>粘贴视频详情区域的 HTML 数据</small></span><i>⌄</i>
       </button>
       <div v-if="open==='import'" class="setting-body">
         <label>HTML 数据<textarea :value="importHtml" rows="8" placeholder="粘贴视频详情区 HTML" @input="emit('update:importHtml',($event.target as HTMLTextAreaElement).value)"></textarea></label>
