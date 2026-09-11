@@ -231,7 +231,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
 	diskTotal, diskFree := diskStats(cfg.DownloadDir)
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": a.ariaOnline(cfg), "timezone": cfg.Timezone})
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": a.ariaOnline(cfg), "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
@@ -437,6 +437,49 @@ func (a *App) downloadAll(w http.ResponseWriter, r *http.Request) {
 	a.startQueueWorker()
 	respond(w, http.StatusAccepted, map[string]any{"accepted": accepted})
 }
+func (a *App) toggleDownloads(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Paused bool `json:"paused"`
+	}
+	if decode(r, &input) != nil {
+		fail(w, http.StatusBadRequest, errors.New("请求格式错误"))
+		return
+	}
+	cfg, err := a.store.Settings()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if input.Paused {
+		if err = a.store.SetDownloadPaused(true); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		err = a.aria(cfg).PauseAll(ctx)
+		if err != nil {
+			_ = a.store.SetDownloadPaused(false)
+		}
+	} else {
+		err = a.aria(cfg).ResumeAll(ctx)
+	}
+	if err != nil {
+		fail(w, http.StatusBadGateway, err)
+		return
+	}
+	if !input.Paused {
+		err = a.store.SetDownloadPaused(false)
+	}
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !input.Paused {
+		a.startQueueWorker()
+	}
+	respond(w, http.StatusAccepted, map[string]any{"paused": input.Paused})
+}
 func (a *App) startQueueWorker() {
 	a.bulkMu.Lock()
 	if a.bulkRunning {
@@ -452,6 +495,10 @@ func (a *App) startQueueWorker() {
 			a.bulkMu.Unlock()
 		}()
 		for {
+			cfg, cfgErr := a.store.Settings()
+			if cfgErr != nil || cfg.DownloadPaused {
+				return
+			}
 			if wait := a.rateLimitWait(); wait > 0 {
 				log.Printf("download queue paused for %s after HTTP 429", wait.Round(time.Second))
 				time.Sleep(wait)
@@ -463,6 +510,9 @@ func (a *App) startQueueWorker() {
 			video := videos[0]
 			if err = a.queue(video.ID); err != nil {
 				log.Printf("persistent queue %s: %v", video.ID, err)
+				if err.Error() == "下载队列已暂停" {
+					return
+				}
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
 				}
@@ -819,6 +869,9 @@ func (a *App) queue(id string) error {
 		return errors.New("任务已存在")
 	}
 	cfg, _ := a.store.Settings()
+	if cfg.DownloadPaused {
+		return errors.New("下载队列已暂停")
+	}
 	_, free := diskStats(cfg.DownloadDir)
 	if cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes {
 		return errors.New("磁盘可用空间低于保留值")
@@ -856,6 +909,9 @@ func (a *App) queue(id string) error {
 	resolved, err := adapter.ResolveDownload(context.Background(), v, cfg.HTTPProxy)
 	if err != nil {
 		return err
+	}
+	if latest, e := a.store.Settings(); e != nil || latest.DownloadPaused {
+		return errors.New("下载队列已暂停")
 	}
 	layout := plex.Build(cfg.DownloadDir, sub, v)
 	if err = os.MkdirAll(layout.SeasonDir, 0755); err != nil {
@@ -1279,6 +1335,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/translations/import", a.importTranslations)
 	mux.HandleFunc("POST /api/plex/refresh-nfo", a.refreshNFO)
 	mux.HandleFunc("POST /api/videos/download-all", a.downloadAll)
+	mux.HandleFunc("POST /api/downloads/toggle", a.toggleDownloads)
 	mux.HandleFunc("GET /api/settings", a.settings)
 	mux.HandleFunc("PUT /api/settings", a.settings)
 	mux.HandleFunc("GET /api/subscriptions", a.subscriptions)

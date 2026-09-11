@@ -212,6 +212,10 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 - 可选 `subscription` 查询参数，只排队该订阅的 `discovered` 视频。
 - 返回 `202`：`{"accepted":388}`。
 
+### `POST /api/downloads/toggle`
+
+请求体为 `{"paused":true}` 时暂停所有 aria2 下载并停止消费持久队列；传入 `false` 时恢复全部下载并继续处理 `queued` 项。返回 `202`，例如 `{"paused":true}`。全局暂停状态会持久保存，并通过 `GET /api/dashboard` 的 `downloads_paused` 字段返回。
+
 ### `POST /api/videos/{video_id}/{action}`
 
 `action` 支持：

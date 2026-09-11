@@ -42,6 +42,8 @@
 }
 
 .transfer-total small { margin: 0; }
+.download-master { min-width: 110px; }
+.download-master.paused { color: #221e15; background: #e5b951; font-weight: 800; }
 .bottom button:first-child.active { color: #e5b951; }
 
 nav button {
