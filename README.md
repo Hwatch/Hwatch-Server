@@ -1,5 +1,7 @@
 # HWatch NAS 媒体订阅器
 
+开发文档：[HTTP API V1](API_V1.md) · [Agent 开发指南](AGENTS.md)
+
 Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体库管理服务。
 
 ## 功能
