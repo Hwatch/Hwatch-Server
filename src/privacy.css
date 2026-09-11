@@ -10,6 +10,16 @@
   filter: blur(30px) saturate(0.25);
 }
 
+.demo-mode .poster {
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+
+.demo-mode .poster > span {
+  z-index: 2;
+}
+
 .transfer-total {
   display: flex;
   gap: 12px;
