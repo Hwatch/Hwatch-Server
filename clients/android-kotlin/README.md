@@ -57,7 +57,9 @@ All URIs are relative to *http://localhost*
 | *DownloadsApi* | [**videoAction**](docs/DownloadsApi.md#videoaction) | **POST** api/videos/{id}/{action} |  |
 | *LibraryApi* | [**dashboard**](docs/LibraryApi.md#dashboard) | **GET** api/dashboard |  |
 | *LibraryApi* | [**importHTML**](docs/LibraryApi.md#importhtml) | **POST** api/import/html |  |
+| *LibraryApi* | [**listDuplicateCandidates**](docs/LibraryApi.md#listduplicatecandidates) | **GET** api/duplicates |  |
 | *LibraryApi* | [**listVideos**](docs/LibraryApi.md#listvideos) | **GET** api/videos |  |
+| *LibraryApi* | [**reviewDuplicateCandidate**](docs/LibraryApi.md#reviewduplicatecandidate) | **POST** api/duplicates/{id}/{action} |  |
 | *LibraryApi* | [**streamMedia**](docs/LibraryApi.md#streammedia) | **GET** media/{id} |  |
 | *LibraryApi* | [**videoFacets**](docs/LibraryApi.md#videofacets) | **GET** api/videos/facets |  |
 | *LibraryApi* | [**videoThumbnail**](docs/LibraryApi.md#videothumbnail) | **GET** thumb/{id} |  |

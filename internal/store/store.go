@@ -100,6 +100,11 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS playback_history (video_id TEXT PRIMARY KEY,play_count INTEGER NOT NULL DEFAULT 1,last_played_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,fingerprint TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT '');" +
 	"CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS media_fingerprints (video_id TEXT PRIMARY KEY,page_url_normalized TEXT NOT NULL DEFAULT '',cover_hash TEXT NOT NULL DEFAULT '',duration_seconds INTEGER NOT NULL DEFAULT 0,file_size INTEGER NOT NULL DEFAULT 0,quick_hash TEXT NOT NULL DEFAULT '',sha256 TEXT NOT NULL DEFAULT '',hash_status TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE INDEX IF NOT EXISTS idx_fingerprints_url ON media_fingerprints(page_url_normalized);" +
+	"CREATE INDEX IF NOT EXISTS idx_fingerprints_sha ON media_fingerprints(sha256);" +
+	"CREATE TABLE IF NOT EXISTS duplicate_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,match_video_id TEXT NOT NULL,match_type TEXT NOT NULL,confidence REAL NOT NULL DEFAULT 1,duration_delta INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(video_id,match_video_id,match_type),FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE,FOREIGN KEY(match_video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE INDEX IF NOT EXISTS idx_duplicate_status ON duplicate_candidates(status,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"

@@ -37,6 +37,18 @@ interface LibraryApi {
     @POST("api/import/html")
     fun importHTML(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body requestBody: kotlin.collections.Map<kotlin.String, kotlin.Any>): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
+    /**
+     * GET api/duplicates
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/duplicates")
+    fun listDuplicateCandidates(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
 
     /**
     * enum for parameter scope
@@ -91,6 +103,31 @@ interface LibraryApi {
      */
     @GET("api/videos")
     fun listVideos(@Query("limit") limit: kotlin.Int? = 48, @Query("offset") offset: kotlin.Int? = 0, @Query("status") status: kotlin.String? = null, @Query("q") q: kotlin.String? = null, @Query("scope") scope: ScopeListVideos? = null, @Query("tags") tags: kotlin.String? = null, @Query("exclude_tags") excludeTags: kotlin.String? = null, @Query("tag_mode") tagMode: TagModeListVideos? = null, @Query("creator") creator: kotlin.String? = null, @Query("codec") codec: kotlin.String? = null, @Query("min_height") minHeight: kotlin.Int? = null, @Query("sort") sort: kotlin.String? = null, @Query("order") order: OrderListVideos? = null, @Query("language") language: kotlin.String? = "zh-CN"): Call<VideoPage>
+
+
+    /**
+    * enum for parameter action
+    */
+    enum class ActionReviewDuplicateCandidate(val value: kotlin.String) {
+        @SerializedName(value = "confirm") confirm("confirm"),
+        @SerializedName(value = "dismiss") dismiss("dismiss")
+    }
+
+    /**
+     * POST api/duplicates/{id}/{action}
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *  - 400: 请求失败
+     *
+     * @param id 
+     * @param action 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/duplicates/{id}/{action}")
+    fun reviewDuplicateCandidate(@Path("id") id: kotlin.Long, @Path("action") action: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET media/{id}

@@ -100,6 +100,21 @@ type Notification = {
   created_at: string;
   read_at: string;
 };
+type Duplicate = {
+  id: number;
+  video_id: string;
+  video_title: string;
+  video_thumbnail: string;
+  match_video_id: string;
+  match_title: string;
+  match_thumbnail: string;
+  match_type: string;
+  confidence: number;
+  duration_delta: number;
+  status: string;
+  created_at: string;
+  reviewed_at: string;
+};
 type Dashboard = {
   subscriptions: Sub[];
   videos: Video[];
@@ -256,6 +271,7 @@ const backups = ref<Backup[]>([]),
   backupDirectory = ref(""),
   backupSensitive = ref(false);
 const notifications = ref<Notification[]>([]);
+const duplicates = ref<Duplicate[]>([]);
 const facets = ref<{ creators: Facet[]; tags: Facet[]; codecs: Facet[] }>({
     creators: [],
     tags: [],
@@ -400,6 +416,21 @@ async function markNotificationsRead() {
   data.value.unread_notifications = 0;
   await loadNotifications();
 }
+async function loadDuplicates() {
+  const result = await api("/api/duplicates");
+  duplicates.value = result.items;
+}
+async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
+  await act(async () => {
+    await api("/api/duplicates/" + item.id + "/" + action, { method: "POST" });
+    notice.value =
+      action === "confirm"
+        ? "已确认重复，保留现有文件"
+        : "已忽略匹配并重新排队";
+    await loadDuplicates();
+    await refreshDashboard();
+  });
+}
 async function loadVideos() {
   const p = new URLSearchParams({
     limit: "48",
@@ -472,6 +503,7 @@ async function changeView(next: string) {
     await loadVideos();
   if (next === "settings") await loadSettings();
   if (next === "notifications") await loadNotifications();
+  if (next === "duplicates") await loadDuplicates();
 }
 async function act(run: () => Promise<void>) {
   busy.value = true;
@@ -862,6 +894,7 @@ watch(
             { id: 'undownloaded', label: '未下载' },
             { id: 'library', label: '影视库' },
             { id: 'translations', label: '翻译管理' },
+            { id: 'duplicates', label: '重复审查' },
             { id: 'notifications', label: '通知' },
           ]"
           :key="item.id"
@@ -941,7 +974,9 @@ watch(
                           ? "翻译管理"
                           : view === "notifications"
                             ? "通知中心"
-                            : "系统设置"
+                            : view === "duplicates"
+                              ? "重复内容审查"
+                              : "系统设置"
             }}
           </h1>
         </div>
@@ -962,7 +997,12 @@ watch(
           {{ data.downloads_paused ? "继续全部" : "暂停全部" }}</button
         ><button
           v-else-if="
-            !['settings', 'translations', 'notifications'].includes(view)
+            ![
+              'settings',
+              'translations',
+              'notifications',
+              'duplicates',
+            ].includes(view)
           "
           class="primary"
           :disabled="busy"
@@ -1157,6 +1197,54 @@ watch(
             </div>
           </article>
           <div v-if="!data.subscriptions.length" class="empty">还没有订阅</div>
+        </div>
+      </section>
+      <section v-else-if="view === 'duplicates'">
+        <div class="duplicate-grid">
+          <article
+            v-for="item in duplicates"
+            :key="item.id"
+            class="duplicate-card"
+          >
+            <div class="duplicate-pair">
+              <div>
+                <img :src="'/thumb/' + item.video_id" /><b>{{
+                  item.video_title
+                }}</b>
+              </div>
+              <span>≈</span>
+              <div>
+                <img :src="'/thumb/' + item.match_video_id" /><b>{{
+                  item.match_title
+                }}</b>
+              </div>
+            </div>
+            <small
+              >{{
+                item.match_type === "sha256"
+                  ? "文件 SHA-256 完全一致"
+                  : item.match_type === "page_url"
+                    ? "详情页地址一致"
+                    : "封面相似 " +
+                      Math.round(item.confidence * 100) +
+                      "% · 时长差 " +
+                      item.duration_delta +
+                      " 秒"
+              }}
+              · {{ item.status }}</small
+            >
+            <div v-if="item.status === 'pending'" class="actions">
+              <button @click="reviewDuplicate(item, 'dismiss')">
+                不是重复，继续下载</button
+              ><button
+                class="primary"
+                @click="reviewDuplicate(item, 'confirm')"
+              >
+                确认重复
+              </button>
+            </div>
+          </article>
+          <div v-if="!duplicates.length" class="empty">暂无重复候选</div>
         </div>
       </section>
       <section v-else-if="view === 'notifications'">
