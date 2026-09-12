@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import NavIcon from './NavIcon.vue'
 
-type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
+type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
 type Backup={name:string;size:number;created_at:string;sha256:string;valid:boolean}
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean}>()
@@ -19,6 +19,8 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
         <span class="setting-symbol"><NavIcon name="downloads"/></span><span><b>下载与存储</b><small>管理下载目录、并发、连接和空间限制</small></span><i>⌄</i>
       </button>
       <form v-if="open==='download'" class="setting-body" @submit.prevent="emit('save')">
+        <label>下载器模式<select v-model="props.settings.downloader_mode" disabled><option value="aria2">固定 aria2（当前可用）</option><option value="wget">固定 wget（接入中）</option><option value="auto">自动选择（接入中）</option></select><small>当前任务继续由原下载器处理；正式开放切换后，仅 queued 和新任务采用新模式。</small></label>
+        <div class="downloader-capability"><span><b>aria2</b><small>已接入 · 多连接、全局限速、断点续传</small></span><span><b>wget</b><small>进程管理与重启续传接入中</small></span></div>
         <label>下载与 Plex 媒体目录<input v-model="props.settings.download_dir" placeholder="/volume1/media/HWatch"><small>视频直接按 Plex 电视库结构写入，无需复制第二份。</small></label>
         <div class="setting-grid"><label>并发下载任务数<input v-model.number="props.settings.max_concurrent" type="number" min="1" max="20"></label><label>单任务连接数<input v-model.number="props.settings.connections_per_download" type="number" min="1" max="16"></label><label>全局下载限速（KB/s）<input v-model.number="props.settings.download_limit_kbps" type="number" min="0"><small>0 表示不限速</small></label><label>最低保留空间（字节）<input v-model.number="props.settings.min_free_bytes" type="number"></label></div>
         <button class="primary save-setting" :disabled="busy">保存设置</button>
