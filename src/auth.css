@@ -3,6 +3,5 @@
 .auth-card h1,.auth-card p{margin:0}.auth-card>p{color:#9da5b2;line-height:1.5}.auth-card label{display:grid;gap:7px;color:#cbd0d9}
 .auth-logo{display:grid;place-items:center;width:48px;height:48px;border-radius:13px;background:#e5b951;color:#211e17;font-size:1.5rem;font-weight:900}
 .auth-error{padding:10px 12px;border-radius:8px;background:#3c2529;color:#ffb4b4!important}.auth-card button{padding:12px}
-.logout-button{position:fixed;left:16px;bottom:52px;z-index:6;width:206px;background:#22262e;color:#aeb5c0}
-.sidebar-collapsed~.logout-button{width:auto}
-@media(max-width:680px){.logout-button{left:9px;width:54px;font-size:0}}
+.logout-button{position:fixed;right:18px;bottom:18px;z-index:6;width:auto;max-width:220px;background:#22262eee;border:1px solid #353b46;color:#aeb5c0;box-shadow:0 8px 28px #0007}
+@media(max-width:680px){.logout-button{right:10px;bottom:10px;max-width:140px;padding:8px 10px;font-size:.78rem}}
