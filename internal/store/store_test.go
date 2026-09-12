@@ -45,3 +45,29 @@ func TestSQLiteLifecycle(t *testing.T) {
 		t.Fatalf("recent=%+v err=%v", recent, err)
 	}
 }
+
+func TestRequeueCapacityFailure(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	sub := Subscription{Slug: "rule34video:test", Name: "test", URL: "https://example.invalid", Enabled: true, CreatedAt: Now()}
+	if err = s.AddSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+	v := Video{ID: "rule34video:capacity", SubscriptionSlug: sub.Slug, Title: "test", PageURL: "https://example.invalid/capacity"}
+	if _, err = s.UpsertDiscovered(v); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.UpdateTask(v.ID, "failed", "", "", "", "wget capacity reached", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if count, requeueErr := s.RequeueTransientFailures(); requeueErr != nil || count != 1 {
+		t.Fatalf("requeued=%d err=%v", count, requeueErr)
+	}
+	got, _ := s.Video(v.ID)
+	if got.Status != "queued" || got.Error != "" {
+		t.Fatalf("unexpected task after requeue: status=%q error=%q", got.Status, got.Error)
+	}
+}

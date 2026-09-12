@@ -1,6 +1,11 @@
 package downloader
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var ErrCapacityReached = errors.New("downloader capacity reached")
 
 type Request struct {
 	URL, Directory, FileName, Referer, UserAgent, Proxy string

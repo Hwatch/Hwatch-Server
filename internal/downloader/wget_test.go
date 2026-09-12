@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,4 +38,26 @@ func TestWgetDownloadsFile(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("wget did not finish")
+}
+
+func TestWgetCapacityIsRetryable(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/wget"); err != nil {
+		t.Skip("wget unavailable")
+	}
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		_, _ = w.Write([]byte("done"))
+	}))
+	defer server.Close()
+	defer close(release)
+	w := NewWget()
+	_ = w.SetGlobal(context.Background(), 1, 0)
+	if _, err := w.Add(context.Background(), Request{URL: server.URL, Directory: t.TempDir(), FileName: "first.bin"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := w.Add(context.Background(), Request{URL: server.URL, Directory: t.TempDir(), FileName: "second.bin"})
+	if !errors.Is(err, ErrCapacityReached) {
+		t.Fatalf("capacity error = %v", err)
+	}
 }
