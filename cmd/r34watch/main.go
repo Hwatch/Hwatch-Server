@@ -45,10 +45,12 @@ type App struct {
 	last429        time.Time
 	nfoMu          sync.Mutex
 	nfoRunning     bool
+	backupMu       sync.Mutex
 	authMu         sync.Mutex
 	loginAttempts  map[string][]time.Time
 	checking       map[string]bool
 	lastSchedule   string
+	lastBackupRun  string
 }
 
 func New(s *store.Store) *App {
@@ -606,6 +608,8 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "check_time", &cfg.CheckTime)
 	assignString(input, "timezone", &cfg.Timezone)
 	assignString(input, "plex_language", &cfg.PlexLanguage)
+	assignString(input, "backup_dir", &cfg.BackupDir)
+	assignString(input, "backup_time", &cfg.BackupTime)
 	assignString(input, "exclude_title_keywords", &cfg.ExcludeTitleKeywords)
 	assignString(input, "exclude_uploaders", &cfg.ExcludeUploaders)
 	assignString(input, "exclude_categories", &cfg.ExcludeCategories)
@@ -616,6 +620,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignInt64(input, "download_limit_kbps", &cfg.DownloadLimitKBPS)
 	assignInt64(input, "min_free_bytes", &cfg.MinFreeBytes)
 	assignInt64(input, "max_duration_seconds", &cfg.MaxDurationSeconds)
+	assignInt(input, "backup_retention", &cfg.BackupRetention)
 	if cfg.HTTPProxy != "" {
 		u, e := url.Parse(cfg.HTTPProxy)
 		if e != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -635,6 +640,14 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, errors.New("下载限速不能小于 0"))
 		return
 	}
+	if cfg.BackupRetention < 1 || cfg.BackupRetention > 365 {
+		fail(w, 400, errors.New("数据库备份保留数量必须在 1 到 365 之间"))
+		return
+	}
+	if _, parseErr := time.Parse("15:04", cfg.BackupTime); parseErr != nil {
+		fail(w, 400, errors.New("数据库备份时间格式无效"))
+		return
+	}
 	if absolute, absErr := filepath.Abs(cfg.DownloadDir); absErr == nil {
 		cfg.DownloadDir = absolute
 	}
@@ -648,7 +661,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, settingsMap(cfg))
 }
 func settingsMap(c store.Settings) map[string]any {
-	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds}
+	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
 }
 func assignString(m map[string]any, k string, v *string) {
 	if x, ok := m[k].(string); ok {
@@ -1176,6 +1189,14 @@ func (a *App) scheduler(ctx context.Context) {
 					}
 				}
 			}
+			if strings.HasSuffix(key, " "+cfg.BackupTime) && key != a.lastBackupRun {
+				a.lastBackupRun = key
+				go func() {
+					if _, backupErr := a.createBackup(false); backupErr != nil {
+						log.Printf("database backup failed: %v", backupErr)
+					}
+				}()
+			}
 		}
 	}
 }
@@ -1362,6 +1383,9 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/downloads/toggle", a.toggleDownloads)
 	mux.HandleFunc("GET /api/settings", a.settings)
 	mux.HandleFunc("PUT /api/settings", a.settings)
+	mux.HandleFunc("GET /api/backups", a.backups)
+	mux.HandleFunc("POST /api/backups", a.backups)
+	mux.HandleFunc("POST /api/backups/{name}/restore", a.restoreBackup)
 	mux.HandleFunc("GET /api/subscriptions", a.subscriptions)
 	mux.HandleFunc("GET /api/platforms", a.platforms)
 	mux.HandleFunc("GET /api/creators/search", a.searchCreators)

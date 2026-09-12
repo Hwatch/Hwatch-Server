@@ -355,7 +355,12 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
   "exclude_uploaders":"",
   "exclude_categories":"",
   "exclude_tags":"",
-  "max_duration_seconds":0
+  "max_duration_seconds":0,
+  "backup_dir":"",
+  "backup_time":"03:30",
+  "backup_retention":7,
+  "backup_last_success":"",
+  "backup_last_error":""
 }
 ```
 
@@ -365,7 +370,15 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 自动排除规则在任务提交下载器前执行。多个文本规则使用逗号、中文逗号、分号或换行分隔；标题规则使用不区分大小写的包含匹配，上传者、分类和标签使用对应字段匹配。`require_creator_match=true` 会排除实际创作者与订阅作者不一致的视频，`max_duration_seconds=0` 表示不限制时长。已下载文件不会因新增规则而自动删除。
 
-警告：当前接口会返回 `aria_secret` 和可能含凭据的 `http_proxy`。Android 客户端不得写入日志、崩溃报告或分析平台；发布公网版本前应等待服务端认证和敏感字段脱敏协议。
+警告：当前接口会向已认证管理员返回 `aria_secret` 和可能含凭据的 `http_proxy`。客户端不得写入日志、崩溃报告或分析平台。
+
+### SQLite 备份与恢复
+
+- `GET /api/backups`：列出一致性快照、大小、SHA-256、完整性状态、实际目录和最近备份结果。
+- `POST /api/backups`：立即创建快照，返回 `201`。备份使用 SQLite `VACUUM INTO`，不直接复制 WAL 文件。
+- `POST /api/backups/{name}/restore`：请求体为 `{"confirm":true}`。恢复前创建回滚快照、暂停下载、校验完整性和必需 schema，原子替换数据库后返回 `202` 并重启服务。
+
+`backup_dir` 留空时备份位于 `<download_dir>/.hwatch-backups`，当前部署即 NFS 媒体目录。数据库可能包含代理凭据、下载器密钥和管理员密码哈希，备份及校验和文件权限均为 `0600`。
 
 ## 8. 翻译与 Plex
 

@@ -11,7 +11,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB   *sql.DB
+	Path string
+}
 type Translation struct{ EntityID, Language, Field, SourceHash, Text, Provider, UpdatedAt string }
 type SubscriptionProgress struct {
 	Total, Completed, Active, Waiting, Failed int64
@@ -37,8 +40,10 @@ type Video struct {
 }
 type Settings struct {
 	HTTPProxy, DownloadDir, AriaRPCURL, AriaSecret, CheckTime, Timezone, PlexLanguage string
+	BackupDir, BackupTime, BackupLastSuccess, BackupLastError                         string
 	ExcludeTitleKeywords, ExcludeUploaders, ExcludeCategories, ExcludeTags            string
 	MaxConcurrent, ConnectionsPerDownload                                             int
+	BackupRetention                                                                   int
 	MinFreeBytes, DownloadLimitKBPS                                                   int64
 	MaxDurationSeconds                                                                int64
 	RequireCreatorMatch, DownloadPaused                                               bool
@@ -95,7 +100,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	s := &Store{DB: db}
+	s := &Store{DB: db, Path: path}
 	// Additive migrations keep existing installations readable while new clean databases
 	// get the same columns directly from schema.
 	_, _ = db.Exec("ALTER TABLE videos ADD COLUMN download_speed INTEGER NOT NULL DEFAULT 0")
@@ -125,7 +130,7 @@ func Open(path string) (*Store, error) {
 	}
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0"}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": ""}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -169,6 +174,10 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.CheckTime = values["check_time"]
 	cfg.Timezone = values["timezone"]
 	cfg.PlexLanguage = values["plex_language"]
+	cfg.BackupDir = values["backup_dir"]
+	cfg.BackupTime = values["backup_time"]
+	cfg.BackupLastSuccess = values["backup_last_success"]
+	cfg.BackupLastError = values["backup_last_error"]
 	cfg.ExcludeTitleKeywords = values["exclude_title_keywords"]
 	cfg.ExcludeUploaders = values["exclude_uploaders"]
 	cfg.ExcludeCategories = values["exclude_categories"]
@@ -180,6 +189,7 @@ func (s *Store) Settings() (Settings, error) {
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
 	_, _ = fmt.Sscan(values["min_free_bytes"], &cfg.MinFreeBytes)
 	_, _ = fmt.Sscan(values["max_duration_seconds"], &cfg.MaxDurationSeconds)
+	_, _ = fmt.Sscan(values["backup_retention"], &cfg.BackupRetention)
 	return cfg, nil
 }
 func (s *Store) SetDownloadPaused(paused bool) error {
@@ -192,11 +202,31 @@ func (s *Store) SaveSettings(cfg Settings) error {
 		return err
 	}
 	defer tx.Rollback()
-	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds}
+	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention}
 	for k, v := range values {
 		if _, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, fmt.Sprint(v)); err != nil {
 			return err
 		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SetBackupResult(success bool, message string) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if success {
+		_, err = tx.Exec("INSERT INTO settings(key,value) VALUES('backup_last_success',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", Now())
+		if err == nil {
+			_, err = tx.Exec("INSERT INTO settings(key,value) VALUES('backup_last_error','') ON CONFLICT(key) DO UPDATE SET value='' ")
+		}
+	} else {
+		_, err = tx.Exec("INSERT INTO settings(key,value) VALUES('backup_last_error',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", message)
+	}
+	if err != nil {
+		return err
 	}
 	return tx.Commit()
 }
