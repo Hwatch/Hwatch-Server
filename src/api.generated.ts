@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/videos": {
         parameters: {
             query?: never;
@@ -621,6 +637,18 @@ export interface operations {
             query?: {
                 language?: components["parameters"]["Language"];
             };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    health: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;

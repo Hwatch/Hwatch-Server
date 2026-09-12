@@ -27,6 +27,8 @@ paths:
     get: {tags: [Auth], operationId: authMe, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/dashboard:
     get: {tags: [Library], operationId: dashboard, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/health:
+    get: {tags: [Settings], operationId: health, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/videos:
     get:
       tags: [Library]

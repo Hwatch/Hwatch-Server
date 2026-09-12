@@ -415,3 +415,6 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `video_id`、`slug` 和所有查询参数都必须 URL 编码。
 - 不要依赖字段顺序；未知字段应忽略。
 - 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
+### `GET /api/health`
+
+返回 SQLite、媒体/NFS 存储、持久队列、aria2、wget、剩余空间及服务运行时间。`status` 为 `ok` 或 `degraded`；下载器字段包含在线状态、版本、活动任务数、速度、连接数和最近错误。

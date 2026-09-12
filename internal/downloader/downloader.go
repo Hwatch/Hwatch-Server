@@ -19,6 +19,7 @@ type Health struct {
 	Online, SupportsMulti    bool
 	Active, Connections      int
 	DownloadSpeed            int64
+	UptimeSeconds            int64
 }
 
 type Engine interface {
