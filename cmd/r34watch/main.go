@@ -121,7 +121,12 @@ func respond(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func fail(w http.ResponseWriter, status int, err error) {
-	respond(w, status, map[string]string{"error": err.Error()})
+	codes := map[int]string{400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "not_found", 409: "conflict", 422: "validation_failed", 429: "rate_limited", 500: "internal_error", 502: "upstream_unavailable"}
+	code := codes[status]
+	if code == "" {
+		code = "request_failed"
+	}
+	respond(w, status, map[string]string{"code": code, "error": err.Error()})
 }
 func decode(r *http.Request, target any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 12<<20)).Decode(target)
@@ -1420,6 +1425,8 @@ func staticHandler(dist string) http.Handler {
 }
 func (a *App) router(dist string) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /openapi.yaml", openAPISpec)
+	mux.HandleFunc("GET /docs", openAPIDocs)
 	mux.HandleFunc("GET /api/auth/status", a.authStatus)
 	mux.HandleFunc("POST /api/auth/setup", a.authSetup)
 	mux.HandleFunc("POST /api/auth/login", a.authLogin)
@@ -1454,6 +1461,14 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/events", a.events)
 	mux.Handle("/", staticHandler(dist))
 	return requestLog(a.requireAuth(mux))
+}
+func openAPISpec(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	http.ServeFile(w, r, "openapi.yaml")
+}
+func openAPIDocs(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.WriteString(w, `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>HWatch API</title><script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script></head><body><script>Scalar.createApiReference({url:'/openapi.yaml',theme:'kepler',authentication:{preferredSecurityScheme:'cookieAuth'}})</script></body></html>`)
 }
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

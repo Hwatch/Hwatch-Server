@@ -1,0 +1,150 @@
+openapi: 3.1.0
+info:
+  title: HWatch API
+  version: 1.0.0
+  description: NAS 媒体订阅、下载与 Plex 媒体库 API。时间均为 UTC RFC 3339。
+servers:
+  - url: /
+security:
+  - cookieAuth: []
+tags:
+  - name: Auth
+  - name: Library
+  - name: Downloads
+  - name: Subscriptions
+  - name: Settings
+  - name: Translation
+paths:
+  /api/auth/status:
+    get: {tags: [Auth], security: [], operationId: authStatus, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/auth/setup:
+    post: {tags: [Auth], security: [], operationId: setupAdmin, requestBody: {$ref: '#/components/requestBodies/Credentials'}, responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
+  /api/auth/login:
+    post: {tags: [Auth], security: [], operationId: login, requestBody: {$ref: '#/components/requestBodies/Credentials'}, responses: {'200': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}}}
+  /api/auth/logout:
+    post: {tags: [Auth], operationId: logout, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/auth/me:
+    get: {tags: [Auth], operationId: authMe, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/dashboard:
+    get: {tags: [Library], operationId: dashboard, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/videos:
+    get:
+      tags: [Library]
+      operationId: listVideos
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: scope, in: query, schema: {type: string, enum: [all, original, translated]}}
+        - {name: tags, in: query, schema: {type: string}}
+        - {name: exclude_tags, in: query, schema: {type: string}}
+        - {name: tag_mode, in: query, schema: {type: string, enum: [all, any]}}
+        - {name: creator, in: query, schema: {type: string}}
+        - {name: codec, in: query, schema: {type: string}}
+        - {name: min_height, in: query, schema: {type: integer}}
+        - {name: sort, in: query, schema: {type: string}}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
+        - {$ref: '#/components/parameters/Language'}
+      responses: {'200': {$ref: '#/components/responses/VideoPage'}, '400': {$ref: '#/components/responses/Error'}}
+  /api/videos/facets:
+    get: {tags: [Library], operationId: videoFacets, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/tasks:
+    get: {tags: [Downloads], operationId: listTasks, parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}, {name: status, in: query, schema: {type: string}}, {$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/VideoPage'}}}
+  /api/videos/download-all:
+    post: {tags: [Downloads], operationId: downloadAll, parameters: [{$ref: '#/components/parameters/CSRF'}, {name: subscription, in: query, schema: {type: string}}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/downloads/toggle:
+    post: {tags: [Downloads], operationId: toggleDownloads, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [paused], properties: {paused: {type: boolean}}}}}}, responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/videos/{id}/{action}:
+    post: {tags: [Downloads], operationId: videoAction, parameters: [{$ref: '#/components/parameters/VideoID'}, {name: action, in: path, required: true, schema: {type: string, enum: [download, retry, pause, resume, delete]}}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+  /api/subscriptions:
+    get: {tags: [Subscriptions], operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri}, type: {type: string}, download_existing: {type: boolean}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+  /api/subscriptions/{slug}:
+    patch: {tags: [Subscriptions], operationId: updateSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    delete: {tags: [Subscriptions], operationId: deleteSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/platforms:
+    get: {tags: [Subscriptions], operationId: listPlatforms, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/creators/search:
+    get: {tags: [Subscriptions], operationId: searchCreators, parameters: [{name: platform, in: query, schema: {type: string}}, {name: q, in: query, required: true, schema: {type: string}}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/check:
+    post: {tags: [Subscriptions], operationId: checkAll, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/check/{slug}:
+    post: {tags: [Subscriptions], operationId: checkSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/settings:
+    get: {tags: [Settings], operationId: getSettings, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    put: {tags: [Settings], operationId: updateSettings, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/backups:
+    get: {tags: [Settings], operationId: listBackups, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    post: {tags: [Settings], operationId: createBackup, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'201': {$ref: '#/components/responses/JSON'}}}
+  /api/backups/{name}/restore:
+    post: {tags: [Settings], operationId: restoreBackup, parameters: [{name: name, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [confirm], properties: {confirm: {type: boolean, const: true}}}}}}, responses: {'202': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}}}
+  /api/translations/export:
+    get: {tags: [Translation], operationId: exportTranslations, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/translations/import:
+    post: {tags: [Translation], operationId: importTranslations, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/plex/refresh-nfo:
+    post: {tags: [Translation], operationId: refreshNFO, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/import/html:
+    post: {tags: [Library], operationId: importHTML, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/events:
+    get:
+      tags: [Downloads]
+      operationId: downloadEvents
+      description: text/event-stream。客户端断线后自动重连，并通过 GET /api/dashboard 与 GET /api/tasks 恢复全量状态。
+      responses:
+        '200': {description: SSE 下载状态流, content: {text/event-stream: {schema: {type: string}}}}
+  /media/{id}:
+    get: {tags: [Library], operationId: streamMedia, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {description: 支持 Range 的媒体流}}}
+  /thumb/{id}:
+    get: {tags: [Library], operationId: videoThumbnail, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {description: 图片或 SVG 占位图}}}
+components:
+  securitySchemes:
+    cookieAuth: {type: apiKey, in: cookie, name: hwatch_session}
+  parameters:
+    CSRF: {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}
+    VideoID: {name: id, in: path, required: true, schema: {type: string}}
+    Slug: {name: slug, in: path, required: true, schema: {type: string}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 48}}
+    Offset: {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+    Language: {name: language, in: query, schema: {type: string, default: zh-CN}}
+  requestBodies:
+    Credentials: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Credentials'}}}}
+    JSONObject: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  responses:
+    JSON: {description: 成功, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+    Error: {description: 请求失败, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    VideoPage: {description: 视频分页, content: {application/json: {schema: {$ref: '#/components/schemas/VideoPage'}}}}
+  schemas:
+    Error:
+      type: object
+      required: [code, error]
+      properties: {code: {type: string}, error: {type: string}}
+    Credentials:
+      type: object
+      required: [username, password]
+      properties: {username: {type: string, minLength: 3, maxLength: 64}, password: {type: string, minLength: 10, maxLength: 256, writeOnly: true}}
+    Video:
+      type: object
+      required: [video_id, subscription_slug, title, status]
+      properties:
+        video_id: {type: string}
+        subscription_slug: {type: string}
+        title: {type: string}
+        translated_title: {type: string}
+        status: {type: string, enum: [discovered, queued, waiting, active, paused, failed, excluded, completed]}
+        downloader_id: {type: string, enum: ['', aria2, wget]}
+        external_task_id: {type: string}
+        bytes_downloaded: {type: integer, format: int64}
+        total_bytes: {type: integer, format: int64}
+        download_speed: {type: integer, format: int64}
+        connections: {type: integer}
+      additionalProperties: true
+    VideoPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Video'}}
+        total: {type: integer, format: int64}
+        limit: {type: integer}
+        offset: {type: integer}
