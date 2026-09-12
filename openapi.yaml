@@ -33,6 +33,18 @@ paths:
       operationId: health
       responses:
         '200': {description: 服务健康状态；组件降级仍返回 200, content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}}
+  /api/notifications:
+    get:
+      tags: [Settings]
+      operationId: listNotifications
+      parameters: [{name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}]
+      responses: {'200': {description: 持久系统通知, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPage'}}}}}
+  /api/notifications/read-all:
+    post:
+      tags: [Settings]
+      operationId: markNotificationsRead
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
   /api/videos:
     get:
       tags: [Library]
@@ -190,6 +202,22 @@ components:
         queue: {type: object, additionalProperties: true}
         downloaders: {type: array, items: {type: object, additionalProperties: true}}
         uptime_seconds: {type: integer, format: int64}
+    Notification:
+      type: object
+      required: [id, code, severity, message, created_at, read_at]
+      properties:
+        id: {type: integer, format: int64}
+        code: {type: string, enum: [storage_unavailable, storage_low, consecutive_download_failures, downloader_unavailable]}
+        severity: {type: string, enum: [warning, error]}
+        message: {type: string}
+        created_at: {type: string, format: date-time}
+        read_at: {type: string, description: 未读时为空字符串}
+    NotificationPage:
+      type: object
+      required: [items, unread]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+        unread: {type: integer, format: int64}
     VideoPage:
       type: object
       required: [items, total, limit, offset]

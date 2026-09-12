@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
+
+	"r34watch/internal/store"
 )
 
 func TestListFollowsAllDeclaredPages(t *testing.T) {
@@ -82,5 +85,34 @@ func TestParseImportedMetadata(t *testing.T) {
 func TestParseCount(t *testing.T) {
 	if got := parseCount("218K (218,417)"); got != 218417 {
 		t.Fatalf("got %d", got)
+	}
+}
+
+func TestCreatorListingSnapshot(t *testing.T) {
+	raw, err := os.ReadFile("testdata/creator_listing.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := []store.Video{}
+	appendListing(string(raw), map[string]bool{}, &out)
+	if len(out) != 1 || out[0].ID != "4429909" || out[0].Title != "Example & Video" || out[0].ThumbnailURL != "https://rule34video.com/thumbs/example.jpg" {
+		t.Fatalf("listing parser contract changed: %+v", out)
+	}
+}
+
+func TestVideoDetailSnapshot(t *testing.T) {
+	raw, err := os.ReadFile("testdata/video_detail.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := parseRaw(store.Video{ID: "4429909"}, string(raw))
+	if v.Title != "Snapshot Episode" || v.Views != 12345 || v.DurationSeconds != 201 || v.CreatorName != "Akt" || v.UploaderName != "Uploader" {
+		t.Fatalf("detail parser contract changed: %+v", v)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(raw) }))
+	defer server.Close()
+	u, quality, err := (Collector{}).Highest(server.URL, "")
+	if err != nil || quality != 2160 || u != "https://cdn.example/video-2160.mp4" {
+		t.Fatalf("source=%q quality=%d err=%v", u, quality, err)
 	}
 }

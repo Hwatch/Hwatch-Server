@@ -65,6 +65,8 @@ All URIs are relative to *http://localhost*
 | *SettingsApi* | [**getSettings**](docs/SettingsApi.md#getsettings) | **GET** api/settings |  |
 | *SettingsApi* | [**health**](docs/SettingsApi.md#health) | **GET** api/health |  |
 | *SettingsApi* | [**listBackups**](docs/SettingsApi.md#listbackups) | **GET** api/backups |  |
+| *SettingsApi* | [**listNotifications**](docs/SettingsApi.md#listnotifications) | **GET** api/notifications |  |
+| *SettingsApi* | [**markNotificationsRead**](docs/SettingsApi.md#marknotificationsread) | **POST** api/notifications/read-all |  |
 | *SettingsApi* | [**recoverySummary**](docs/SettingsApi.md#recoverysummary) | **GET** api/recovery/latest |  |
 | *SettingsApi* | [**restoreBackup**](docs/SettingsApi.md#restorebackup) | **POST** api/backups/{name}/restore |  |
 | *SettingsApi* | [**updateSettings**](docs/SettingsApi.md#updatesettings) | **PUT** api/settings |  |
@@ -89,6 +91,8 @@ All URIs are relative to *http://localhost*
  - [app.hwatch.client.models.Error](docs/Error.md)
  - [app.hwatch.client.models.Health](docs/Health.md)
  - [app.hwatch.client.models.HealthWarning](docs/HealthWarning.md)
+ - [app.hwatch.client.models.Notification](docs/Notification.md)
+ - [app.hwatch.client.models.NotificationPage](docs/NotificationPage.md)
  - [app.hwatch.client.models.RecoveryStatus](docs/RecoveryStatus.md)
  - [app.hwatch.client.models.RecoveryStatusSummary](docs/RecoveryStatusSummary.md)
  - [app.hwatch.client.models.RestoreBackupRequest](docs/RestoreBackupRequest.md)

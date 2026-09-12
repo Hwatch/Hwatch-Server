@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.Error
 import app.hwatch.client.models.Health
+import app.hwatch.client.models.NotificationPage
 import app.hwatch.client.models.RecoveryStatus
 import app.hwatch.client.models.RestoreBackupRequest
 
@@ -60,6 +61,32 @@ interface SettingsApi {
      */
     @GET("api/backups")
     fun listBackups(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * GET api/notifications
+     * 
+     * 
+     * Responses:
+     *  - 200: 持久系统通知
+     *
+     * @param limit  (optional, default to 50)
+     * @return [Call]<[NotificationPage]>
+     */
+    @GET("api/notifications")
+    fun listNotifications(@Query("limit") limit: kotlin.Int? = 50): Call<NotificationPage>
+
+    /**
+     * POST api/notifications/read-all
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/notifications/read-all")
+    fun markNotificationsRead(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/recovery/latest

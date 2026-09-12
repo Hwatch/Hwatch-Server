@@ -18,3 +18,15 @@ func TestRule34VideoSubscriptionIdentity(t *testing.T) {
 		t.Fatalf("unexpected subscription: %+v", sub)
 	}
 }
+
+func TestRule34VideoSatisfiesAdapterContract(t *testing.T) {
+	var _ Adapter = Rule34Video{}
+	registry := NewRegistry(Rule34Video{})
+	got, err := registry.Match("https://rule34video.com/models/akt/")
+	if err != nil || got.ID() != "rule34video" {
+		t.Fatalf("adapter routing failed: %v", err)
+	}
+	if _, err = registry.ByID("unsupported"); err == nil {
+		t.Fatal("unknown platform must not silently fall back")
+	}
+}

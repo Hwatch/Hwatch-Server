@@ -469,6 +469,14 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 视频与任务对象额外返回 `error_code` 和 `error_retryable`。当前稳定分类包括 `capacity_reached`、`rate_limited`、`timeout`、`downloader_offline`、`detached_task`、`source_expired`、`storage_unavailable`、`permission_denied` 和 `download_failed`；无错误时 `error_code` 为空字符串。
 
+### `GET /api/notifications`
+
+返回持久系统通知及未读数量。当前通知覆盖媒体/NFS 不可用、空间低于保留值、当前下载器不可用和连续三个下载失败。相同故障采用 6 小时冷却，避免重复刷屏。
+
+### `POST /api/notifications/read-all`
+
+将当前全部通知标为已读，需要 CSRF 请求头。通知只保存稳定错误码和脱敏文案，不保存代理、下载地址或认证信息。
+
 ## 11. Android 实现建议
 
 - 使用 Media3/ExoPlayer 播放 `/media/{id}`。
