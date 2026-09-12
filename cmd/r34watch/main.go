@@ -147,7 +147,7 @@ func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	return out
 }
 func videoMap(v store.Video) map[string]any {
-	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
+	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
 }
 func translatedVideoMap(v store.Video, language string, translations map[string]store.Translation) map[string]any {
 	item := videoMap(v)
@@ -842,6 +842,9 @@ func (a *App) check(slug string) {
 			}
 		}
 	}
+	if requeued, _ := a.store.RequeueTrustedCreatorMismatches(slug); requeued > 0 {
+		a.startQueueWorker()
+	}
 }
 func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
@@ -927,11 +930,17 @@ func (a *App) queue(id string) error {
 	return a.store.UpdateTask(id, "waiting", gid, "", layout.FullPath, "", 0, 0)
 }
 func exclusionReason(v store.Video, sub store.Subscription, cfg store.Settings) string {
+	if trustedSubscriptionListing(v.SourceRelationJSON, sub) {
+		return contentExclusionReason(v, cfg)
+	}
 	creatorURL := strings.TrimRight(strings.ToLower(v.CreatorURL), "/")
 	subURL := strings.TrimRight(strings.ToLower(sub.URL), "/")
 	if cfg.RequireCreatorMatch && creatorURL != "" && subURL != "" && creatorURL != subURL {
 		return "实际创作者与订阅作者不一致: " + v.CreatorName
 	}
+	return contentExclusionReason(v, cfg)
+}
+func contentExclusionReason(v store.Video, cfg store.Settings) string {
 	if matchedRule(v.Title, cfg.ExcludeTitleKeywords) {
 		return "标题命中排除规则"
 	}
@@ -948,6 +957,14 @@ func exclusionReason(v store.Video, sub store.Subscription, cfg store.Settings) 
 		return "视频时长超过限制"
 	}
 	return ""
+}
+func trustedSubscriptionListing(raw string, sub store.Subscription) bool {
+	var relation struct {
+		Type             string `json:"type"`
+		Platform         string `json:"platform"`
+		SubscriptionSlug string `json:"subscription_slug"`
+	}
+	return json.Unmarshal([]byte(raw), &relation) == nil && relation.Type == "creator_listing" && relation.Platform == sub.Platform && relation.SubscriptionSlug == sub.Slug
 }
 func exclusionRules(raw string) []string {
 	return strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool { return r == ',' || r == '\n' || r == ';' || r == '，' })

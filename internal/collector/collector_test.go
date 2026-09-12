@@ -14,7 +14,7 @@ func TestListFollowsAllDeclaredPages(t *testing.T) {
 		if page == "" {
 			page = "1"
 		}
-		fmt.Fprintf(w, `<a data-parameters="from:01"></a><a data-parameters="from:03"></a><a href="/video/%s/item-%s/" title="Item %s"></a>`, page, page, page)
+		fmt.Fprintf(w, `<a data-parameters="from:01"></a><a data-parameters="from:03"></a><div class="item thumb" data-video-card-id="%s"><a class="th" href="/video/%s/item-%s/" title="Item %s"><img src="item.jpg"></a></div>`, page, page, page, page)
 	}))
 	defer server.Close()
 	videos, err := (Collector{}).List(server.URL+"/models/test/?sort=new", "")
@@ -23,6 +23,20 @@ func TestListFollowsAllDeclaredPages(t *testing.T) {
 	}
 	if len(videos) != 3 || videos[0].ID != "1" || videos[2].ID != "3" {
 		t.Fatalf("expected all three pages, got %+v", videos)
+	}
+}
+
+func TestListIgnoresVideoLinksOutsideListingCards(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<a href="/video/999/advert-or-recommendation/">outside</a><div data-video-card-id="123"><a class="th" href="/video/123/real-item/" title="Real item"></a></div>`))
+	}))
+	defer server.Close()
+	videos, err := (Collector{}).List(server.URL+"/models/test/", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(videos) != 1 || videos[0].ID != "123" {
+		t.Fatalf("expected only the listing card, got %+v", videos)
 	}
 }
 
@@ -57,6 +71,9 @@ func TestParseImportedMetadata(t *testing.T) {
 	}
 	if v.ID != "4419929" || v.Title != "Episode title" || v.Views != 218417 || v.DurationSeconds != 293 || v.CreatorName != "Akt" {
 		t.Fatalf("unexpected metadata: %+v", v)
+	}
+	if v.CreatorsJSON == "" || v.CreatorsJSON == "[]" {
+		t.Fatal("expected creator relationships")
 	}
 	if v.RawHTML != "" {
 		t.Fatal("normalized video row must not duplicate raw import HTML")

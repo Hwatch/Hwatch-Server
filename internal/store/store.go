@@ -24,16 +24,16 @@ type Subscription struct {
 	Enabled, BaselineComplete                                                      bool
 }
 type Video struct {
-	ID, SubscriptionSlug, Title, PageURL, PublishedAt, DiscoveredAt, ThumbnailURL     string
-	Platform, SourceID                                                                string
-	Views, DurationSeconds                                                            int64
-	CreatorName, CreatorURL, CreatorAvatar, UploaderName, UploaderURL, UploaderAvatar string
-	CategoriesJSON, TagsJSON, ExternalLinksJSON, RawHTML                              string
-	Status, AriaGID, FilePath, PlexPath, Error, DownloadedAt, UpdatedAt               string
-	VideoCodec, AudioCodec, Container, MediaProbedAt, TranscodeStatus                 string
-	BytesDownloaded, TotalBytes, DownloadSpeed, BitRate                               int64
-	FrameRate                                                                         float64
-	PlexSeason, PlexEpisode, Connections, Width, Height, BitDepth                     int
+	ID, SubscriptionSlug, Title, PageURL, PublishedAt, DiscoveredAt, ThumbnailURL          string
+	Platform, SourceID                                                                     string
+	Views, DurationSeconds                                                                 int64
+	CreatorName, CreatorURL, CreatorAvatar, UploaderName, UploaderURL, UploaderAvatar      string
+	CategoriesJSON, TagsJSON, ExternalLinksJSON, CreatorsJSON, SourceRelationJSON, RawHTML string
+	Status, AriaGID, FilePath, PlexPath, Error, DownloadedAt, UpdatedAt                    string
+	VideoCodec, AudioCodec, Container, MediaProbedAt, TranscodeStatus                      string
+	BytesDownloaded, TotalBytes, DownloadSpeed, BitRate                                    int64
+	FrameRate                                                                              float64
+	PlexSeason, PlexEpisode, Connections, Width, Height, BitDepth                          int
 }
 type Settings struct {
 	HTTPProxy, DownloadDir, AriaRPCURL, AriaSecret, CheckTime, Timezone, PlexLanguage string
@@ -67,7 +67,7 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"discovered_at TEXT NOT NULL,thumbnail_url TEXT NOT NULL DEFAULT '',views INTEGER NOT NULL DEFAULT 0,duration_seconds INTEGER NOT NULL DEFAULT 0," +
 	"creator_name TEXT NOT NULL DEFAULT '',creator_url TEXT NOT NULL DEFAULT '',creator_avatar TEXT NOT NULL DEFAULT ''," +
 	"uploader_name TEXT NOT NULL DEFAULT '',uploader_url TEXT NOT NULL DEFAULT '',uploader_avatar TEXT NOT NULL DEFAULT ''," +
-	"categories_json TEXT NOT NULL DEFAULT '[]',tags_json TEXT NOT NULL DEFAULT '[]',external_links_json TEXT NOT NULL DEFAULT '[]'," +
+	"categories_json TEXT NOT NULL DEFAULT '[]',tags_json TEXT NOT NULL DEFAULT '[]',external_links_json TEXT NOT NULL DEFAULT '[]',creators_json TEXT NOT NULL DEFAULT '[]',source_relation_json TEXT NOT NULL DEFAULT '{}'," +
 	"raw_html TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'discovered',aria_gid TEXT NOT NULL DEFAULT ''," +
 	"file_path TEXT NOT NULL DEFAULT '',plex_path TEXT NOT NULL DEFAULT '',bytes_downloaded INTEGER NOT NULL DEFAULT 0,total_bytes INTEGER NOT NULL DEFAULT 0,download_speed INTEGER NOT NULL DEFAULT 0,connections INTEGER NOT NULL DEFAULT 0," +
 	"video_codec TEXT NOT NULL DEFAULT '',audio_codec TEXT NOT NULL DEFAULT '',container TEXT NOT NULL DEFAULT '',width INTEGER NOT NULL DEFAULT 0,height INTEGER NOT NULL DEFAULT 0,frame_rate REAL NOT NULL DEFAULT 0,bit_rate INTEGER NOT NULL DEFAULT 0,bit_depth INTEGER NOT NULL DEFAULT 0,media_probed_at TEXT NOT NULL DEFAULT '',transcode_status TEXT NOT NULL DEFAULT ''," +
@@ -115,6 +115,8 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE videos ADD COLUMN bit_depth INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE videos ADD COLUMN media_probed_at TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE videos ADD COLUMN transcode_status TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE videos ADD COLUMN creators_json TEXT NOT NULL DEFAULT '[]'",
+		"ALTER TABLE videos ADD COLUMN source_relation_json TEXT NOT NULL DEFAULT '{}'",
 	} {
 		_, _ = db.Exec(statement)
 	}
@@ -258,20 +260,23 @@ func (s *Store) UpsertDiscovered(v Video) (bool, error) {
 	if v.UpdatedAt == "" {
 		v.UpdatedAt = Now()
 	}
-	res, err := s.DB.Exec("INSERT OR IGNORE INTO videos(id,subscription_slug,platform,source_id,title,page_url,discovered_at,thumbnail_url,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", v.ID, v.SubscriptionSlug, v.Platform, v.SourceID, v.Title, v.PageURL, v.DiscoveredAt, v.ThumbnailURL, "discovered", v.UpdatedAt)
+	res, err := s.DB.Exec("INSERT OR IGNORE INTO videos(id,subscription_slug,platform,source_id,title,page_url,discovered_at,thumbnail_url,source_relation_json,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.SubscriptionSlug, v.Platform, v.SourceID, v.Title, v.PageURL, v.DiscoveredAt, v.ThumbnailURL, v.SourceRelationJSON, "discovered", v.UpdatedAt)
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
+	if n == 0 && v.SourceRelationJSON != "" && v.SourceRelationJSON != "{}" {
+		_, err = s.DB.Exec("UPDATE videos SET source_relation_json=?,updated_at=? WHERE id=?", v.SourceRelationJSON, Now(), v.ID)
+	}
 	return n > 0, nil
 }
 func scanVideo(scanner interface{ Scan(...any) error }) (Video, error) {
 	var v Video
-	err := scanner.Scan(&v.ID, &v.SubscriptionSlug, &v.Platform, &v.SourceID, &v.Title, &v.PageURL, &v.PublishedAt, &v.DiscoveredAt, &v.ThumbnailURL, &v.Views, &v.DurationSeconds, &v.CreatorName, &v.CreatorURL, &v.CreatorAvatar, &v.UploaderName, &v.UploaderURL, &v.UploaderAvatar, &v.CategoriesJSON, &v.TagsJSON, &v.ExternalLinksJSON, &v.RawHTML, &v.Status, &v.AriaGID, &v.FilePath, &v.PlexPath, &v.BytesDownloaded, &v.TotalBytes, &v.DownloadSpeed, &v.Connections, &v.VideoCodec, &v.AudioCodec, &v.Container, &v.Width, &v.Height, &v.FrameRate, &v.BitRate, &v.BitDepth, &v.MediaProbedAt, &v.TranscodeStatus, &v.PlexSeason, &v.PlexEpisode, &v.Error, &v.DownloadedAt, &v.UpdatedAt)
+	err := scanner.Scan(&v.ID, &v.SubscriptionSlug, &v.Platform, &v.SourceID, &v.Title, &v.PageURL, &v.PublishedAt, &v.DiscoveredAt, &v.ThumbnailURL, &v.Views, &v.DurationSeconds, &v.CreatorName, &v.CreatorURL, &v.CreatorAvatar, &v.UploaderName, &v.UploaderURL, &v.UploaderAvatar, &v.CategoriesJSON, &v.TagsJSON, &v.ExternalLinksJSON, &v.CreatorsJSON, &v.SourceRelationJSON, &v.RawHTML, &v.Status, &v.AriaGID, &v.FilePath, &v.PlexPath, &v.BytesDownloaded, &v.TotalBytes, &v.DownloadSpeed, &v.Connections, &v.VideoCodec, &v.AudioCodec, &v.Container, &v.Width, &v.Height, &v.FrameRate, &v.BitRate, &v.BitDepth, &v.MediaProbedAt, &v.TranscodeStatus, &v.PlexSeason, &v.PlexEpisode, &v.Error, &v.DownloadedAt, &v.UpdatedAt)
 	return v, err
 }
 
-const videoColumns = "id,subscription_slug,platform,source_id,title,page_url,published_at,discovered_at,thumbnail_url,views,duration_seconds,creator_name,creator_url,creator_avatar,uploader_name,uploader_url,uploader_avatar,categories_json,tags_json,external_links_json,raw_html,status,aria_gid,file_path,plex_path,bytes_downloaded,total_bytes,download_speed,connections,video_codec,audio_codec,container,width,height,frame_rate,bit_rate,bit_depth,media_probed_at,transcode_status,plex_season,plex_episode,error,downloaded_at,updated_at"
+const videoColumns = "id,subscription_slug,platform,source_id,title,page_url,published_at,discovered_at,thumbnail_url,views,duration_seconds,creator_name,creator_url,creator_avatar,uploader_name,uploader_url,uploader_avatar,categories_json,tags_json,external_links_json,creators_json,source_relation_json,raw_html,status,aria_gid,file_path,plex_path,bytes_downloaded,total_bytes,download_speed,connections,video_codec,audio_codec,container,width,height,frame_rate,bit_rate,bit_depth,media_probed_at,transcode_status,plex_season,plex_episode,error,downloaded_at,updated_at"
 
 func (s *Store) Video(id string) (Video, error) {
 	return scanVideo(s.DB.QueryRow("SELECT "+videoColumns+" FROM videos WHERE id=?", id))
@@ -513,8 +518,15 @@ func (s *Store) SubscriptionProgress(slug string) (SubscriptionProgress, error) 
 	return p, err
 }
 func (s *Store) UpdateDetails(v Video) error {
-	_, err := s.DB.Exec("UPDATE videos SET title=?,published_at=?,thumbnail_url=?,views=?,duration_seconds=?,creator_name=?,creator_url=?,creator_avatar=?,uploader_name=?,uploader_url=?,uploader_avatar=?,categories_json=?,tags_json=?,external_links_json=?,raw_html=?,updated_at=? WHERE id=?", v.Title, v.PublishedAt, v.ThumbnailURL, v.Views, v.DurationSeconds, v.CreatorName, v.CreatorURL, v.CreatorAvatar, v.UploaderName, v.UploaderURL, v.UploaderAvatar, v.CategoriesJSON, v.TagsJSON, v.ExternalLinksJSON, v.RawHTML, Now(), v.ID)
+	_, err := s.DB.Exec("UPDATE videos SET title=?,published_at=?,thumbnail_url=?,views=?,duration_seconds=?,creator_name=?,creator_url=?,creator_avatar=?,uploader_name=?,uploader_url=?,uploader_avatar=?,categories_json=?,tags_json=?,external_links_json=?,creators_json=?,source_relation_json=CASE WHEN ?='' OR ?='{}' THEN source_relation_json ELSE ? END,raw_html=?,updated_at=? WHERE id=?", v.Title, v.PublishedAt, v.ThumbnailURL, v.Views, v.DurationSeconds, v.CreatorName, v.CreatorURL, v.CreatorAvatar, v.UploaderName, v.UploaderURL, v.UploaderAvatar, v.CategoriesJSON, v.TagsJSON, v.ExternalLinksJSON, v.CreatorsJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.RawHTML, Now(), v.ID)
 	return err
+}
+func (s *Store) RequeueTrustedCreatorMismatches(slug string) (int64, error) {
+	res, err := s.DB.Exec("UPDATE videos SET status='queued',aria_gid='',error='',updated_at=? WHERE subscription_slug=? AND status='excluded' AND error LIKE '实际创作者与订阅作者不一致:%' AND source_relation_json<>'{}'", Now(), slug)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 func (s *Store) UpdateTask(id, status, gid, path, plexPath, errText string, done, total int64) error {
 	_, err := s.DB.Exec("UPDATE videos SET status=?,aria_gid=?,file_path=?,plex_path=?,error=?,bytes_downloaded=?,total_bytes=?,download_speed=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE download_speed END,connections=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE connections END,downloaded_at=CASE WHEN ?='completed' THEN ? ELSE downloaded_at END,updated_at=? WHERE id=?", status, gid, path, plexPath, errText, done, total, status, status, status, Now(), Now(), id)

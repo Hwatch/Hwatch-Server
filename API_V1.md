@@ -41,6 +41,8 @@ source:3144962 -> source%3A3144962
   "creator_name": "Creator",
   "creator_url": "",
   "creator_avatar": "",
+  "creators": [{"Name":"Creator","URL":"","Image":""}],
+  "source_relation": {"type":"creator_listing","platform":"source","subscription_slug":"source:creator","subscription_url":"","creator_key":"creator"},
   "uploader_name": "uploader",
   "uploader_url": "",
   "uploader_avatar": "",
@@ -70,6 +72,8 @@ source:3144962 -> source%3A3144962
   "error": ""
 }
 ```
+
+`creator_name`、`creator_url` 和 `creator_avatar` 保留为主要创作者兼容字段；`creators` 包含详情页识别到的全部关联创作者。`source_relation` 记录视频由哪个订阅列表发现，用于解释归属和避免联合创作内容被主要创作者字段误排除。
 
 视频状态：
 
