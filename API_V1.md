@@ -343,6 +343,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
   "download_dir":"/media",
   "aria_rpc_url":"http://127.0.0.1:6800/jsonrpc",
   "aria_secret":"",
+  "downloader_mode":"aria2",
   "check_time":"04:00",
   "timezone":"Asia/Shanghai",
   "plex_language":"zh-CN",
@@ -367,6 +368,8 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 ### `PUT /api/settings`
 
 发送需要修改的字段即可，服务端基于现有设置合并。成功返回完整设置。`download_limit_kbps=0` 表示不限速。
+
+`downloader_mode` 可为 `aria2`、`wget` 或 `auto`。切换仅影响尚未启动的 `queued` 任务和新任务；已经分配的任务继续使用其持久化 `downloader_id`。wget 使用单连接及 `-c` 断点续传，服务重启后会重新解析临时下载地址并从现有文件继续。
 
 自动排除规则在任务提交下载器前执行。多个文本规则使用逗号、中文逗号、分号或换行分隔；标题规则使用不区分大小写的包含匹配，上传者、分类和标签使用对应字段匹配。`require_creator_match=true` 会排除实际创作者与订阅作者不一致的视频，`max_duration_seconds=0` 表示不限制时长。已下载文件不会因新增规则而自动删除。
 
