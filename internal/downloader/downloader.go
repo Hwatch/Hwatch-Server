@@ -17,6 +17,8 @@ type Status struct {
 type Health struct {
 	ID, Name, Version, Error string
 	Online, SupportsMulti    bool
+	Active, Connections      int
+	DownloadSpeed            int64
 }
 
 type Engine interface {

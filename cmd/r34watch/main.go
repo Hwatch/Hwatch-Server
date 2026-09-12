@@ -262,7 +262,10 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
 	diskTotal, diskFree := diskStats(cfg.DownloadDir)
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": a.ariaOnline(cfg), "timezone": cfg.Timezone})
+	healthCtx, healthCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	ariaHealth, wgetHealth := a.aria(cfg).Health(healthCtx), a.wget.Health(healthCtx)
+	healthCancel()
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaHealth.Online, "downloader_mode": cfg.DownloaderMode, "downloaders": []downloader.Health{ariaHealth, wgetHealth}, "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
@@ -542,6 +545,9 @@ func (a *App) startQueueWorker() {
 				if strings.Contains(err.Error(), "capacity reached") {
 					time.Sleep(time.Second)
 					continue
+				}
+				if strings.Contains(err.Error(), "downloader unavailable") {
+					return
 				}
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
@@ -970,6 +976,12 @@ func (a *App) queue(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	engine := a.selectedEngine(cfg)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	health := engine.Health(healthCtx)
+	healthCancel()
+	if !health.Online {
+		return fmt.Errorf("downloader unavailable: %s", engine.ID())
+	}
 	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, Connections: cfg.ConnectionsPerDownload})
 	if err != nil {
 		_ = a.store.UpdateTask(id, "failed", "", "", "", err.Error(), 0, 0)

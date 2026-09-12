@@ -182,6 +182,14 @@ func (w *Wget) Health(ctx context.Context) Health {
 	} else {
 		h.Version = strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
 	}
+	w.mu.Lock()
+	for _, task := range w.tasks {
+		if task.state == "active" || task.state == "waiting" {
+			h.Active++
+			h.Connections++
+		}
+	}
+	w.mu.Unlock()
 	return h
 }
 
