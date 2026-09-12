@@ -36,12 +36,14 @@
 
 .transfer-total {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 15px;
 }
 
 .transfer-total > div {
   min-width: 190px;
+  flex: 1 1 190px;
   padding: 15px 18px;
   background: #1a1d24;
   border: 1px solid #2b303a;
@@ -49,6 +51,12 @@
   display: grid;
   gap: 5px;
 }
+
+.transfer-total .downloader-total { border-color: #45323a; }
+.transfer-total .downloader-total.online { border-color: #29483a; }
+.downloader-total span { color: #9199a7; font-size: .72rem; overflow-wrap: anywhere; }
+.downloader-total b { color: #ff9d9d; }
+.downloader-total.online b { color: #60c694; }
 
 .transfer-total b {
   color: #e5b951;
