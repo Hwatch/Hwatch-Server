@@ -5,5 +5,5 @@
 .auth-error{padding:10px 12px;border-radius:8px;background:#3c2529;color:#ffb4b4!important}.auth-card button{padding:12px}
 .logout-button{position:fixed;right:18px;bottom:18px;z-index:6;width:auto;max-width:220px;background:#22262eee;border:1px solid #353b46;color:#aeb5c0;box-shadow:0 8px 28px #0007}
 @media(max-width:680px){.logout-button{right:10px;bottom:10px;max-width:140px;padding:8px 10px;font-size:.78rem}}
-.downloader-status{position:fixed;z-index:4;top:112px;right:24px;display:flex;gap:8px;align-items:center}.downloader-status span{display:grid;gap:2px;padding:8px 10px;border:1px solid #45323a;border-radius:8px;background:#241b20}.downloader-status span.online{border-color:#29483a;background:#17251f}.downloader-status small,.downloader-status i{font-size:.7rem;color:#929aa9}.downloader-status i{font-style:normal}
-@media(max-width:900px){.downloader-status{position:static;margin:10px 16px;flex-wrap:wrap}}
+.downloader-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;align-items:stretch;margin-bottom:15px}.downloader-status span{display:grid;gap:3px;padding:11px 13px;border:1px solid #45323a;border-radius:10px;background:#241b20;min-width:0}.downloader-status span.online{border-color:#29483a;background:#17251f}.downloader-status small,.downloader-status i{font-size:.72rem;color:#929aa9;overflow-wrap:anywhere}.downloader-status i{grid-column:1/-1;font-style:normal;text-align:right;padding-right:2px}
+@media(max-width:900px){.downloader-status{grid-template-columns:1fr}.downloader-status i{text-align:left}}
