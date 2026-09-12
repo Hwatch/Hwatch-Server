@@ -244,7 +244,27 @@ func (a *App) restoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	restored, openErr := sql.Open("sqlite", tmp)
 	if openErr == nil {
+		var restoredRoot string
+		_ = restored.QueryRow("SELECT value FROM settings WHERE key='download_dir'").Scan(&restoredRoot)
+		if restoredRoot == "" {
+			_ = restored.QueryRow("SELECT value FROM settings WHERE key='media_root'").Scan(&restoredRoot)
+		}
 		_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('download_paused','true') ON CONFLICT(key) DO UPDATE SET value='true'")
+		if openErr == nil {
+			_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('restore_pending','true') ON CONFLICT(key) DO UPDATE SET value='true'")
+		}
+		if openErr == nil {
+			_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('restore_source_root',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", restoredRoot)
+		}
+		if openErr == nil {
+			_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('restore_target_root',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", cfg.DownloadDir)
+		}
+		if openErr == nil {
+			_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('download_dir',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", cfg.DownloadDir)
+		}
+		if openErr == nil {
+			_, openErr = restored.Exec("INSERT INTO settings(key,value) VALUES('backup_dir',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", cfg.BackupDir)
+		}
 		_ = restored.Close()
 	}
 	if openErr != nil {

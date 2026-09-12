@@ -146,6 +146,20 @@ func Open(path string) (*Store, error) {
 }
 func Now() string             { return time.Now().UTC().Format(time.RFC3339) }
 func (s *Store) Close() error { return s.DB.Close() }
+func (s *Store) Setting(key string) (string, error) {
+	var value string
+	err := s.DB.QueryRow("SELECT value FROM settings WHERE key=?", key).Scan(&value)
+	return value, err
+}
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.DB.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value)
+	return err
+}
+
+func (s *Store) UpdateMediaPaths(id, filePath, plexPath string) error {
+	_, err := s.DB.Exec("UPDATE videos SET file_path=?,plex_path=?,updated_at=? WHERE id=?", filePath, plexPath, Now(), id)
+	return err
+}
 func (s *Store) CleanupAutomaticRaw() error {
 	var count int
 	if err := s.DB.QueryRow("SELECT count(*) FROM videos WHERE raw_html<>''").Scan(&count); err != nil || count == 0 {

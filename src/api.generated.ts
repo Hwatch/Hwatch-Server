@@ -340,6 +340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recovery/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["recoverySummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/backups/{name}/restore": {
         parameters: {
             query?: never;
@@ -481,6 +497,25 @@ export interface components {
             username: string;
             password: string;
         };
+        RecoveryStatus: {
+            available: boolean;
+            summary?: {
+                /** Format: date-time */
+                completed_at?: string;
+                source_media_root?: string;
+                current_media_root?: string;
+                subscriptions?: number;
+                completed_media?: number;
+                missing_media?: number;
+                path_mismatches?: number;
+                paths_remapped?: number;
+                aria_tasks_checked?: number;
+                aria_tasks_kept?: number;
+                aria_tasks_requeued?: number;
+                aria_unavailable?: boolean;
+                reconciliation_done?: boolean;
+            };
+        };
         Video: {
             video_id: string;
             subscription_slug: string;
@@ -488,8 +523,8 @@ export interface components {
             translated_title?: string;
             /** @enum {string} */
             status: "discovered" | "queued" | "waiting" | "active" | "paused" | "failed" | "excluded" | "completed";
-            /** @enum {string} */
-            downloader_id?: "" | "aria2" | "wget";
+            /** @description 未分配时为空字符串，已分配时为 aria2 或 wget */
+            downloader_id?: string;
             external_task_id?: string;
             /** Format: int64 */
             bytes_downloaded?: number;
@@ -946,6 +981,26 @@ export interface operations {
             201: components["responses"]["JSON"];
         };
     };
+    recoverySummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 最近一次数据库恢复协调摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryStatus"];
+                };
+            };
+        };
+    };
     restoreBackup: {
         parameters: {
             query?: never;
@@ -960,8 +1015,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @constant */
-                    confirm: true;
+                    /** @description 必须为 true */
+                    confirm: boolean;
                 };
             };
         };

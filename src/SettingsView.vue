@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import NavIcon from './NavIcon.vue'
 
 type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
@@ -10,6 +10,8 @@ const emit=defineEmits<{save:[];import:[];createBackup:[];restoreBackup:[name:st
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
 const toggle=(name:string)=>open.value=open.value===name?'':name
+const recovery=ref<any>({available:false})
+onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(response.ok)recovery.value=await response.json()}catch{}})
 </script>
 
 <template>
@@ -40,6 +42,14 @@ const toggle=(name:string)=>open.value=open.value===name?'':name
         <p v-if="backupSensitive" class="error">数据库包含代理或下载器凭据，备份文件属于敏感数据；目录权限已限制为仅服务账号可读写。</p>
         <p v-if="settings.backup_last_error" class="error">最近备份失败：{{settings.backup_last_error}}</p>
         <small>最近成功：{{settings.backup_last_success||'尚无'}} · 位置：{{backupDirectory}}</small>
+        <div v-if="recovery.available" class="recovery-summary">
+          <b>最近恢复协调{{recovery.summary.reconciliation_done?'已完成':'等待 aria2 后继续'}}</b>
+          <small>{{recovery.summary.completed_at}} · {{recovery.summary.subscriptions}} 个订阅 · {{recovery.summary.completed_media}} 个已下载媒体</small>
+          <small>路径映射 {{recovery.summary.paths_remapped}} · 缺失媒体 {{recovery.summary.missing_media}} · 根目录外路径 {{recovery.summary.path_mismatches}}</small>
+          <small>aria2 检查 {{recovery.summary.aria_tasks_checked}} · 保留 {{recovery.summary.aria_tasks_kept}} · 重新排队 {{recovery.summary.aria_tasks_requeued}}</small>
+          <small v-if="recovery.summary.source_media_root!==recovery.summary.current_media_root">{{recovery.summary.source_media_root||'（原目录未知）'}} → {{recovery.summary.current_media_root}}</small>
+          <p v-if="recovery.summary.aria_unavailable" class="error">aria2 暂时不可用，旧 GID 已原样保留，服务会自动重试协调。</p>
+        </div>
         <div class="backup-list"><article v-for="item in backups" :key="item.name"><span><b>{{item.name}}</b><small>{{size(item.size)}} · SHA-256 {{item.sha256.slice(0,12)}}…</small></span><button class="danger" :disabled="busy||!item.valid" @click="emit('restoreBackup',item.name)">{{item.valid?'恢复':'校验失败'}}</button></article><div v-if="!backups.length" class="empty compact-empty">还没有数据库备份</div></div>
       </div>
     </section>
