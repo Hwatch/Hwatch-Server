@@ -240,6 +240,8 @@ nav i { margin-left: auto; }
 .backup-list article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #303641; border-radius: 9px; background: #14171c; }
 .backup-list article span { min-width: 0; display: grid; gap: 4px; }
 .backup-list article b,.backup-list article small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.downloader-capability { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.downloader-capability span { display: grid; gap: 4px; padding: 11px 12px; border: 1px solid #303641; border-radius: 9px; background: #14171c; }
 .setting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .setting-check { grid-template-columns: auto 1fr !important; align-items: center; padding: 12px; border-radius: 9px; background: #15181e; }
 .setting-check input { width: auto; }
