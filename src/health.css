@@ -13,3 +13,9 @@
 .health-alert b { color: #e5b951; }
 .health-alert span { font-size: .82rem; color: #d7b77f; }
 .health-alert span.error { color: #ffaaaa; }
+.notification-list article { grid-template-columns: 12px 1fr; }
+.notification-list article.unread { border-color: #765d2e; background: #211e18; }
+.notification-list small { display: block; margin-top: 5px; }
+.notification-dot { width: 9px; height: 9px; border-radius: 50%; background: #8490a0; }
+.notification-dot.warning { background: #e5b951; }
+.notification-dot.error { background: #ef7777; }

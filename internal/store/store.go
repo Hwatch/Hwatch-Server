@@ -62,6 +62,15 @@ type DownloaderStats struct {
 	Speed               int64
 	LastError           string
 }
+type Notification struct {
+	ID          int64  `json:"id"`
+	Code        string `json:"code"`
+	Severity    string `json:"severity"`
+	Message     string `json:"message"`
+	Fingerprint string `json:"-"`
+	CreatedAt   string `json:"created_at"`
+	ReadAt      string `json:"read_at"`
+}
 
 const schema = "PRAGMA journal_mode=WAL;" +
 	"PRAGMA foreign_keys=ON;" +
@@ -89,6 +98,8 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT,source TEXT NOT NULL,raw_html TEXT NOT NULL,video_id TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,error TEXT NOT NULL DEFAULT '');" +
 	"CREATE TABLE IF NOT EXISTS translations (entity_id TEXT NOT NULL,language TEXT NOT NULL,field TEXT NOT NULL,source_hash TEXT NOT NULL,translated_text TEXT NOT NULL,provider TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(entity_id,language,field));" +
 	"CREATE TABLE IF NOT EXISTS playback_history (video_id TEXT PRIMARY KEY,play_count INTEGER NOT NULL DEFAULT 1,last_played_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,fingerprint TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT '');" +
+	"CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"
@@ -154,6 +165,66 @@ func (s *Store) Setting(key string) (string, error) {
 func (s *Store) SetSetting(key, value string) error {
 	_, err := s.DB.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value)
 	return err
+}
+
+func (s *Store) Notify(code, severity, message, fingerprint string, cooldown time.Duration) (bool, error) {
+	cutoff := time.Now().UTC().Add(-cooldown).Format(time.RFC3339)
+	result, err := s.DB.Exec("INSERT INTO notifications(code,severity,message,fingerprint,created_at) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE code=? AND fingerprint=? AND created_at>=?)", code, severity, message, fingerprint, Now(), code, fingerprint, cutoff)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+func (s *Store) Notifications(limit int) ([]Notification, error) {
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.DB.Query("SELECT id,code,severity,message,fingerprint,created_at,read_at FROM notifications ORDER BY created_at DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Notification{}
+	for rows.Next() {
+		var n Notification
+		if err = rows.Scan(&n.ID, &n.Code, &n.Severity, &n.Message, &n.Fingerprint, &n.CreatedAt, &n.ReadAt); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+func (s *Store) UnreadNotifications() (int64, error) {
+	var count int64
+	err := s.DB.QueryRow("SELECT count(*) FROM notifications WHERE read_at='' ").Scan(&count)
+	return count, err
+}
+func (s *Store) MarkNotificationsRead() error {
+	_, err := s.DB.Exec("UPDATE notifications SET read_at=? WHERE read_at=''", Now())
+	return err
+}
+func (s *Store) ConsecutiveFailures(threshold int) (int, error) {
+	if threshold < 1 {
+		threshold = 3
+	}
+	rows, err := s.DB.Query("SELECT status FROM videos WHERE status NOT IN ('discovered','excluded') ORDER BY updated_at DESC LIMIT ?", threshold)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var status string
+		if err = rows.Scan(&status); err != nil {
+			return 0, err
+		}
+		if status != "failed" {
+			return count, nil
+		}
+		count++
+	}
+	return count, rows.Err()
 }
 
 func (s *Store) UpdateMediaPaths(id, filePath, plexPath string) error {

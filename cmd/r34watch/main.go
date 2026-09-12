@@ -336,7 +336,8 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 			ariaOnline = item.Online
 		}
 	}
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaOnline, "downloader_mode": cfg.DownloaderMode, "downloaders": downloaders, "health_status": health["status"], "health_warnings": health["warnings"], "timezone": cfg.Timezone})
+	unreadNotifications, _ := a.store.UnreadNotifications()
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaOnline, "downloader_mode": cfg.DownloaderMode, "downloaders": downloaders, "health_status": health["status"], "health_warnings": health["warnings"], "unread_notifications": unreadNotifications, "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
@@ -1047,6 +1048,14 @@ func (a *App) queue(id string) error {
 	}
 	resolved, err := adapter.ResolveDownload(context.Background(), v, cfg.HTTPProxy)
 	if err != nil {
+		if classifyDownloadError(err).Code == "source_expired" {
+			_ = a.refreshExpiredSource(v, cfg, err.Error())
+			if fresh, freshErr := a.store.Video(v.ID); freshErr == nil {
+				resolved, err = adapter.ResolveDownload(context.Background(), fresh, cfg.HTTPProxy)
+			}
+		}
+	}
+	if err != nil {
 		return err
 	}
 	if latest, e := a.store.Settings(); e != nil || latest.DownloadPaused {
@@ -1299,7 +1308,9 @@ func (a *App) pollTasks(ctx context.Context) {
 				removeCtx, removeCancel := context.WithTimeout(ctx, 5*time.Second)
 				_ = client.Remove(removeCtx, externalID)
 				removeCancel()
-				if failure.Code == "rate_limited" {
+				if failure.Code == "source_expired" {
+					errText = a.refreshExpiredSource(v, cfg, errText)
+				} else if failure.Code == "rate_limited" {
 					a.record429()
 				}
 				_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", path, v.PlexPath, errText, status.Completed, status.Total)
@@ -1319,6 +1330,21 @@ func (a *App) pollTasks(ctx context.Context) {
 		}
 	}
 }
+
+func (a *App) refreshExpiredSource(video store.Video, cfg store.Settings, cause string) string {
+	adapter, err := a.adapters.ByID(video.Platform)
+	if err == nil {
+		refreshCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		fresh, refreshErr := adapter.FetchDetails(refreshCtx, video, cfg.HTTPProxy)
+		cancel()
+		if refreshErr == nil {
+			fresh.SubscriptionSlug = video.SubscriptionSlug
+			_ = a.store.UpdateDetails(fresh)
+			cause = "下载源已失效，详情已刷新并重新排队"
+		}
+	}
+	return cause
+}
 func (a *App) scheduler(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -1328,6 +1354,9 @@ func (a *App) scheduler(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.reconcileRecovery()
+			notifyCtx, notifyCancel := context.WithTimeout(ctx, 5*time.Second)
+			a.evaluateNotifications(notifyCtx)
+			notifyCancel()
 			cfg, _ := a.store.Settings()
 			loc, err := time.LoadLocation(cfg.Timezone)
 			if err != nil {
@@ -1530,6 +1559,8 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/auth/me", a.authMe)
 	mux.HandleFunc("GET /api/dashboard", a.dashboard)
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /api/notifications", a.notifications)
+	mux.HandleFunc("POST /api/notifications/read-all", a.notifications)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)
@@ -1602,6 +1633,9 @@ func main() {
 		_ = s.SaveSettings(cfg)
 	}
 	app := New(s)
+	notifyCtx, notifyCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	app.evaluateNotifications(notifyCtx)
+	notifyCancel()
 	app.reconcileRecovery()
 	app.reconcile()
 	_, _ = s.RequeueTransientFailures()

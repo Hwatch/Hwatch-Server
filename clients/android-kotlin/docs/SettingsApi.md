@@ -8,6 +8,8 @@ All URIs are relative to *http://localhost*
 | [**getSettings**](SettingsApi.md#getSettings) | **GET** api/settings |  |
 | [**health**](SettingsApi.md#health) | **GET** api/health |  |
 | [**listBackups**](SettingsApi.md#listBackups) | **GET** api/backups |  |
+| [**listNotifications**](SettingsApi.md#listNotifications) | **GET** api/notifications |  |
+| [**markNotificationsRead**](SettingsApi.md#markNotificationsRead) | **POST** api/notifications/read-all |  |
 | [**recoverySummary**](SettingsApi.md#recoverySummary) | **GET** api/recovery/latest |  |
 | [**restoreBackup**](SettingsApi.md#restoreBackup) | **POST** api/backups/{name}/restore |  |
 | [**updateSettings**](SettingsApi.md#updateSettings) | **PUT** api/settings |  |
@@ -130,6 +132,76 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.list
 
 ### Parameters
 This endpoint does not need any parameter.
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SettingsApi::class.java)
+val limit : kotlin.Int = 56 // kotlin.Int | 
+
+val result : NotificationPage = webService.listNotifications(limit)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **limit** | **kotlin.Int**|  | [optional] [default to 50] |
+
+### Return type
+
+[**NotificationPage**](NotificationPage.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SettingsApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.markNotificationsRead(xCSRFToken)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
 
 ### Return type
 

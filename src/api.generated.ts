@@ -116,6 +116,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/videos": {
         parameters: {
             query?: never;
@@ -566,6 +598,24 @@ export interface components {
             /** Format: int64 */
             uptime_seconds: number;
         };
+        Notification: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            code: "storage_unavailable" | "storage_low" | "consecutive_download_failures" | "downloader_unavailable";
+            /** @enum {string} */
+            severity: "warning" | "error";
+            message: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 未读时为空字符串 */
+            read_at: string;
+        };
+        NotificationPage: {
+            items: components["schemas"]["Notification"][];
+            /** Format: int64 */
+            unread: number;
+        };
         VideoPage: {
             items: components["schemas"]["Video"][];
             /** Format: int64 */
@@ -729,6 +779,42 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 持久系统通知 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+        };
+    };
+    markNotificationsRead: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
         };
     };
     listVideos: {
