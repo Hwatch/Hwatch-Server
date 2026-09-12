@@ -7,12 +7,17 @@ import (
 )
 
 func TestExclusionReason(t *testing.T) {
-	sub := store.Subscription{URL: "https://source.example/models/akt/"}
+	sub := store.Subscription{Slug: "source:akt", Platform: "source", URL: "https://source.example/models/akt/"}
 	cfg := store.Settings{RequireCreatorMatch: true, ExcludeTitleKeywords: "compilation,合集", ExcludeTags: "blocked-tag"}
 
 	wrongCreator := store.Video{CreatorURL: "https://source.example/models/other/", CreatorName: "Other"}
 	if got := exclusionReason(wrongCreator, sub, cfg); got == "" {
 		t.Fatal("expected mismatched creator to be excluded")
+	}
+	trustedListing := wrongCreator
+	trustedListing.SourceRelationJSON = `{"type":"creator_listing","platform":"source","subscription_slug":"source:akt"}`
+	if got := exclusionReason(trustedListing, sub, cfg); got != "" {
+		t.Fatalf("trusted subscription listing must not be rejected by primary creator: %q", got)
 	}
 	titled := store.Video{CreatorURL: sub.URL, Title: "2026 Compilation"}
 	if got := exclusionReason(titled, sub, cfg); got != "标题命中排除规则" {

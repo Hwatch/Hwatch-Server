@@ -25,6 +25,7 @@ type ModelResult struct {
 
 var (
 	videoRE         = regexp.MustCompile("href=[\"'](?:https?://rule34video\\.com)?(/video/(\\d+)/([^\"']+)/)[\"']")
+	videoCardRE     = regexp.MustCompile(`(?i)data-video-card-id=["'](\d+)["']`)
 	titleRE         = regexp.MustCompile("title=[\"']([^\"']+)[\"']")
 	imageOriginalRE = regexp.MustCompile("(?i)(?:data-original|data-webp|data-src)=[\"']([^\"']+)[\"']")
 	imageRE         = regexp.MustCompile("(?i)src=[\"']([^\"']+)[\"']")
@@ -37,6 +38,7 @@ var (
 	uploadDateRE    = regexp.MustCompile("[\"']uploadDate[\"']\\s*:\\s*[\"']([^\"']+)")
 	ogImageRE       = regexp.MustCompile("(?i)<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)")
 	modelBlockRE    = regexp.MustCompile("(?s)data-suggest-type=[\"']model[\"'].*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
+	modelItemRE     = regexp.MustCompile("(?s)data-item-type=[\"']model[\"'][^>]*>.*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
 	uploaderBlockRE = regexp.MustCompile("(?s)<div class=[\"']label[\"']>Uploaded by</div>\\s*<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>")
 	tagRE           = regexp.MustCompile("(?s)<a[^>]+class=[\"']tag_item[\"'][^>]+href=[\"']([^\"']+/tags/[^\"']+)[\"'][^>]*>([^<]+)</a>")
 	categoryRE      = regexp.MustCompile("(?s)data-item-type=[\"']category[\"'].*?<a[^>]+href=[\"']([^\"']+/categories/[^\"']+/)[\"'][^>]*>(.*?)</a>")
@@ -192,21 +194,29 @@ func paginationURL(modelURL string, page int) (string, error) {
 }
 
 func appendListing(page string, seen map[string]bool, out *[]store.Video) {
-	for _, m := range videoRE.FindAllStringSubmatchIndex(page, -1) {
-		id := page[m[4]:m[5]]
+	cards := videoCardRE.FindAllStringSubmatchIndex(page, -1)
+	for i, card := range cards {
+		id := page[card[2]:card[3]]
 		if seen[id] {
 			continue
 		}
-		seen[id] = true
-		start := max(0, m[0]-220)
-		end := min(len(page), m[1]+1000)
+		start := card[0]
+		end := len(page)
+		if i+1 < len(cards) {
+			end = cards[i+1][0]
+		}
 		block := page[start:end]
-		slug := page[m[6]:m[7]]
+		m := videoRE.FindStringSubmatch(block)
+		if len(m) != 4 || m[2] != id {
+			continue
+		}
+		seen[id] = true
+		slug := m[3]
 		title := slug
 		if x := titleRE.FindStringSubmatch(block); len(x) == 2 {
 			title = html.UnescapeString(x[1])
 		}
-		*out = append(*out, store.Video{ID: id, Title: title, PageURL: "https://rule34video.com" + page[m[2]:m[3]], ThumbnailURL: firstImage(block)})
+		*out = append(*out, store.Video{ID: id, Title: title, PageURL: absolute(m[1]), ThumbnailURL: firstImage(block)})
 	}
 }
 func (Collector) Detail(v store.Video, proxy string) (store.Video, error) {
@@ -238,11 +248,24 @@ func parseRaw(v store.Video, page string) store.Video {
 	if m := uploadDateRE.FindStringSubmatch(page); len(m) == 2 {
 		v.PublishedAt = m[1]
 	}
-	if m := modelBlockRE.FindStringSubmatch(page); len(m) == 3 {
-		v.CreatorURL = absolute(m[1])
-		v.CreatorName = clean(m[2])
-		v.CreatorAvatar = firstImage(m[2])
+	creators := []Link{}
+	creatorSeen := map[string]bool{}
+	for _, expression := range []*regexp.Regexp{modelItemRE, modelBlockRE} {
+		for _, m := range expression.FindAllStringSubmatch(page, -1) {
+			creatorURL := absolute(m[1])
+			if creatorSeen[creatorURL] {
+				continue
+			}
+			creatorSeen[creatorURL] = true
+			creators = append(creators, Link{Name: clean(m[2]), URL: creatorURL, Image: firstImage(m[2])})
+		}
 	}
+	if len(creators) > 0 {
+		v.CreatorURL = creators[0].URL
+		v.CreatorName = creators[0].Name
+		v.CreatorAvatar = creators[0].Image
+	}
+	v.CreatorsJSON = marshal(creators)
 	if m := uploaderBlockRE.FindStringSubmatch(page); len(m) == 3 {
 		v.UploaderURL = absolute(m[1])
 		v.UploaderName = clean(m[2])

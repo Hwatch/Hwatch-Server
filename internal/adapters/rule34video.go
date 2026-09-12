@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -50,6 +51,8 @@ func (a Rule34Video) ListVideos(_ context.Context, sub store.Subscription, proxy
 		items[i].Platform = a.ID()
 		items[i].ID = a.ID() + ":" + items[i].SourceID
 		items[i].SubscriptionSlug = sub.Slug
+		relation, _ := json.Marshal(map[string]string{"type": "creator_listing", "platform": a.ID(), "subscription_slug": sub.Slug, "subscription_url": sub.URL, "creator_key": sub.SourceID})
+		items[i].SourceRelationJSON = string(relation)
 	}
 	return items, nil
 }
