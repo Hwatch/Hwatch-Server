@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"r34watch/internal/adapters"
-	"r34watch/internal/aria2"
+	"r34watch/internal/downloader"
 	"r34watch/internal/mediainfo"
 	"r34watch/internal/plex"
 	"r34watch/internal/store"
@@ -151,7 +151,7 @@ func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	return out
 }
 func videoMap(v store.Video) map[string]any {
-	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
+	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
 }
 func translatedVideoMap(v store.Video, language string, translations map[string]store.Translation) map[string]any {
 	item := videoMap(v)
@@ -192,13 +192,20 @@ func maps[T any](items []T, fn func(T) map[string]any) []map[string]any {
 	return out
 }
 
-func (a *App) aria(cfg store.Settings) *aria2.Client {
-	return aria2.New(cfg.AriaRPCURL, cfg.AriaSecret)
+func (a *App) aria(cfg store.Settings) downloader.Engine {
+	return downloader.NewAria(cfg.AriaRPCURL, cfg.AriaSecret)
+}
+func (a *App) engineFor(v store.Video, cfg store.Settings) downloader.Engine { return a.aria(cfg) }
+func externalTaskID(v store.Video) string {
+	if v.ExternalID != "" {
+		return v.ExternalID
+	}
+	return v.AriaGID
 }
 func (a *App) ariaOnline(cfg store.Settings) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return a.aria(cfg).Version(ctx) == nil
+	return a.aria(cfg).Health(ctx).Online
 }
 func diskStats(path string) (total, free int64) {
 	if path == "" {
@@ -937,12 +944,13 @@ func (a *App) queue(id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	gid, err := a.aria(cfg).Add(ctx, resolved.URL, layout.SeasonDir, layout.FileName, v.PageURL, userAgent, cfg.HTTPProxy, cfg.ConnectionsPerDownload)
+	engine := a.aria(cfg)
+	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, Connections: cfg.ConnectionsPerDownload})
 	if err != nil {
 		_ = a.store.UpdateTask(id, "failed", "", "", "", err.Error(), 0, 0)
 		return err
 	}
-	return a.store.UpdateTask(id, "waiting", gid, "", layout.FullPath, "", 0, 0)
+	return a.store.BindDownloader(id, engine.ID(), externalID, "waiting", layout.FullPath)
 }
 func exclusionReason(v store.Video, sub store.Subscription, cfg store.Settings) string {
 	if trustedSubscriptionListing(v.SourceRelationJSON, sub) {
@@ -1013,7 +1021,8 @@ func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := a.store.Settings()
-	client := a.aria(cfg)
+	client := a.engineFor(v, cfg)
+	externalID := externalTaskID(v)
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	switch action {
@@ -1023,15 +1032,15 @@ func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 			a.startQueueWorker()
 		}
 	case "pause":
-		err = client.Pause(ctx, v.AriaGID)
+		err = client.Pause(ctx, externalID)
 		if err == nil {
-			err = a.store.UpdateTask(id, "paused", v.AriaGID, v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
+			err = a.store.UpdateDownloaderTask(id, "paused", client.ID(), externalID, v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
 		}
 	case "resume":
-		err = client.Resume(ctx, v.AriaGID)
+		err = client.Resume(ctx, externalID)
 	case "delete":
-		if v.AriaGID != "" {
-			_ = client.Remove(ctx, v.AriaGID)
+		if externalID != "" {
+			_ = client.Remove(ctx, externalID)
 		}
 		if v.PlexPath != "" {
 			_ = os.Remove(v.PlexPath)
@@ -1040,7 +1049,7 @@ func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 			_ = os.Remove(base + ".jpg")
 			_ = os.Remove(v.PlexPath + ".aria2")
 		}
-		err = a.store.UpdateTask(id, "discovered", "", "", "", "", 0, 0)
+		err = a.store.UpdateDownloaderTask(id, "discovered", "", "", "", "", "", 0, 0)
 	default:
 		err = errors.New("未知操作")
 	}
@@ -1115,12 +1124,13 @@ func (a *App) monitor(ctx context.Context) {
 }
 func (a *App) pollTasks(ctx context.Context) {
 	cfg, _ := a.store.Settings()
-	client := a.aria(cfg)
 	for _, state := range []string{"waiting", "active", "paused"} {
 		items, _ := a.store.Videos(500, 0, state, "")
 		for _, v := range items {
+			client := a.engineFor(v, cfg)
+			externalID := externalTaskID(v)
 			callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			status, err := client.Tell(callCtx, v.AriaGID)
+			status, err := client.Tell(callCtx, externalID)
 			cancel()
 			if err != nil {
 				continue
@@ -1146,14 +1156,14 @@ func (a *App) pollTasks(ctx context.Context) {
 			}
 			if mapped == "failed" && isRateLimited(errText) {
 				removeCtx, removeCancel := context.WithTimeout(ctx, 5*time.Second)
-				_ = client.Remove(removeCtx, v.AriaGID)
+				_ = client.Remove(removeCtx, externalID)
 				removeCancel()
 				a.record429()
-				_ = a.store.UpdateTask(v.ID, "queued", "", path, v.PlexPath, errText, status.Completed, status.Total)
+				_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", path, v.PlexPath, errText, status.Completed, status.Total)
 				a.startQueueWorker()
 				continue
 			}
-			_ = a.store.UpdateTask(v.ID, mapped, v.AriaGID, path, v.PlexPath, errText, status.Completed, status.Total)
+			_ = a.store.UpdateDownloaderTask(v.ID, mapped, client.ID(), externalID, path, v.PlexPath, errText, status.Completed, status.Total)
 			_ = a.store.UpdateTransfer(v.ID, status.DownloadSpeed, status.Connections)
 			if mapped == "completed" {
 				fresh, _ := a.store.Video(v.ID)
