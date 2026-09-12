@@ -52,10 +52,11 @@ type App struct {
 	checking       map[string]bool
 	lastSchedule   string
 	lastBackupRun  string
+	startedAt      time.Time
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}}
+	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -231,6 +232,26 @@ func (a *App) ariaOnline(cfg store.Settings) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	return a.aria(cfg).Health(ctx).Online
+}
+func (a *App) downloaderHealth(ctx context.Context, cfg store.Settings) []downloader.Health {
+	items := []downloader.Health{a.aria(cfg).Health(ctx), a.wget.Health(ctx)}
+	for i := range items {
+		stats, _ := a.store.DownloaderStats(items[i].ID)
+		items[i].Active, items[i].Connections, items[i].DownloadSpeed = stats.Active, stats.Connections, stats.Speed
+		items[i].UptimeSeconds = int64(time.Since(a.startedAt).Seconds())
+		if items[i].Error == "" {
+			items[i].Error = stats.LastError
+		}
+	}
+	return items
+}
+func (a *App) health(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := a.store.Settings()
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	dbErr := a.store.DB.PingContext(ctx)
+	_, free := diskStats(cfg.DownloadDir)
+	respond(w, 200, map[string]any{"status": map[bool]string{true: "ok", false: "degraded"}[dbErr == nil && free > 0], "database": map[string]any{"online": dbErr == nil}, "storage": map[string]any{"online": free > 0, "free_bytes": free, "minimum_free_bytes": cfg.MinFreeBytes}, "queue": map[string]any{"paused": cfg.DownloadPaused}, "downloaders": a.downloaderHealth(ctx, cfg), "uptime_seconds": int64(time.Since(a.startedAt).Seconds())})
 }
 func diskStats(path string) (total, free int64) {
 	if path == "" {
@@ -1433,6 +1454,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/auth/logout", a.authLogout)
 	mux.HandleFunc("GET /api/auth/me", a.authMe)
 	mux.HandleFunc("GET /api/dashboard", a.dashboard)
+	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)

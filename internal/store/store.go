@@ -57,6 +57,11 @@ type VideoFacet struct {
 	Value string `json:"value"`
 	Count int64  `json:"count"`
 }
+type DownloaderStats struct {
+	Active, Connections int
+	Speed               int64
+	LastError           string
+}
 
 const schema = "PRAGMA journal_mode=WAL;" +
 	"PRAGMA foreign_keys=ON;" +
@@ -596,6 +601,11 @@ func (s *Store) UpdateDownloaderTask(id, status, downloaderID, externalID, path,
 func (s *Store) UpdateTransfer(id string, speed int64, connections int) error {
 	_, err := s.DB.Exec("UPDATE videos SET download_speed=?,connections=? WHERE id=?", speed, connections, id)
 	return err
+}
+func (s *Store) DownloaderStats(id string) (DownloaderStats, error) {
+	var out DownloaderStats
+	err := s.DB.QueryRow("SELECT COALESCE(SUM(status IN ('active','waiting')),0),COALESCE(SUM(CASE WHEN status='active' THEN download_speed ELSE 0 END),0),COALESCE(SUM(CASE WHEN status='active' THEN connections ELSE 0 END),0),COALESCE((SELECT error FROM videos WHERE downloader_id=? AND error<>'' ORDER BY updated_at DESC LIMIT 1),'') FROM videos WHERE downloader_id=?", id, id).Scan(&out.Active, &out.Speed, &out.Connections, &out.LastError)
+	return out, err
 }
 func (s *Store) UpdateMediaInfo(id, videoCodec, audioCodec, container string, width, height int, frameRate float64, bitRate int64, bitDepth int) error {
 	_, err := s.DB.Exec("UPDATE videos SET video_codec=?,audio_codec=?,container=?,width=?,height=?,frame_rate=?,bit_rate=?,bit_depth=?,media_probed_at=?,transcode_status=CASE WHEN transcode_status='' THEN 'not_requested' ELSE transcode_status END,updated_at=? WHERE id=?", videoCodec, audioCodec, container, width, height, frameRate, bitRate, bitDepth, Now(), Now(), id)
