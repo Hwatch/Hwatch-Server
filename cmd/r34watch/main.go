@@ -45,12 +45,14 @@ type App struct {
 	last429        time.Time
 	nfoMu          sync.Mutex
 	nfoRunning     bool
+	authMu         sync.Mutex
+	loginAttempts  map[string][]time.Time
 	checking       map[string]bool
 	lastSchedule   string
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}}
+	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}}
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -1344,6 +1346,11 @@ func staticHandler(dist string) http.Handler {
 }
 func (a *App) router(dist string) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/auth/status", a.authStatus)
+	mux.HandleFunc("POST /api/auth/setup", a.authSetup)
+	mux.HandleFunc("POST /api/auth/login", a.authLogin)
+	mux.HandleFunc("POST /api/auth/logout", a.authLogout)
+	mux.HandleFunc("GET /api/auth/me", a.authMe)
 	mux.HandleFunc("GET /api/dashboard", a.dashboard)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
@@ -1369,7 +1376,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /thumb/{id}", a.thumbnail)
 	mux.HandleFunc("GET /api/events", a.events)
 	mux.Handle("/", staticHandler(dist))
-	return requestLog(mux)
+	return requestLog(a.requireAuth(mux))
 }
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
