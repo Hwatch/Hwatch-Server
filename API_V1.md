@@ -1,6 +1,6 @@
 # HWatch HTTP API V1
 
-本文档描述当前 HWatch Go 服务供 Web、Android 和其他客户端使用的接口。`V1` 是本接口文档的版本；当前路由仍使用 `/api/...`，没有 `/api/v1` 前缀。
+本文档描述当前 HWatch Go 服务供 Web、Android 和其他客户端使用的接口。`V1` 是本接口文档的版本；当前路由仍使用 `/api/...`，没有 `/api/v1` 前缀。本文档只描述已经实现的能力，计划中的 OpenAPI、wget 和多下载器切换尚不可用。
 
 ## 1. 连接约定
 
@@ -136,12 +136,17 @@ source:3144962 -> source%3A3144962
   "library_bytes": 456,
   "current_download_speed": 789,
   "current_connections": 8,
+  "downloads_paused": false,
   "disk_total": 965554995200,
   "disk_free": 273582915584,
   "aria2_online": true,
   "timezone": "Asia/Shanghai"
 }
 ```
+
+- `aria2_online` 只表示服务端能否连接配置的 aria2 JSON-RPC，并不保证每个历史 GID 仍然存在。
+- `downloads_paused` 是持久化的 HWatch 全局下载开关；为 `true` 时不再消费 `queued` 项，并要求 aria2 暂停已有任务。
+- `current_download_speed` 单位为字节/秒，`current_connections` 是数据库中所有 `active` 任务连接数之和。
 
 ## 4. 影视库与搜索
 
@@ -206,6 +211,12 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 参数：`limit`（最大 1000）、`offset`、`status`、`language`。不传状态时返回除 `discovered` 外的所有任务。
 
+`status` 可使用 `queued`、`waiting`、`active`、`paused`、`failed`、`excluded` 或 `completed`。响应结构：
+
+```json
+{"items":[Video],"total":168,"limit":200,"offset":0}
+```
+
 ### `POST /api/videos/download-all`
 
 - 无请求体。
@@ -214,7 +225,13 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ### `POST /api/downloads/toggle`
 
-请求体为 `{"paused":true}` 时暂停所有 aria2 下载并停止消费持久队列；传入 `false` 时恢复全部下载并继续处理 `queued` 项。返回 `202`，例如 `{"paused":true}`。全局暂停状态会持久保存，并通过 `GET /api/dashboard` 的 `downloads_paused` 字段返回。
+请求体为 `{"paused":true}` 时暂停所有 aria2 下载并停止消费持久队列；传入 `false` 时恢复全部下载并继续处理 `queued` 项。成功返回 `202`：
+
+```json
+{"paused":true}
+```
+
+全局暂停状态会保存在 SQLite，并通过 `GET /api/dashboard` 的 `downloads_paused` 字段返回。aria2 RPC 不可用时返回 `502`，暂停请求不会被保存为成功状态。当前实现只控制 aria2；TODO 中的 wget 和多下载器热切换不属于当前 API。
 
 ### `POST /api/videos/{video_id}/{action}`
 
@@ -238,7 +255,7 @@ Server-Sent Events 实时下载状态，响应类型 `text/event-stream`，约�
 data: {"tasks":[...],"download_speed":123456,"connections":8}
 ```
 
-Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以 `/api/tasks` 做一次全量校准。
+`tasks` 只包含 `waiting`、`active` 和 `paused` 项，不包含仍在解析下载源的 `queued` 项。Android 可使用 SSE 客户端；断线时建议 2–5 秒退避重连，并以 `/api/tasks` 做一次全量校准。SSE 中的 `download_speed` 单位为字节/秒。
 
 ## 6. 订阅
 
