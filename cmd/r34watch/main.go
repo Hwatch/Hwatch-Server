@@ -47,6 +47,7 @@ type App struct {
 	nfoMu          sync.Mutex
 	nfoRunning     bool
 	backupMu       sync.Mutex
+	recoveryMu     sync.Mutex
 	authMu         sync.Mutex
 	loginAttempts  map[string][]time.Time
 	checking       map[string]bool
@@ -1253,6 +1254,7 @@ func (a *App) scheduler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			a.reconcileRecovery()
 			cfg, _ := a.store.Settings()
 			loc, err := time.LoadLocation(cfg.Timezone)
 			if err != nil {
@@ -1466,6 +1468,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/settings", a.settings)
 	mux.HandleFunc("PUT /api/settings", a.settings)
 	mux.HandleFunc("GET /api/backups", a.backups)
+	mux.HandleFunc("GET /api/recovery/latest", a.recoveryStatus)
 	mux.HandleFunc("POST /api/backups", a.backups)
 	mux.HandleFunc("POST /api/backups/{name}/restore", a.restoreBackup)
 	mux.HandleFunc("GET /api/subscriptions", a.subscriptions)
@@ -1526,6 +1529,7 @@ func main() {
 		_ = s.SaveSettings(cfg)
 	}
 	app := New(s)
+	app.reconcileRecovery()
 	app.reconcile()
 	_, _ = s.RequeueTransientFailures()
 	_, _ = s.RequeueDetachedWget()

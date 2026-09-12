@@ -380,6 +380,9 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `GET /api/backups`：列出一致性快照、大小、SHA-256、完整性状态、实际目录和最近备份结果。
 - `POST /api/backups`：立即创建快照，返回 `201`。备份使用 SQLite `VACUUM INTO`，不直接复制 WAL 文件。
 - `POST /api/backups/{name}/restore`：请求体为 `{"confirm":true}`。恢复前创建回滚快照、暂停下载、校验完整性和必需 schema，原子替换数据库后返回 `202` 并重启服务。
+- `GET /api/recovery/latest`：返回最近一次恢复协调摘要。恢复后保留当前部署的媒体与备份目录，将旧媒体根目录下的绝对路径映射到当前根目录；只在 aria2 明确返回 GID 不存在时重新排队。aria2 暂时离线或 RPC 异常时保留原 GID，并每 30 秒重试协调。
+
+恢复完成后下载仍保持全局暂停，管理员应先检查摘要中的缺失媒体、根目录外路径和 aria2 重新排队数量，再手动继续下载。服务会对可访问但尚未探测的已下载媒体继续执行媒体信息探测。
 
 `backup_dir` 留空时备份位于 `<download_dir>/.hwatch-backups`，当前部署即 NFS 媒体目录。数据库可能包含代理凭据、下载器密钥和管理员密码哈希，备份及校验和文件权限均为 `0600`。
 

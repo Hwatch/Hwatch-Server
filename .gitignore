@@ -1,4 +1,6 @@
 node_modules/
+clients/android-kotlin/.gradle/
+clients/android-kotlin/build/
 *.tsbuildinfo
 web/dist/
 /r34watch
