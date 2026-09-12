@@ -63,6 +63,8 @@ source:3144962 -> source%3A3144962
   "external_links": [],
   "status": "completed",
   "aria_gid": "0123456789abcdef",
+  "downloader_id": "aria2",
+  "external_task_id": "0123456789abcdef",
   "file_path": "/media/...mp4",
   "plex_path": "/media/...mp4",
   "bytes_downloaded": 123456,
@@ -91,7 +93,7 @@ source:3144962 -> source%3A3144962
 
 - `discovered`：已发现、尚未选择下载
 - `queued`：持久队列中，正在解析下载源
-- `waiting`：已提交 aria2，等待下载
+- `waiting`：已提交到任务绑定的下载器，等待下载
 - `active`：正在下载
 - `paused`：已暂停
 - `failed`：失败，可重试
@@ -156,13 +158,19 @@ source:3144962 -> source%3A3144962
   "disk_total": 965554995200,
   "disk_free": 273582915584,
   "aria2_online": true,
+  "downloader_mode": "auto",
+  "downloaders": [
+    {"ID":"aria2","Name":"aria2","Version":"","Error":"","Online":true,"SupportsMulti":true,"Active":2,"Connections":8,"DownloadSpeed":789,"UptimeSeconds":3600},
+    {"ID":"wget","Name":"wget","Version":"GNU Wget 1.21.3","Error":"","Online":true,"SupportsMulti":false,"Active":0,"Connections":0,"DownloadSpeed":0,"UptimeSeconds":3600}
+  ],
   "timezone": "Asia/Shanghai"
 }
 ```
 
 - `aria2_online` 只表示服务端能否连接配置的 aria2 JSON-RPC，并不保证每个历史 GID 仍然存在。
-- `downloads_paused` 是持久化的 HWatch 全局下载开关；为 `true` 时不再消费 `queued` 项，并要求 aria2 暂停已有任务。
+- `downloads_paused` 是持久化的 HWatch 全局下载开关；为 `true` 时不再消费 `queued` 项，并尝试暂停 aria2 与 HWatch 管理的 wget 任务。
 - `current_download_speed` 单位为字节/秒，`current_connections` 是数据库中所有 `active` 任务连接数之和。
+- `downloader_mode` 为 `aria2`、`wget` 或 `auto`；`downloaders` 使用当前实现的 Go 字段名（首字母大写），包含每个引擎的在线状态和传输统计。
 
 ## 4. 影视库与搜索
 
@@ -241,13 +249,13 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ### `POST /api/downloads/toggle`
 
-请求体为 `{"paused":true}` 时暂停所有 aria2 下载并停止消费持久队列；传入 `false` 时恢复全部下载并继续处理 `queued` 项。成功返回 `202`：
+请求体为 `{"paused":true}` 时先持久化全局暂停状态、停止消费队列，并尝试暂停 aria2 与当前 HWatch 实例管理的 wget 任务；传入 `false` 时尝试恢复两个下载器、清除全局暂停状态并继续处理 `queued` 项。成功返回 `202`：
 
 ```json
 {"paused":true}
 ```
 
-全局暂停状态会保存在 SQLite，并通过 `GET /api/dashboard` 的 `downloads_paused` 字段返回。aria2 RPC 不可用时返回 `502`，暂停请求不会被保存为成功状态。当前实现只控制 aria2；TODO 中的 wget 和多下载器热切换不属于当前 API。
+全局暂停状态保存在 SQLite，并通过 `GET /api/dashboard` 的 `downloads_paused` 字段返回。当前实现不会因为某个下载器的暂停/恢复调用失败而让接口失败；客户端应继续通过 `/api/health`、`/api/dashboard` 和 `/api/tasks` 检查各下载器与任务的实际状态。
 
 ### `POST /api/videos/{video_id}/{action}`
 
@@ -255,8 +263,8 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 - `download`：加入持久队列
 - `retry`：失败任务重新加入队列
-- `pause`：暂停 aria2 任务
-- `resume`：继续 aria2 任务
+- `pause`：使用任务持久化的 `downloader_id` 暂停任务
+- `resume`：使用原下载器继续任务；已脱离进程的 wget 任务会重新进入 `queued` 并断点续传
 - `delete`：移除任务和媒体/NFO/海报，并恢复为 `discovered`
 
 成功返回 `202`：`{"status":"accepted"}`。
@@ -382,6 +390,29 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `POST /api/backups/{name}/restore`：请求体为 `{"confirm":true}`。恢复前创建回滚快照、暂停下载、校验完整性和必需 schema，原子替换数据库后返回 `202` 并重启服务。
 - `GET /api/recovery/latest`：返回最近一次恢复协调摘要。恢复后保留当前部署的媒体与备份目录，将旧媒体根目录下的绝对路径映射到当前根目录；只在 aria2 明确返回 GID 不存在时重新排队。aria2 暂时离线或 RPC 异常时保留原 GID，并每 30 秒重试协调。
 
+尚未进行过恢复时返回 `{"available":false}`。存在恢复记录时返回：
+
+```json
+{
+  "available": true,
+  "summary": {
+    "completed_at": "2026-09-12T13:00:00Z",
+    "source_media_root": "/old/media",
+    "current_media_root": "/mnt/media",
+    "subscriptions": 5,
+    "completed_media": 737,
+    "missing_media": 0,
+    "path_mismatches": 0,
+    "paths_remapped": 737,
+    "aria_tasks_checked": 2,
+    "aria_tasks_kept": 1,
+    "aria_tasks_requeued": 1,
+    "aria_unavailable": false,
+    "reconciliation_done": true
+  }
+}
+```
+
 恢复完成后下载仍保持全局暂停，管理员应先检查摘要中的缺失媒体、根目录外路径和 aria2 重新排队数量，再手动继续下载。服务会对可访问但尚未探测的已下载媒体继续执行媒体信息探测。
 
 `backup_dir` 留空时备份位于 `<download_dir>/.hwatch-backups`，当前部署即 NFS 媒体目录。数据库可能包含代理凭据、下载器密钥和管理员密码哈希，备份及校验和文件权限均为 `0600`。
@@ -408,7 +439,33 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 请求：`{"html":"<div id=...>...</div>"}`。返回解析并保存后的 Video。该接口用于手动粘贴页面数据，Android 普通用户流程可以不实现。
 
-## 10. Android 实现建议
+## 10. 健康检查
+
+### `GET /api/health`
+
+返回数据库、媒体存储、持久队列和下载器状态。HTTP 请求成功并不等于所有组件健康；应检查顶层 `status`。
+
+```json
+{
+  "status": "ok",
+  "database": {"online": true},
+  "storage": {"online": true, "free_bytes": 273582915584, "minimum_free_bytes": 5368709120},
+  "queue": {"paused": false},
+  "downloaders": [
+    {"ID":"aria2","Name":"aria2","Version":"","Error":"","Online":true,"SupportsMulti":true,"Active":2,"Connections":8,"DownloadSpeed":789,"UptimeSeconds":3600},
+    {"ID":"wget","Name":"wget","Version":"GNU Wget 1.21.3","Error":"","Online":true,"SupportsMulti":false,"Active":0,"Connections":0,"DownloadSpeed":0,"UptimeSeconds":3600}
+  ],
+  "uptime_seconds": 3600
+}
+```
+
+- `status=degraded`：数据库不可访问或媒体目录无法取得可用空间。
+- `storage.free_bytes` 和 `minimum_free_bytes` 单位均为字节。
+- `downloaders[].DownloadSpeed` 单位为字节/秒。
+- `downloaders[].UptimeSeconds` 当前表示 HWatch 本次进程运行时间，不是外部 aria2 进程启动时间。
+- 单个下载器离线会反映在其 `Online` 和 `Error` 字段，但当前不会单独将顶层 `status` 改为 `degraded`。
+
+## 11. Android 实现建议
 
 - 使用 Media3/ExoPlayer 播放 `/media/{id}`。
 - 列表先加载 `/api/videos`，图片交给 Coil 加载 `/thumb/{id}`。
@@ -418,6 +475,3 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `video_id`、`slug` 和所有查询参数都必须 URL 编码。
 - 不要依赖字段顺序；未知字段应忽略。
 - 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
-### `GET /api/health`
-
-返回 SQLite、媒体/NFS 存储、持久队列、aria2、wget、剩余空间及服务运行时间。`status` 为 `ok` 或 `degraded`；下载器字段包含在线状态、版本、活动任务数、速度、连接数和最近错误。
