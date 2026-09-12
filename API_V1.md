@@ -1,6 +1,6 @@
 # HWatch HTTP API V1
 
-本文档描述当前 HWatch Go 服务供 Web、Android 和其他客户端使用的接口。`V1` 是本接口文档的版本；当前路由仍使用 `/api/...`，没有 `/api/v1` 前缀。本文档只描述已经实现的能力，计划中的 OpenAPI、wget 和多下载器切换尚不可用。
+本文档是 HWatch API 的人工阅读指南。机器可读的唯一契约为根目录 `openapi.yaml`，运行实例提供 `/openapi.yaml` 和 `/docs`；当前路由仍使用 `/api/...`，没有 `/api/v1` 前缀。
 
 ## 1. 连接约定
 
@@ -8,7 +8,7 @@
 - API 数据：`application/json; charset=utf-8`
 - 时间：服务端使用 RFC 3339 UTC，例如 `2026-09-11T16:39:37Z`。客户端应按 `dashboard.timezone` 转换后显示。
 - 成功状态通常为 `200`、`201` 或 `202`。
-- 错误格式：`{"error":"错误说明"}`。
+- 错误格式：`{"code":"stable_error_code","error":"错误说明"}`；旧客户端继续读取 `error` 即可。
 - 除首次初始化和登录接口外，API、媒体流和缩略图均要求管理员会话。
 - ID 和订阅 slug 可能包含冒号，拼接路径时必须进行 URL 编码。
 
