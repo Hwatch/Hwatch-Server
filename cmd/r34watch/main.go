@@ -569,7 +569,7 @@ func (a *App) startQueueWorker() {
 				if err.Error() == "下载队列已暂停" {
 					return
 				}
-				if strings.Contains(err.Error(), "capacity reached") {
+				if errors.Is(err, downloader.ErrCapacityReached) {
 					time.Sleep(time.Second)
 					continue
 				}
@@ -1011,6 +1011,10 @@ func (a *App) queue(id string) error {
 	}
 	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, Connections: cfg.ConnectionsPerDownload})
 	if err != nil {
+		if errors.Is(err, downloader.ErrCapacityReached) {
+			_ = a.store.UpdateTask(id, "queued", "", v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
+			return err
+		}
 		_ = a.store.UpdateTask(id, "failed", "", "", "", err.Error(), 0, 0)
 		return err
 	}

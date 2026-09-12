@@ -42,7 +42,7 @@ func (w *Wget) Add(_ context.Context, r Request) (string, error) {
 	}
 	if active >= w.max {
 		w.mu.Unlock()
-		return "", errors.New("wget capacity reached")
+		return "", fmt.Errorf("wget capacity reached: %w", ErrCapacityReached)
 	}
 	if _, err := exec.LookPath("wget"); err != nil {
 		w.mu.Unlock()
