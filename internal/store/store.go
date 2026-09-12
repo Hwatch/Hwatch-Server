@@ -489,6 +489,13 @@ func (s *Store) RequeueTransientFailures() (int64, error) {
 	}
 	return result.RowsAffected()
 }
+func (s *Store) RequeueDetachedWget() (int64, error) {
+	result, err := s.DB.Exec("UPDATE videos SET status='queued',external_task_id='',aria_gid='',updated_at=? WHERE downloader_id='wget' AND status IN ('active','waiting')", Now())
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
 func (s *Store) TaskVideos(limit, offset int, status string) ([]Video, error) {
 	if status != "" {
 		return s.Videos(limit, offset, status, "")

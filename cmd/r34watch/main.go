@@ -33,6 +33,7 @@ const userAgent = "Mozilla/5.0 (compatible; r34watch/2.0; NAS media manager)"
 type App struct {
 	store          *store.Store
 	adapters       *adapters.Registry
+	wget           *downloader.Wget
 	mu             sync.Mutex
 	queueMu        sync.Mutex
 	bulkMu         sync.Mutex
@@ -54,7 +55,7 @@ type App struct {
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}}
+	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}}
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -195,7 +196,26 @@ func maps[T any](items []T, fn func(T) map[string]any) []map[string]any {
 func (a *App) aria(cfg store.Settings) downloader.Engine {
 	return downloader.NewAria(cfg.AriaRPCURL, cfg.AriaSecret)
 }
-func (a *App) engineFor(v store.Video, cfg store.Settings) downloader.Engine { return a.aria(cfg) }
+func (a *App) selectedEngine(cfg store.Settings) downloader.Engine {
+	if cfg.DownloaderMode == "wget" {
+		return a.wget
+	}
+	if cfg.DownloaderMode == "auto" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if a.aria(cfg).Health(ctx).Online {
+			return a.aria(cfg)
+		}
+		return a.wget
+	}
+	return a.aria(cfg)
+}
+func (a *App) engineFor(v store.Video, cfg store.Settings) downloader.Engine {
+	if v.DownloaderID == "wget" {
+		return a.wget
+	}
+	return a.aria(cfg)
+}
 func externalTaskID(v store.Video) string {
 	if v.ExternalID != "" {
 		return v.ExternalID
@@ -468,16 +488,11 @@ func (a *App) toggleDownloads(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}
-		err = a.aria(cfg).PauseAll(ctx)
-		if err != nil {
-			_ = a.store.SetDownloadPaused(false)
-		}
+		_ = a.aria(cfg).PauseAll(ctx)
+		_ = a.wget.PauseAll(ctx)
 	} else {
-		err = a.aria(cfg).ResumeAll(ctx)
-	}
-	if err != nil {
-		fail(w, http.StatusBadGateway, err)
-		return
+		_ = a.aria(cfg).ResumeAll(ctx)
+		_ = a.wget.ResumeAll(ctx)
 	}
 	if !input.Paused {
 		err = a.store.SetDownloadPaused(false)
@@ -523,6 +538,10 @@ func (a *App) startQueueWorker() {
 				log.Printf("persistent queue %s: %v", video.ID, err)
 				if err.Error() == "下载队列已暂停" {
 					return
+				}
+				if strings.Contains(err.Error(), "capacity reached") {
+					time.Sleep(time.Second)
+					continue
 				}
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
@@ -612,6 +631,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "download_dir", &cfg.DownloadDir)
 	assignString(input, "aria_rpc_url", &cfg.AriaRPCURL)
 	assignString(input, "aria_secret", &cfg.AriaSecret)
+	assignString(input, "downloader_mode", &cfg.DownloaderMode)
 	assignString(input, "check_time", &cfg.CheckTime)
 	assignString(input, "timezone", &cfg.Timezone)
 	assignString(input, "plex_language", &cfg.PlexLanguage)
@@ -647,6 +667,10 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, errors.New("下载限速不能小于 0"))
 		return
 	}
+	if cfg.DownloaderMode != "aria2" && cfg.DownloaderMode != "wget" && cfg.DownloaderMode != "auto" {
+		fail(w, 400, errors.New("下载器模式无效"))
+		return
+	}
 	if cfg.BackupRetention < 1 || cfg.BackupRetention > 365 {
 		fail(w, 400, errors.New("数据库备份保留数量必须在 1 到 365 之间"))
 		return
@@ -664,6 +688,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	_ = a.aria(cfg).SetGlobal(ctx, cfg.MaxConcurrent, cfg.DownloadLimitKBPS)
+	_ = a.wget.SetGlobal(ctx, cfg.MaxConcurrent, cfg.DownloadLimitKBPS)
 	cancel()
 	respond(w, 200, settingsMap(cfg))
 }
@@ -944,7 +969,7 @@ func (a *App) queue(id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	engine := a.aria(cfg)
+	engine := a.selectedEngine(cfg)
 	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, Connections: cfg.ConnectionsPerDownload})
 	if err != nil {
 		_ = a.store.UpdateTask(id, "failed", "", "", "", err.Error(), 0, 0)
@@ -1038,6 +1063,12 @@ func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 		}
 	case "resume":
 		err = client.Resume(ctx, externalID)
+		if err != nil && v.DownloaderID == "wget" {
+			err = a.store.UpdateDownloaderTask(id, "queued", "", "", v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
+			if err == nil {
+				a.startQueueWorker()
+			}
+		}
 	case "delete":
 		if externalID != "" {
 			_ = client.Remove(ctx, externalID)
@@ -1448,9 +1479,11 @@ func main() {
 	app := New(s)
 	app.reconcile()
 	_, _ = s.RequeueTransientFailures()
+	_, _ = s.RequeueDetachedWget()
 	startupCfg, _ := s.Settings()
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	_ = app.aria(startupCfg).SetGlobal(startupCtx, startupCfg.MaxConcurrent, startupCfg.DownloadLimitKBPS)
+	_ = app.wget.SetGlobal(startupCtx, startupCfg.MaxConcurrent, startupCfg.DownloadLimitKBPS)
 	startupCancel()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
