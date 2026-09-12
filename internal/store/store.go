@@ -78,7 +78,10 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS traffic_events (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,bytes INTEGER NOT NULL,recorded_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT,source TEXT NOT NULL,raw_html TEXT NOT NULL,video_id TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,error TEXT NOT NULL DEFAULT '');" +
 	"CREATE TABLE IF NOT EXISTS translations (entity_id TEXT NOT NULL,language TEXT NOT NULL,field TEXT NOT NULL,source_hash TEXT NOT NULL,translated_text TEXT NOT NULL,provider TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(entity_id,language,field));" +
-	"CREATE TABLE IF NOT EXISTS playback_history (video_id TEXT PRIMARY KEY,play_count INTEGER NOT NULL DEFAULT 1,last_played_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);"
+	"CREATE TABLE IF NOT EXISTS playback_history (video_id TEXT PRIMARY KEY,play_count INTEGER NOT NULL DEFAULT 1,last_played_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
+	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
+	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)

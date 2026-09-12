@@ -9,8 +9,20 @@
 - 时间：服务端使用 RFC 3339 UTC，例如 `2026-09-11T16:39:37Z`。客户端应按 `dashboard.timezone` 转换后显示。
 - 成功状态通常为 `200`、`201` 或 `202`。
 - 错误格式：`{"error":"错误说明"}`。
-- 当前版本没有登录认证，客户端只应连接可信局域网中的实例，不应直接暴露到公网。
+- 除首次初始化和登录接口外，API、媒体流和缩略图均要求管理员会话。
 - ID 和订阅 slug 可能包含冒号，拼接路径时必须进行 URL 编码。
+
+### 管理员认证
+
+浏览器使用 `hwatch_session` HttpOnly、SameSite=Strict Cookie。所有非 GET/HEAD/OPTIONS 请求还必须携带登录响应返回的 `X-CSRF-Token` 请求头。
+
+- `GET /api/auth/status`：返回 `{configured, authenticated, username?, csrf_token?}`。
+- `POST /api/auth/setup`：仅尚无用户时可用，请求 `{username,password}`，创建首位管理员并登录。
+- `POST /api/auth/login`：请求 `{username,password}`；单个来源地址 15 分钟内最多连续失败 5 次。
+- `GET /api/auth/me`：返回当前管理员和 CSRF token。
+- `POST /api/auth/logout`：注销当前会话。
+
+密码长度为 10–256，服务端仅保存 bcrypt 哈希；会话默认有效期为 7 天。HTTPS 反向代理应传递 `X-Forwarded-Proto: https` 以启用 Secure Cookie。
 
 示例：
 
