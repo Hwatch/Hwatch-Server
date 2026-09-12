@@ -45,6 +45,17 @@ paths:
       operationId: markNotificationsRead
       parameters: [{$ref: '#/components/parameters/CSRF'}]
       responses: {'200': {$ref: '#/components/responses/JSON'}}
+  /api/duplicates:
+    get: {tags: [Library], operationId: listDuplicateCandidates, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/duplicates/{id}/{action}:
+    post:
+      tags: [Library]
+      operationId: reviewDuplicateCandidate
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [confirm, dismiss]}}
+        - {$ref: '#/components/parameters/CSRF'}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}
   /api/videos:
     get:
       tags: [Library]

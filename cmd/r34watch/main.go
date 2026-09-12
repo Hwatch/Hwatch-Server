@@ -46,6 +46,8 @@ type App struct {
 	last429        time.Time
 	nfoMu          sync.Mutex
 	nfoRunning     bool
+	hashMu         sync.Mutex
+	hashRunning    map[string]bool
 	backupMu       sync.Mutex
 	recoveryMu     sync.Mutex
 	authMu         sync.Mutex
@@ -57,7 +59,7 @@ type App struct {
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
+	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -633,6 +635,9 @@ func (a *App) startQueueWorker() {
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
 				}
+				if strings.HasPrefix(err.Error(), "duplicate: ") {
+					continue
+				}
 				if failure.Retryable {
 					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
 					if failure.Code == "rate_limited" {
@@ -1023,6 +1028,9 @@ func (a *App) queue(id string) error {
 			_ = a.store.UpdateDetails(v)
 		}
 	}
+	if err = a.duplicateBeforeDownload(v, cfg); err != nil {
+		return err
+	}
 	sub, err := a.store.Subscription(v.SubscriptionSlug)
 	if err != nil {
 		return err
@@ -1326,6 +1334,7 @@ func (a *App) pollTasks(ctx context.Context) {
 				translated := a.translatedMetadata(fresh, cfg.PlexLanguage)
 				_ = plex.Generate(layout, sub, translated, cfg.HTTPProxy)
 				a.probeMedia(v.ID, path)
+				a.hashCompletedMedia(v.ID, path)
 			}
 		}
 	}
@@ -1354,6 +1363,7 @@ func (a *App) scheduler(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.reconcileRecovery()
+			a.hashNextCompletedMedia()
 			notifyCtx, notifyCancel := context.WithTimeout(ctx, 5*time.Second)
 			a.evaluateNotifications(notifyCtx)
 			notifyCancel()
@@ -1561,6 +1571,8 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/notifications", a.notifications)
 	mux.HandleFunc("POST /api/notifications/read-all", a.notifications)
+	mux.HandleFunc("GET /api/duplicates", a.duplicates)
+	mux.HandleFunc("POST /api/duplicates/{id}/{action}", a.duplicates)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)
@@ -1633,6 +1645,8 @@ func main() {
 		_ = s.SaveSettings(cfg)
 	}
 	app := New(s)
+	go app.backfillCoverFingerprints()
+	app.hashNextCompletedMedia()
 	notifyCtx, notifyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	app.evaluateNotifications(notifyCtx)
 	notifyCancel()

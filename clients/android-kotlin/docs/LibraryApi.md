@@ -6,7 +6,9 @@ All URIs are relative to *http://localhost*
 | ------------- | ------------- | ------------- |
 | [**dashboard**](LibraryApi.md#dashboard) | **GET** api/dashboard |  |
 | [**importHTML**](LibraryApi.md#importHTML) | **POST** api/import/html |  |
+| [**listDuplicateCandidates**](LibraryApi.md#listDuplicateCandidates) | **GET** api/duplicates |  |
 | [**listVideos**](LibraryApi.md#listVideos) | **GET** api/videos |  |
+| [**reviewDuplicateCandidate**](LibraryApi.md#reviewDuplicateCandidate) | **POST** api/duplicates/{id}/{action} |  |
 | [**streamMedia**](LibraryApi.md#streamMedia) | **GET** media/{id} |  |
 | [**videoFacets**](LibraryApi.md#videoFacets) | **GET** api/videos/facets |  |
 | [**videoThumbnail**](LibraryApi.md#videoThumbnail) | **GET** thumb/{id} |  |
@@ -96,6 +98,38 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.impo
 
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(LibraryApi::class.java)
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.listDuplicateCandidates()
+```
+
+### Parameters
+This endpoint does not need any parameter.
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
 val limit : kotlin.Int = 56 // kotlin.Int | 
 val offset : kotlin.Int = 56 // kotlin.Int | 
 val status : kotlin.String = status_example // kotlin.String | 
@@ -135,6 +169,45 @@ val result : VideoPage = webService.listVideos(limit, offset, status, q, scope, 
 ### Return type
 
 [**VideoPage**](VideoPage.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val id : kotlin.Long = 789 // kotlin.Long | 
+val action : kotlin.String = action_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.reviewDuplicateCandidate(id, action, xCSRFToken)
+```
+
+### Parameters
+| **id** | **kotlin.Long**|  | |
+| **action** | **kotlin.String**|  | [enum: confirm, dismiss] |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
 
 ### Authorization
 
