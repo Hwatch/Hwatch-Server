@@ -87,6 +87,8 @@ All URIs are relative to *http://localhost*
  - [app.hwatch.client.models.CreateSubscriptionRequest](docs/CreateSubscriptionRequest.md)
  - [app.hwatch.client.models.Credentials](docs/Credentials.md)
  - [app.hwatch.client.models.Error](docs/Error.md)
+ - [app.hwatch.client.models.Health](docs/Health.md)
+ - [app.hwatch.client.models.HealthWarning](docs/HealthWarning.md)
  - [app.hwatch.client.models.RecoveryStatus](docs/RecoveryStatus.md)
  - [app.hwatch.client.models.RecoveryStatusSummary](docs/RecoveryStatusSummary.md)
  - [app.hwatch.client.models.RestoreBackupRequest](docs/RestoreBackupRequest.md)

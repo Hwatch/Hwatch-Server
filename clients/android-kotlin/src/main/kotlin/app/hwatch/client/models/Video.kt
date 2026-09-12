@@ -32,6 +32,9 @@ import com.google.gson.annotations.SerializedName
  * @param totalBytes 
  * @param downloadSpeed 
  * @param connections 
+ * @param error 
+ * @param errorCode 稳定下载错误分类；无错误时为空字符串
+ * @param errorRetryable 
  */
 
 
@@ -69,7 +72,17 @@ data class Video (
     val downloadSpeed: kotlin.Long? = null,
 
     @SerializedName("connections")
-    val connections: kotlin.Int? = null
+    val connections: kotlin.Int? = null,
+
+    @SerializedName("error")
+    val error: kotlin.String? = null,
+
+    /* 稳定下载错误分类；无错误时为空字符串 */
+    @SerializedName("error_code")
+    val errorCode: kotlin.String? = null,
+
+    @SerializedName("error_retryable")
+    val errorRetryable: kotlin.Boolean? = null
 
 ) : kotlin.collections.HashMap<String, kotlin.Any>() {
 

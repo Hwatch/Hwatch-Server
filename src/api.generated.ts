@@ -533,8 +533,38 @@ export interface components {
             /** Format: int64 */
             download_speed?: number;
             connections?: number;
+            error?: string;
+            /** @description 稳定下载错误分类；无错误时为空字符串 */
+            error_code?: string;
+            error_retryable?: boolean;
         } & {
             [key: string]: unknown;
+        };
+        HealthWarning: {
+            /** @enum {string} */
+            code: "database_unavailable" | "storage_unavailable" | "storage_low" | "downloader_unavailable" | "download_failures";
+            /** @enum {string} */
+            severity: "warning" | "error";
+            message: string;
+        };
+        Health: {
+            /** @enum {string} */
+            status: "ok" | "degraded";
+            warnings: components["schemas"]["HealthWarning"][];
+            database: {
+                [key: string]: unknown;
+            };
+            storage: {
+                [key: string]: unknown;
+            };
+            queue: {
+                [key: string]: unknown;
+            };
+            downloaders: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            uptime_seconds: number;
         };
         VideoPage: {
             items: components["schemas"]["Video"][];
@@ -690,7 +720,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: components["responses"]["JSON"];
+            /** @description 服务健康状态；组件降级仍返回 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Health"];
+                };
+            };
         };
     };
     listVideos: {

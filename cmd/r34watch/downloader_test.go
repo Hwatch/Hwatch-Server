@@ -49,4 +49,44 @@ func TestDetachedWgetTasksReturnToQueue(t *testing.T) {
 	if got.Status != "queued" || got.ExternalID != "" {
 		t.Fatalf("unexpected task: %+v", got)
 	}
+	if got.PlexPath != "/tmp/test.mp4" {
+		t.Fatalf("partial download path was lost: %q", got.PlexPath)
+	}
+}
+
+func TestQueuedTaskSurvivesDatabaseReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restart.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := store.Subscription{Slug: "rule34video:restart", Name: "restart", URL: "https://example.invalid/restart", Enabled: true, CreatedAt: store.Now()}
+	if err = s.AddSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+	v := store.Video{ID: "rule34video:restart", SubscriptionSlug: sub.Slug, Title: "partial", PageURL: "https://example.invalid/video", DiscoveredAt: store.Now(), UpdatedAt: store.Now()}
+	if _, err = s.UpsertDiscovered(v); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.BindDownloader(v.ID, "wget", "old-process", "active", "/mnt/media/partial.mp4"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err = s.RequeueDetachedWget(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Video(v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "queued" || got.PlexPath != "/mnt/media/partial.mp4" || got.ExternalID != "" {
+		t.Fatalf("restart recovery lost state: %+v", got)
+	}
 }

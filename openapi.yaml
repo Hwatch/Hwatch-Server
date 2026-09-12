@@ -28,7 +28,11 @@ paths:
   /api/dashboard:
     get: {tags: [Library], operationId: dashboard, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/health:
-    get: {tags: [Settings], operationId: health, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    get:
+      tags: [Settings]
+      operationId: health
+      responses:
+        '200': {description: 服务健康状态；组件降级仍返回 200, content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}}
   /api/videos:
     get:
       tags: [Library]
@@ -164,7 +168,28 @@ components:
         total_bytes: {type: integer, format: int64}
         download_speed: {type: integer, format: int64}
         connections: {type: integer}
+        error: {type: string}
+        error_code: {type: string, description: 稳定下载错误分类；无错误时为空字符串}
+        error_retryable: {type: boolean}
       additionalProperties: true
+    HealthWarning:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code: {type: string, enum: [database_unavailable, storage_unavailable, storage_low, downloader_unavailable, download_failures]}
+        severity: {type: string, enum: [warning, error]}
+        message: {type: string}
+    Health:
+      type: object
+      required: [status, warnings, database, storage, queue, downloaders, uptime_seconds]
+      properties:
+        status: {type: string, enum: [ok, degraded]}
+        warnings: {type: array, items: {$ref: '#/components/schemas/HealthWarning'}}
+        database: {type: object, additionalProperties: true}
+        storage: {type: object, additionalProperties: true}
+        queue: {type: object, additionalProperties: true}
+        downloaders: {type: array, items: {type: object, additionalProperties: true}}
+        uptime_seconds: {type: integer, format: int64}
     VideoPage:
       type: object
       required: [items, total, limit, offset]

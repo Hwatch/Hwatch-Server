@@ -1,0 +1,15 @@
+.health-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  margin-bottom: 18px;
+  border: 1px solid #684d28;
+  border-radius: 10px;
+  background: #2a2117;
+}
+
+.health-alert b { color: #e5b951; }
+.health-alert span { font-size: .82rem; color: #d7b77f; }
+.health-alert span.error { color: #ffaaaa; }

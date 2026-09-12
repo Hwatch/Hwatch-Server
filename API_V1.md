@@ -448,6 +448,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 ```json
 {
   "status": "ok",
+  "warnings": [],
   "database": {"online": true},
   "storage": {"online": true, "free_bytes": 273582915584, "minimum_free_bytes": 5368709120},
   "queue": {"paused": false},
@@ -459,11 +460,14 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 }
 ```
 
-- `status=degraded`：数据库不可访问或媒体目录无法取得可用空间。
+- `status=degraded`：数据库不可访问、媒体/NFS 目录不可用、空间低于最低保留值，或当前下载模式没有可用下载器。
+- `warnings` 是结构化告警数组，包含稳定的 `code`、`severity` 和面向用户的 `message`。客户端逻辑应依赖 `code`，不要匹配中文文案。
 - `storage.free_bytes` 和 `minimum_free_bytes` 单位均为字节。
 - `downloaders[].DownloadSpeed` 单位为字节/秒。
 - `downloaders[].UptimeSeconds` 当前表示 HWatch 本次进程运行时间，不是外部 aria2 进程启动时间。
-- 单个下载器离线会反映在其 `Online` 和 `Error` 字段，但当前不会单独将顶层 `status` 改为 `degraded`。
+- 固定下载器离线会令顶层状态降级；自动模式仅在 aria2 与 wget 都不可用时降级。
+
+视频与任务对象额外返回 `error_code` 和 `error_retryable`。当前稳定分类包括 `capacity_reached`、`rate_limited`、`timeout`、`downloader_offline`、`detached_task`、`source_expired`、`storage_unavailable`、`permission_denied` 和 `download_failed`；无错误时 `error_code` 为空字符串。
 
 ## 11. Android 实现建议
 
