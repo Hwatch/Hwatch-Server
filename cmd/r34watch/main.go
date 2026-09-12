@@ -159,7 +159,8 @@ func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	return out
 }
 func videoMap(v store.Video) map[string]any {
-	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
+	failure := classifyDownloadMessage(v.Error)
+	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "error_code": failure.Code, "error_retryable": failure.Retryable, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
 }
 func translatedVideoMap(v store.Video, language string, translations map[string]store.Translation) map[string]any {
 	item := videoMap(v)
@@ -235,7 +236,13 @@ func (a *App) ariaOnline(cfg store.Settings) bool {
 	return a.aria(cfg).Health(ctx).Online
 }
 func (a *App) downloaderHealth(ctx context.Context, cfg store.Settings) []downloader.Health {
-	items := []downloader.Health{a.aria(cfg).Health(ctx), a.wget.Health(ctx)}
+	ariaCtx, ariaCancel := context.WithTimeout(ctx, 2*time.Second)
+	ariaHealth := a.aria(cfg).Health(ariaCtx)
+	ariaCancel()
+	wgetCtx, wgetCancel := context.WithTimeout(ctx, 2*time.Second)
+	wgetHealth := a.wget.Health(wgetCtx)
+	wgetCancel()
+	items := []downloader.Health{ariaHealth, wgetHealth}
 	for i := range items {
 		stats, _ := a.store.DownloaderStats(items[i].ID)
 		items[i].Active, items[i].Connections, items[i].DownloadSpeed = stats.Active, stats.Connections, stats.Speed
@@ -250,9 +257,39 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := a.store.Settings()
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
+	respond(w, 200, a.healthSnapshot(ctx, cfg))
+}
+func (a *App) healthSnapshot(ctx context.Context, cfg store.Settings) map[string]any {
+	warnings := []map[string]string{}
 	dbErr := a.store.DB.PingContext(ctx)
-	_, free := diskStats(cfg.DownloadDir)
-	respond(w, 200, map[string]any{"status": map[bool]string{true: "ok", false: "degraded"}[dbErr == nil && free > 0], "database": map[string]any{"online": dbErr == nil}, "storage": map[string]any{"online": free > 0, "free_bytes": free, "minimum_free_bytes": cfg.MinFreeBytes}, "queue": map[string]any{"paused": cfg.DownloadPaused}, "downloaders": a.downloaderHealth(ctx, cfg), "uptime_seconds": int64(time.Since(a.startedAt).Seconds())})
+	if dbErr != nil {
+		warnings = append(warnings, map[string]string{"code": "database_unavailable", "severity": "error", "message": "SQLite 数据库不可用"})
+	}
+	total, free := diskStats(cfg.DownloadDir)
+	storageOnline := total > 0
+	if !storageOnline {
+		warnings = append(warnings, map[string]string{"code": "storage_unavailable", "severity": "error", "message": "媒体目录或 NFS 不可用"})
+	}
+	if storageOnline && cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes {
+		warnings = append(warnings, map[string]string{"code": "storage_low", "severity": "error", "message": "可用空间低于最低保留空间，已暂停建立新任务"})
+	}
+	downloaders := a.downloaderHealth(ctx, cfg)
+	selectedOnline := false
+	for _, item := range downloaders {
+		selected := item.ID == cfg.DownloaderMode || (cfg.DownloaderMode == "auto" && item.Online)
+		if selected && item.Online {
+			selectedOnline = true
+		}
+	}
+	if !selectedOnline {
+		warnings = append(warnings, map[string]string{"code": "downloader_unavailable", "severity": "error", "message": "当前下载模式没有可用下载器"})
+	}
+	failed, _ := a.store.CountVideos("failed")
+	if failed > 0 {
+		warnings = append(warnings, map[string]string{"code": "download_failures", "severity": "warning", "message": fmt.Sprintf("有 %d 个失败任务等待处理", failed)})
+	}
+	degraded := dbErr != nil || !storageOnline || (cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes) || !selectedOnline
+	return map[string]any{"status": map[bool]string{true: "degraded", false: "ok"}[degraded], "warnings": warnings, "database": map[string]any{"online": dbErr == nil}, "storage": map[string]any{"online": storageOnline, "total_bytes": total, "free_bytes": free, "minimum_free_bytes": cfg.MinFreeBytes}, "queue": map[string]any{"paused": cfg.DownloadPaused}, "downloaders": downloaders, "uptime_seconds": int64(time.Since(a.startedAt).Seconds())}
 }
 func diskStats(path string) (total, free int64) {
 	if path == "" {
@@ -289,10 +326,17 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
 	diskTotal, diskFree := diskStats(cfg.DownloadDir)
-	healthCtx, healthCancel := context.WithTimeout(r.Context(), 3*time.Second)
-	ariaHealth, wgetHealth := a.aria(cfg).Health(healthCtx), a.wget.Health(healthCtx)
+	healthCtx, healthCancel := context.WithTimeout(r.Context(), 5*time.Second)
+	health := a.healthSnapshot(healthCtx, cfg)
 	healthCancel()
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaHealth.Online, "downloader_mode": cfg.DownloaderMode, "downloaders": []downloader.Health{ariaHealth, wgetHealth}, "timezone": cfg.Timezone})
+	downloaders, _ := health["downloaders"].([]downloader.Health)
+	ariaOnline := false
+	for _, item := range downloaders {
+		if item.ID == "aria2" {
+			ariaOnline = item.Online
+		}
+	}
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaOnline, "downloader_mode": cfg.DownloaderMode, "downloaders": downloaders, "health_status": health["status"], "health_warnings": health["warnings"], "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
@@ -559,6 +603,15 @@ func (a *App) startQueueWorker() {
 				log.Printf("download queue paused for %s after HTTP 429", wait.Round(time.Second))
 				time.Sleep(wait)
 			}
+			engine := a.selectedEngine(cfg)
+			if waiter, ok := engine.(downloader.CapacityWaiter); ok {
+				waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				err := waiter.WaitForCapacity(waitCtx)
+				cancel()
+				if err != nil {
+					continue
+				}
+			}
 			videos, err := a.store.Videos(1, 0, "queued", "")
 			if err != nil || len(videos) == 0 {
 				return
@@ -569,20 +622,23 @@ func (a *App) startQueueWorker() {
 				if err.Error() == "下载队列已暂停" {
 					return
 				}
-				if errors.Is(err, downloader.ErrCapacityReached) {
-					time.Sleep(time.Second)
+				failure := classifyDownloadError(err)
+				if failure.Code == "capacity_reached" {
 					continue
 				}
-				if strings.Contains(err.Error(), "downloader unavailable") {
+				if failure.Code == "downloader_offline" {
 					return
 				}
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
 				}
-				if isRateLimited(err.Error()) || strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(err.Error(), "Timeout") {
+				if failure.Retryable {
 					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
-					if isRateLimited(err.Error()) {
+					if failure.Code == "rate_limited" {
 						a.record429()
+					}
+					if failure.Delay > 0 && failure.Code != "rate_limited" {
+						time.Sleep(failure.Delay)
 					}
 					continue
 				}
@@ -1207,6 +1263,16 @@ func (a *App) pollTasks(ctx context.Context) {
 			status, err := client.Tell(callCtx, externalID)
 			cancel()
 			if err != nil {
+				failure := classifyDownloadError(err)
+				if failure.Code == "detached_task" {
+					healthCtx, healthCancel := context.WithTimeout(ctx, 2*time.Second)
+					online := client.Health(healthCtx).Online
+					healthCancel()
+					if online {
+						_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", v.FilePath, v.PlexPath, "原下载任务已脱离，已自动重新排队", v.BytesDownloaded, v.TotalBytes)
+						a.startQueueWorker()
+					}
+				}
 				continue
 			}
 			mapped := status.State
@@ -1228,11 +1294,14 @@ func (a *App) pollTasks(ctx context.Context) {
 			if errText == "" && status.ErrorCode != "" && mapped == "failed" {
 				errText = "aria2 error " + status.ErrorCode
 			}
-			if mapped == "failed" && isRateLimited(errText) {
+			failure := classifyDownloaderStatus(status.ErrorCode, errText)
+			if mapped == "failed" && failure.Retryable {
 				removeCtx, removeCancel := context.WithTimeout(ctx, 5*time.Second)
 				_ = client.Remove(removeCtx, externalID)
 				removeCancel()
-				a.record429()
+				if failure.Code == "rate_limited" {
+					a.record429()
+				}
 				_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", path, v.PlexPath, errText, status.Completed, status.Total)
 				a.startQueueWorker()
 				continue

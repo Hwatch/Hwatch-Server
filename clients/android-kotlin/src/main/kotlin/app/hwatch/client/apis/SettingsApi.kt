@@ -7,6 +7,7 @@ import okhttp3.RequestBody
 import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.Health
 import app.hwatch.client.models.RecoveryStatus
 import app.hwatch.client.models.RestoreBackupRequest
 
@@ -41,12 +42,12 @@ interface SettingsApi {
      * 
      * 
      * Responses:
-     *  - 200: 成功
+     *  - 200: 服务健康状态；组件降级仍返回 200
      *
-     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     * @return [Call]<[Health]>
      */
     @GET("api/health")
-    fun health(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+    fun health(): Call<Health>
 
     /**
      * GET api/backups

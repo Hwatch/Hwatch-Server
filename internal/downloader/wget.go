@@ -26,11 +26,14 @@ type wgetTask struct {
 type Wget struct {
 	mu        sync.Mutex
 	tasks     map[string]*wgetTask
+	capacity  chan struct{}
 	max       int
 	limitKBPS int64
 }
 
-func NewWget() *Wget     { return &Wget{tasks: map[string]*wgetTask{}, max: 2} }
+func NewWget() *Wget {
+	return &Wget{tasks: map[string]*wgetTask{}, max: 2, capacity: make(chan struct{}, 1)}
+}
 func (*Wget) ID() string { return "wget" }
 func (w *Wget) Add(_ context.Context, r Request) (string, error) {
 	w.mu.Lock()
@@ -83,8 +86,36 @@ func (w *Wget) Add(_ context.Context, r Request) (string, error) {
 			t.state = "complete"
 		}
 		w.mu.Unlock()
+		w.notifyCapacity()
 	}()
 	return id, nil
+}
+func (w *Wget) notifyCapacity() {
+	select {
+	case w.capacity <- struct{}{}:
+	default:
+	}
+}
+func (w *Wget) WaitForCapacity(ctx context.Context) error {
+	for {
+		w.mu.Lock()
+		active := 0
+		for _, task := range w.tasks {
+			if task.state == "active" || task.state == "waiting" {
+				active++
+			}
+		}
+		available := active < w.max
+		w.mu.Unlock()
+		if available {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-w.capacity:
+		}
+	}
 }
 func (w *Wget) Tell(_ context.Context, id string) (Status, error) {
 	w.mu.Lock()
@@ -123,13 +154,21 @@ func (w *Wget) signal(id string, sig syscall.Signal, state string) error {
 	return nil
 }
 func (w *Wget) Pause(_ context.Context, id string) error {
-	return w.signal(id, syscall.SIGSTOP, "paused")
+	err := w.signal(id, syscall.SIGSTOP, "paused")
+	if err == nil {
+		w.notifyCapacity()
+	}
+	return err
 }
 func (w *Wget) Resume(_ context.Context, id string) error {
 	return w.signal(id, syscall.SIGCONT, "active")
 }
 func (w *Wget) Remove(_ context.Context, id string) error {
-	return w.signal(id, syscall.SIGTERM, "removed")
+	err := w.signal(id, syscall.SIGTERM, "removed")
+	if err == nil {
+		w.notifyCapacity()
+	}
+	return err
 }
 func (w *Wget) PauseAll(ctx context.Context) error {
 	w.mu.Lock()

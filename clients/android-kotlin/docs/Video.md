@@ -15,6 +15,9 @@
 | **totalBytes** | **kotlin.Long** |  |  [optional] |
 | **downloadSpeed** | **kotlin.Long** |  |  [optional] |
 | **connections** | **kotlin.Int** |  |  [optional] |
+| **error** | **kotlin.String** |  |  [optional] |
+| **errorCode** | **kotlin.String** | 稳定下载错误分类；无错误时为空字符串 |  [optional] |
+| **errorRetryable** | **kotlin.Boolean** |  |  [optional] |
 
 
 <a id="Status"></a>

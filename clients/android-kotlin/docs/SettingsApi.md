@@ -93,7 +93,7 @@ This endpoint does not need any parameter.
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(SettingsApi::class.java)
 
-val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.health()
+val result : Health = webService.health()
 ```
 
 ### Parameters
@@ -101,7 +101,7 @@ This endpoint does not need any parameter.
 
 ### Return type
 
-[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+[**Health**](Health.md)
 
 ### Authorization
 

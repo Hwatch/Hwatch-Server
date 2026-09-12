@@ -39,3 +39,7 @@ type Engine interface {
 	SetGlobal(context.Context, int, int64) error
 	Health(context.Context) Health
 }
+
+type CapacityWaiter interface {
+	WaitForCapacity(context.Context) error
+}
