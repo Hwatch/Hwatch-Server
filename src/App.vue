@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
+import NodeManagement from "./NodeManagement.vue";
 import SettingsView from "./SettingsView.vue";
 import { requestJSON } from "./api-client";
 type Link = { Name?: string; URL?: string; Image?: string };
@@ -239,6 +240,7 @@ const viewRoutes: Record<string, string> = {
   library: "/library",
   translations: "/translations",
   duplicates: "/duplicates",
+  nodes: "/nodes",
   notifications: "/notifications",
   settings: "/settings",
 };
@@ -250,6 +252,7 @@ const viewTitles: Record<string, string> = {
   library: "影视库",
   translations: "翻译管理",
   duplicates: "重复审查",
+  nodes: "计算节点",
   notifications: "通知",
   settings: "设置",
 };
@@ -478,6 +481,26 @@ async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
         : "已忽略匹配并重新排队";
     await loadDuplicates();
     await refreshDashboard();
+  });
+}
+const duplicateReason = (item: Duplicate) => {
+  const external: Record<string, string> = {
+    external_exact: "外部分析：文件内容一致",
+    external_reencoded: "外部分析：同一内容的重新编码版本",
+    external_contained: "外部分析：该视频已完整包含于另一视频",
+    external_partial_overlap: "外部分析：两个视频存在部分重叠",
+    external_compilation_contains: "外部分析：合集包含匹配视频",
+  };
+  if (external[item.match_type]) return external[item.match_type];
+  if (item.match_type === "sha256") return "文件 SHA-256 完全一致";
+  if (item.match_type === "page_url") return "详情页地址一致";
+  return `封面相似 ${Math.round(item.confidence * 100)}% · 时长差 ${item.duration_delta} 秒`;
+};
+async function createExternalJob(video: Video, type: "dedupe" | "transcode") {
+  if (type === "transcode" && !confirm(`将“${displayTitle(video)}”加入 H.265 转码队列？转码完成后仍需人工确认产物。`)) return;
+  await act(async () => {
+    const result = await api("/api/compute/jobs", {method:"POST", body:JSON.stringify({video_id:video.video_id, type})});
+    notice.value = result.created ? (type === "dedupe" ? "外部去重任务已创建" : "H.265 转码任务已创建") : "相同媒体和算法的任务已经存在";
   });
 }
 async function reviewDuplicateBatch(action: "confirm" | "dismiss") {
@@ -1046,6 +1069,7 @@ watch(
             { id: 'library', label: '影视库' },
             { id: 'translations', label: '翻译管理' },
             { id: 'duplicates', label: '重复审查' },
+            { id: 'nodes', label: '计算节点' },
             { id: 'notifications', label: '通知' },
           ]"
           :key="item.id"
@@ -1116,25 +1140,7 @@ watch(
         <div>
           <p class="eyebrow">{{ view.toUpperCase() }}</p>
           <h1>
-            {{
-              view === "home"
-                ? "概览"
-                : view === "subscriptions"
-                  ? "订阅管理"
-                  : view === "downloads"
-                    ? "下载中心"
-                    : view === "undownloaded"
-                      ? "未下载视频"
-                      : view === "library"
-                        ? "影视库"
-                        : view === "translations"
-                          ? "翻译管理"
-                          : view === "notifications"
-                            ? "通知中心"
-                            : view === "duplicates"
-                              ? "重复内容审查"
-                              : "系统设置"
-            }}
+            {{ viewTitles[view] || "HWatch" }}
           </h1>
         </div>
         <button
@@ -1159,6 +1165,7 @@ watch(
               'translations',
               'notifications',
               'duplicates',
+              'nodes',
             ].includes(view)
           "
           class="primary"
@@ -1426,17 +1433,7 @@ watch(
               </div>
             </div>
             <small
-              >{{
-                item.match_type === "sha256"
-                  ? "文件 SHA-256 完全一致"
-                  : item.match_type === "page_url"
-                    ? "详情页地址一致"
-                    : "封面相似 " +
-                      Math.round(item.confidence * 100) +
-                      "% · 时长差 " +
-                      item.duration_delta +
-                      " 秒"
-              }}
+              >{{ duplicateReason(item) }}
               · {{ item.status }}</small
             >
             <small v-if="item.estimated_bytes">预计可释放 {{ size(item.estimated_bytes) }}</small>
@@ -1724,8 +1721,12 @@ watch(
                 {{ mediaSummary(v) || v.views.toLocaleString() + " 次观看" }}
               </p>
             </div>
-            <button v-if="view === 'library'" @click="selected = v">播放</button
-            ><button v-else @click="videoAction(v, 'download')">下载</button>
+            <div class="library-actions">
+              <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
+              <button v-if="view === 'library'" title="提交外部内容去重分析" :disabled="busy" @click="createExternalJob(v,'dedupe')">去重</button>
+              <button v-if="view === 'library'" title="提交 H.265 转码" :disabled="busy||v.video_codec==='H.265/HEVC'||['pending','transcoding','verifying'].includes(v.transcode_status)" @click="createExternalJob(v,'transcode')">H.265</button>
+              <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
+            </div>
           </article>
           <div v-if="!videos.length" class="empty">
             {{ view === "library" ? "影视库暂无已下载视频" : "没有未下载视频" }}
@@ -1753,7 +1754,8 @@ watch(
         </div>
       </section>
       <section v-else>
-        <div v-if="view === 'translations'" class="panel">
+        <NodeManagement v-if="view === 'nodes'" :api="api" :timezone="data.timezone" />
+        <div v-else-if="view === 'translations'" class="panel">
           <h2>WebAI 翻译交换</h2>
           <p>
             导出只包含视频标识、标题、标签和原文哈希，不包含代理密码、Cookie、下载地址或本地路径。
@@ -1861,6 +1863,7 @@ watch(
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
+      <div v-if="selected.status === 'completed'" class="player-actions"><button :disabled="busy" @click="createExternalJob(selected,'dedupe')">外部去重分析</button><button class="primary" :disabled="busy||selected.video_codec==='H.265/HEVC'||['pending','transcoding','verifying'].includes(selected.transcode_status)" @click="createExternalJob(selected,'transcode')">转码为 H.265</button></div>
     </div>
   </div>
 </template>

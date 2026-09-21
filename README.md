@@ -29,6 +29,7 @@ Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体�
 - 结构化审计、任务状态历史、持久通知和下载器健康检查
 - iPhone Safari 添加到主屏幕所需的 Manifest、图标和安全区域适配
 - HWatch Node Server：外部去重与转码节点认证、心跳、持久任务、租约和结果验证
+- Web 管理界面：创建/撤销计算节点、保存一次性令牌、查看任务进度与去重结果，并人工确认转码产物
 
 ## 平台适配器
 

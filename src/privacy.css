@@ -141,7 +141,12 @@ nav i { margin-left: auto; }
 .subscription-kind.creator { color: #8fd5ff; background: #183044; }
 .subscription-kind.series { color: #f3c87b; background: #3b2d18; }
 .subscription-source .actions { align-self: center; }
-.library article > button:last-child { min-height: 42px; height: 42px; display: grid; place-items: center; padding: 0 13px; }
+.library-actions { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 7px; margin: 0 10px 10px; }
+.library-actions button { min-height: 42px; height: 42px; display: grid; place-items: center; padding: 0 11px; }
+.library-actions button:only-child { grid-column: 1 / -1; }
+.player-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.strong-demo .node-token code { filter: blur(10px); user-select: none; }
+.strong-demo .job-title b,.strong-demo .match-results small { color: transparent; background: #30343d; border-radius: 4px; }
 .completed-tasks-toggle {
   width: 100%;
   margin-top: 15px;
@@ -269,7 +274,8 @@ nav i { margin-left: auto; }
   .poster, .library article > img { height: auto; aspect-ratio: 16 / 9; }
   .meta { min-height: 98px; padding: 10px; }
   .meta b { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
-  .library article > button:last-child { margin: 0 10px 10px; }
+  .library-actions { grid-template-columns: 1fr 1fr; }
+  .library-actions .primary { grid-column: 1 / -1; }
   .queue article { padding: 10px; gap: 10px; }
   .queue img { height: auto; aspect-ratio: 16 / 9; }
   .actions { flex-wrap: wrap; }
