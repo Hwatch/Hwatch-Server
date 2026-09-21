@@ -47,3 +47,27 @@ func TestBackupNameRejectsTraversal(t *testing.T) {
 		}
 	}
 }
+
+func TestVerifyBackupChecksumRejectsTampering(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hwatch-20260912T120000Z.db")
+	if err := os.WriteFile(path, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := checksumFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path+".sha256", []byte(sum+"  "+filepath.Base(path)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = verifyBackupChecksum(path); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = verifyBackupChecksum(path); err == nil {
+		t.Fatal("tampered backup passed checksum validation")
+	}
+}

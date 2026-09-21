@@ -25,13 +25,13 @@ class CreateSubscriptionRequestTest : ShouldSpec() {
         // uncomment below to create an instance of CreateSubscriptionRequest
         //val modelInstance = CreateSubscriptionRequest()
 
-        // to test the property `url`
+        // to test the property `url` - 已注册适配器支持的订阅链接
         should("test url") {
             // uncomment below to test the property
             //modelInstance.url shouldBe ("TODO")
         }
 
-        // to test the property `type`
+        // to test the property `type` - 可省略，由链接自动识别
         should("test type") {
             // uncomment below to test the property
             //modelInstance.type shouldBe ("TODO")

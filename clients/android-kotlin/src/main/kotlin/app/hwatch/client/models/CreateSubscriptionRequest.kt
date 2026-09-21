@@ -21,25 +21,36 @@ import com.google.gson.annotations.SerializedName
 /**
  * 
  *
- * @param url 
- * @param type 
+ * @param url 已注册适配器支持的订阅链接
+ * @param type 可省略，由链接自动识别
  * @param downloadExisting 
  */
 
 
 data class CreateSubscriptionRequest (
 
+    /* 已注册适配器支持的订阅链接 */
     @SerializedName("url")
     val url: java.net.URI,
 
+    /* 可省略，由链接自动识别 */
     @SerializedName("type")
-    val type: kotlin.String? = null,
+    val type: CreateSubscriptionRequest.Type? = null,
 
     @SerializedName("download_existing")
-    val downloadExisting: kotlin.Boolean? = null
+    val downloadExisting: kotlin.Boolean? = false
 
 ) {
 
+    /**
+     * 可省略，由链接自动识别
+     *
+     * Values: creator,playlist
+     */
+    enum class Type(val value: kotlin.String) {
+        @SerializedName(value = "creator") creator("creator"),
+        @SerializedName(value = "playlist") playlist("playlist");
+    }
 
 }
 

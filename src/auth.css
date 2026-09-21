@@ -3,5 +3,7 @@
 .auth-card h1,.auth-card p{margin:0}.auth-card>p{color:#9da5b2;line-height:1.5}.auth-card label{display:grid;gap:7px;color:#cbd0d9}
 .auth-logo{display:grid;place-items:center;width:48px;height:48px;border-radius:13px;background:#e5b951;color:#211e17;font-size:1.5rem;font-weight:900}
 .auth-error{padding:10px 12px;border-radius:8px;background:#3c2529;color:#ffb4b4!important}.auth-card button{padding:12px}
-.logout-button{position:fixed;right:18px;bottom:18px;z-index:6;width:auto;max-width:220px;background:#22262eee;border:1px solid #353b46;color:#aeb5c0;box-shadow:0 8px 28px #0007}
-@media(max-width:680px){.logout-button{right:10px;bottom:10px;max-width:140px;padding:8px 10px;font-size:.78rem}}
+.sidebar-account{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding-top:12px;border-top:1px solid #2b303a}
+.sidebar-account>span{display:grid;min-width:0;padding-left:3px}.sidebar-account small{margin:0;font-size:.68rem;color:#777f8d}.sidebar-account b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem;color:#d9dde4}
+.bottom .sidebar-logout{min-width:40px;padding:9px;color:#d68b8b;background:#302126;border:1px solid #493036}.bottom .sidebar-logout:hover{color:#ffd0d0;background:#3b272d}.sidebar-logout .nav-icon{width:18px;height:18px}.sidebar-logout span{display:none}
+@media(max-width:680px){.sidebar-account{grid-template-columns:1fr}.bottom .sidebar-logout{width:100%;min-height:44px;justify-content:center}.sidebar-logout span{display:inline}}

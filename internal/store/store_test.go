@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -43,6 +44,53 @@ func TestSQLiteLifecycle(t *testing.T) {
 	recent, err := s.RecentlyPlayed(10)
 	if err != nil || len(recent) != 1 || recent[0].ID != "rule34video:123" {
 		t.Fatalf("recent=%+v err=%v", recent, err)
+	}
+}
+
+func TestSubmissionClaimIsConcurrentSafeAndAuditable(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	sub := Subscription{Slug: "rule34video:claim", Name: "claim", URL: "https://example.invalid/claim", Enabled: true, CreatedAt: Now()}
+	if err = s.AddSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+	v := Video{ID: "rule34video:claim", SubscriptionSlug: sub.Slug, Title: "claim", PageURL: "https://example.invalid/v"}
+	if _, err = s.UpsertDiscovered(v); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.QueueVideo(v.ID); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	results := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); results <- s.BeginSubmission(v.ID, "aria2", "same-gid", "/media/x.mp4") }()
+	}
+	wg.Wait()
+	close(results)
+	success := 0
+	for result := range results {
+		if result == nil {
+			success++
+		}
+	}
+	if success != 1 {
+		t.Fatalf("successful claims=%d want 1", success)
+	}
+	events, err := s.TaskEvents(v.ID, 10)
+	if err != nil || len(events) != 1 || events[0].ToStatus != "submitting" {
+		t.Fatalf("events=%+v err=%v", events, err)
+	}
+	if err = s.AddAudit("admin", "POST /api/test", "http", "", "success", map[string]any{"status": 200}); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := s.AuditLogs(10, 0)
+	if err != nil || len(logs) != 1 || logs[0].Actor != "admin" {
+		t.Fatalf("logs=%+v err=%v", logs, err)
 	}
 }
 

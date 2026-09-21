@@ -11,6 +11,7 @@ All URIs are relative to *http://localhost*
 | [**listPlatforms**](SubscriptionsApi.md#listPlatforms) | **GET** api/platforms |  |
 | [**listSubscriptions**](SubscriptionsApi.md#listSubscriptions) | **GET** api/subscriptions |  |
 | [**searchCreators**](SubscriptionsApi.md#searchCreators) | **GET** api/creators/search |  |
+| [**subscriptionAvatar**](SubscriptionsApi.md#subscriptionAvatar) | **GET** avatar/{slug} |  |
 | [**updateSubscription**](SubscriptionsApi.md#updateSubscription) | **PATCH** api/subscriptions/{slug} |  |
 
 
@@ -274,16 +275,53 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.sear
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
 val slug : kotlin.String = slug_example // kotlin.String | 
-val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
 
-val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.updateSubscription(slug, xCSRFToken)
+webService.subscriptionAvatar(slug)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **slug** | **kotlin.String**|  | |
+
+### Return type
+
+null (empty response body)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: image/jpeg, image/png, image/svg+xml, application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
+val slug : kotlin.String = slug_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val updateSubscriptionRequest : UpdateSubscriptionRequest =  // UpdateSubscriptionRequest | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.updateSubscription(slug, xCSRFToken, updateSubscriptionRequest)
 ```
 
 ### Parameters
 | **slug** | **kotlin.String**|  | |
+| **xCSRFToken** | **kotlin.String**|  | |
 | Name | Type | Description  | Notes |
 | ------------- | ------------- | ------------- | ------------- |
-| **xCSRFToken** | **kotlin.String**|  | |
+| **updateSubscriptionRequest** | [**UpdateSubscriptionRequest**](UpdateSubscriptionRequest.md)|  | |
 
 ### Return type
 
@@ -295,6 +333,6 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.upda
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 

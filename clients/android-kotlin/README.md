@@ -53,6 +53,7 @@ All URIs are relative to *http://localhost*
 | *DownloadsApi* | [**downloadAll**](docs/DownloadsApi.md#downloadall) | **POST** api/videos/download-all |  |
 | *DownloadsApi* | [**downloadEvents**](docs/DownloadsApi.md#downloadevents) | **GET** api/events |  |
 | *DownloadsApi* | [**listTasks**](docs/DownloadsApi.md#listtasks) | **GET** api/tasks |  |
+| *DownloadsApi* | [**taskHistory**](docs/DownloadsApi.md#taskhistory) | **GET** api/tasks/{id}/history |  |
 | *DownloadsApi* | [**toggleDownloads**](docs/DownloadsApi.md#toggledownloads) | **POST** api/downloads/toggle |  |
 | *DownloadsApi* | [**videoAction**](docs/DownloadsApi.md#videoaction) | **POST** api/videos/{id}/{action} |  |
 | *LibraryApi* | [**dashboard**](docs/LibraryApi.md#dashboard) | **GET** api/dashboard |  |
@@ -60,15 +61,30 @@ All URIs are relative to *http://localhost*
 | *LibraryApi* | [**listDuplicateCandidates**](docs/LibraryApi.md#listduplicatecandidates) | **GET** api/duplicates |  |
 | *LibraryApi* | [**listVideos**](docs/LibraryApi.md#listvideos) | **GET** api/videos |  |
 | *LibraryApi* | [**reviewDuplicateCandidate**](docs/LibraryApi.md#reviewduplicatecandidate) | **POST** api/duplicates/{id}/{action} |  |
+| *LibraryApi* | [**reviewDuplicateCandidatesBatch**](docs/LibraryApi.md#reviewduplicatecandidatesbatch) | **POST** api/duplicates/batch |  |
 | *LibraryApi* | [**streamMedia**](docs/LibraryApi.md#streammedia) | **GET** media/{id} |  |
 | *LibraryApi* | [**videoFacets**](docs/LibraryApi.md#videofacets) | **GET** api/videos/facets |  |
 | *LibraryApi* | [**videoThumbnail**](docs/LibraryApi.md#videothumbnail) | **GET** thumb/{id} |  |
+| *NodeWorkerApi* | [**claimComputeJob**](docs/NodeWorkerApi.md#claimcomputejob) | **POST** api/node/v1/jobs/claim |  |
+| *NodeWorkerApi* | [**completeComputeJob**](docs/NodeWorkerApi.md#completecomputejob) | **POST** api/node/v1/jobs/{id}/complete |  |
+| *NodeWorkerApi* | [**failComputeJob**](docs/NodeWorkerApi.md#failcomputejob) | **POST** api/node/v1/jobs/{id}/fail |  |
+| *NodeWorkerApi* | [**nodeHeartbeat**](docs/NodeWorkerApi.md#nodeheartbeat) | **POST** api/node/v1/heartbeat |  |
+| *NodeWorkerApi* | [**updateComputeJobProgress**](docs/NodeWorkerApi.md#updatecomputejobprogress) | **POST** api/node/v1/jobs/{id}/progress |  |
+| *NodesApi* | [**cancelComputeJob**](docs/NodesApi.md#cancelcomputejob) | **POST** api/compute/jobs/{id}/cancel |  |
+| *NodesApi* | [**commitTranscodeJob**](docs/NodesApi.md#committranscodejob) | **POST** api/compute/jobs/{id}/commit |  |
+| *NodesApi* | [**createComputeJob**](docs/NodesApi.md#createcomputejob) | **POST** api/compute/jobs |  |
+| *NodesApi* | [**createComputeNode**](docs/NodesApi.md#createcomputenode) | **POST** api/nodes |  |
+| *NodesApi* | [**listComputeJobs**](docs/NodesApi.md#listcomputejobs) | **GET** api/compute/jobs |  |
+| *NodesApi* | [**listComputeNodes**](docs/NodesApi.md#listcomputenodes) | **GET** api/nodes |  |
+| *NodesApi* | [**revokeComputeNode**](docs/NodesApi.md#revokecomputenode) | **DELETE** api/nodes/{id} |  |
 | *SettingsApi* | [**createBackup**](docs/SettingsApi.md#createbackup) | **POST** api/backups |  |
 | *SettingsApi* | [**getSettings**](docs/SettingsApi.md#getsettings) | **GET** api/settings |  |
 | *SettingsApi* | [**health**](docs/SettingsApi.md#health) | **GET** api/health |  |
+| *SettingsApi* | [**listAuditLogs**](docs/SettingsApi.md#listauditlogs) | **GET** api/audit |  |
 | *SettingsApi* | [**listBackups**](docs/SettingsApi.md#listbackups) | **GET** api/backups |  |
 | *SettingsApi* | [**listNotifications**](docs/SettingsApi.md#listnotifications) | **GET** api/notifications |  |
 | *SettingsApi* | [**markNotificationsRead**](docs/SettingsApi.md#marknotificationsread) | **POST** api/notifications/read-all |  |
+| *SettingsApi* | [**previewExclusions**](docs/SettingsApi.md#previewexclusions) | **POST** api/exclusions/preview |  |
 | *SettingsApi* | [**recoverySummary**](docs/SettingsApi.md#recoverysummary) | **GET** api/recovery/latest |  |
 | *SettingsApi* | [**restoreBackup**](docs/SettingsApi.md#restorebackup) | **POST** api/backups/{name}/restore |  |
 | *SettingsApi* | [**updateSettings**](docs/SettingsApi.md#updatesettings) | **PUT** api/settings |  |
@@ -79,6 +95,7 @@ All URIs are relative to *http://localhost*
 | *SubscriptionsApi* | [**listPlatforms**](docs/SubscriptionsApi.md#listplatforms) | **GET** api/platforms |  |
 | *SubscriptionsApi* | [**listSubscriptions**](docs/SubscriptionsApi.md#listsubscriptions) | **GET** api/subscriptions |  |
 | *SubscriptionsApi* | [**searchCreators**](docs/SubscriptionsApi.md#searchcreators) | **GET** api/creators/search |  |
+| *SubscriptionsApi* | [**subscriptionAvatar**](docs/SubscriptionsApi.md#subscriptionavatar) | **GET** avatar/{slug} |  |
 | *SubscriptionsApi* | [**updateSubscription**](docs/SubscriptionsApi.md#updatesubscription) | **PATCH** api/subscriptions/{slug} |  |
 | *TranslationApi* | [**exportTranslations**](docs/TranslationApi.md#exporttranslations) | **GET** api/translations/export |  |
 | *TranslationApi* | [**importTranslations**](docs/TranslationApi.md#importtranslations) | **POST** api/translations/import |  |
@@ -88,17 +105,29 @@ All URIs are relative to *http://localhost*
 <a id="documentation-for-models"></a>
 ## Documentation for Models
 
+ - [app.hwatch.client.models.ClaimComputeJobRequest](docs/ClaimComputeJobRequest.md)
+ - [app.hwatch.client.models.CommitTranscodeJobRequest](docs/CommitTranscodeJobRequest.md)
+ - [app.hwatch.client.models.CompleteComputeJobRequest](docs/CompleteComputeJobRequest.md)
+ - [app.hwatch.client.models.CreateComputeJob](docs/CreateComputeJob.md)
+ - [app.hwatch.client.models.CreateComputeNode](docs/CreateComputeNode.md)
  - [app.hwatch.client.models.CreateSubscriptionRequest](docs/CreateSubscriptionRequest.md)
  - [app.hwatch.client.models.Credentials](docs/Credentials.md)
  - [app.hwatch.client.models.Error](docs/Error.md)
  - [app.hwatch.client.models.Health](docs/Health.md)
  - [app.hwatch.client.models.HealthWarning](docs/HealthWarning.md)
+ - [app.hwatch.client.models.NodeCapabilities](docs/NodeCapabilities.md)
+ - [app.hwatch.client.models.NodeFailure](docs/NodeFailure.md)
+ - [app.hwatch.client.models.NodeHeartbeat](docs/NodeHeartbeat.md)
+ - [app.hwatch.client.models.NodeProgress](docs/NodeProgress.md)
  - [app.hwatch.client.models.Notification](docs/Notification.md)
  - [app.hwatch.client.models.NotificationPage](docs/NotificationPage.md)
  - [app.hwatch.client.models.RecoveryStatus](docs/RecoveryStatus.md)
  - [app.hwatch.client.models.RecoveryStatusSummary](docs/RecoveryStatusSummary.md)
+ - [app.hwatch.client.models.RefreshNFORequest](docs/RefreshNFORequest.md)
  - [app.hwatch.client.models.RestoreBackupRequest](docs/RestoreBackupRequest.md)
+ - [app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest](docs/ReviewDuplicateCandidatesBatchRequest.md)
  - [app.hwatch.client.models.ToggleDownloadsRequest](docs/ToggleDownloadsRequest.md)
+ - [app.hwatch.client.models.UpdateSubscriptionRequest](docs/UpdateSubscriptionRequest.md)
  - [app.hwatch.client.models.Video](docs/Video.md)
  - [app.hwatch.client.models.VideoPage](docs/VideoPage.md)
 
@@ -114,4 +143,9 @@ Authentication schemes defined for the API:
 - **Type**: API key
 - **API key parameter name**: hwatch_session
 - **Location**: 
+
+<a id="nodeBearer"></a>
+### nodeBearer
+
+- **Type**: HTTP Bearer Token authentication (opaque-node-token)
 

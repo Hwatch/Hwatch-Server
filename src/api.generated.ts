@@ -180,6 +180,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/duplicates/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewDuplicateCandidatesBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exclusions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 使用尚未保存的规则草稿预览命中项，不改变视频状态。 */
+        post: operations["previewExclusions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/videos": {
         parameters: {
             query?: never;
@@ -220,6 +269,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["taskHistory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -286,6 +351,22 @@ export interface paths {
         get: operations["listSubscriptions"];
         put?: never;
         post: operations["createSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatar/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["subscriptionAvatar"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -517,6 +598,167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listComputeNodes"];
+        put?: never;
+        post: operations["createComputeNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/nodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeComputeNode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compute/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listComputeJobs"];
+        put?: never;
+        post: operations["createComputeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compute/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelComputeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compute/jobs/{id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 验证并原子提交转码临时产物；必须显式确认，默认保留原文件备份。 */
+        post: operations["commitTranscodeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/node/v1/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["nodeHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/node/v1/jobs/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["claimComputeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/node/v1/jobs/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["updateComputeJobProgress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/node/v1/jobs/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeComputeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/node/v1/jobs/{id}/fail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["failComputeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}": {
         parameters: {
             query?: never;
@@ -561,6 +803,42 @@ export interface components {
             username: string;
             password: string;
         };
+        NodeCapabilities: {
+            dedupe: boolean;
+            transcode: boolean;
+            video_toolbox?: boolean;
+            encoders?: string[];
+            max_dedupe_jobs?: number;
+            max_transcode_jobs?: number;
+        };
+        CreateComputeNode: {
+            name: string;
+            permissions: components["schemas"]["NodeCapabilities"];
+        };
+        CreateComputeJob: {
+            video_id: string;
+            /** @enum {string} */
+            type: "dedupe" | "transcode";
+            algorithm_version?: string;
+            options?: {
+                [key: string]: unknown;
+            };
+        };
+        NodeHeartbeat: {
+            capabilities: components["schemas"]["NodeCapabilities"];
+            version: string;
+            platform: string;
+        };
+        NodeProgress: {
+            /** @enum {string} */
+            status: "assigned" | "analyzing" | "matching" | "transcoding";
+            progress: number;
+        };
+        NodeFailure: {
+            code: string;
+            message: string;
+            retry: boolean;
+        };
         RecoveryStatus: {
             available: boolean;
             summary?: {
@@ -584,9 +862,22 @@ export interface components {
             video_id: string;
             subscription_slug: string;
             title: string;
+            description?: string;
             translated_title?: string;
+            /** Format: int64 */
+            views?: number;
+            /** Format: int64 */
+            likes?: number;
+            /**
+             * Format: double
+             * @description 点赞百分比，例如 99 表示 99%
+             */
+            like_rate?: number;
+            tags?: {
+                [key: string]: unknown;
+            }[];
             /** @enum {string} */
-            status: "discovered" | "queued" | "waiting" | "active" | "paused" | "failed" | "excluded" | "completed";
+            status: "discovered" | "queued" | "submitting" | "waiting" | "active" | "paused" | "failed" | "excluded" | "completed";
             /** @description 未分配时为空字符串，已分配时为 aria2 或 wget */
             downloader_id?: string;
             external_task_id?: string;
@@ -692,6 +983,7 @@ export interface components {
         VideoID: string;
         Slug: string;
         Limit: number;
+        TaskLimit: number;
         Offset: number;
         Language: string;
     };
@@ -879,6 +1171,58 @@ export interface operations {
             400: components["responses"]["Error"];
         };
     };
+    reviewDuplicateCandidatesBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: number[];
+                    /** @enum {string} */
+                    action: "confirm" | "dismiss";
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            400: components["responses"]["Error"];
+        };
+    };
+    previewExclusions: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSONObject"];
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    listAuditLogs: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
     listVideos: {
         parameters: {
             query?: {
@@ -922,7 +1266,7 @@ export interface operations {
     listTasks: {
         parameters: {
             query?: {
-                limit?: components["parameters"]["Limit"];
+                limit?: components["parameters"]["TaskLimit"];
                 offset?: components["parameters"]["Offset"];
                 status?: string;
                 language?: components["parameters"]["Language"];
@@ -934,6 +1278,20 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["VideoPage"];
+        };
+    };
+    taskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["VideoID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
         };
     };
     downloadAll: {
@@ -1014,9 +1372,17 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: uri */
+                    /**
+                     * Format: uri
+                     * @description 已注册适配器支持的订阅链接
+                     */
                     url: string;
-                    type?: string;
+                    /**
+                     * @description 可省略，由链接自动识别
+                     * @enum {string}
+                     */
+                    type?: "creator" | "playlist";
+                    /** @default false */
                     download_existing?: boolean;
                 };
             };
@@ -1024,6 +1390,33 @@ export interface operations {
         responses: {
             201: components["responses"]["JSON"];
             400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    subscriptionAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本地缓存的订阅头像或 SVG 占位图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/svg+xml": unknown;
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     deleteSubscription: {
@@ -1053,7 +1446,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
         responses: {
             200: components["responses"]["JSON"];
         };
@@ -1215,6 +1614,8 @@ export interface operations {
         parameters: {
             query?: {
                 language?: components["parameters"]["Language"];
+                platform?: string;
+                subscription?: string;
             };
             header?: never;
             path?: never;
@@ -1248,9 +1649,17 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default zh-CN */
+                    language?: string;
+                };
+            };
+        };
         responses: {
             202: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
         };
     };
     importHTML: {
@@ -1285,6 +1694,236 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
+        };
+    };
+    listComputeNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    createComputeNode: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateComputeNode"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+        };
+    };
+    revokeComputeNode: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    listComputeJobs: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["TaskLimit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    createComputeJob: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateComputeJob"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            201: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    cancelComputeJob: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    commitTranscodeJob: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    confirm: boolean;
+                    /** @default true */
+                    keep_original?: boolean;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    nodeHeartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeHeartbeat"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            401: components["responses"]["Error"];
+        };
+    };
+    claimComputeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    types: ("dedupe" | "transcode")[];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            /** @description 当前没有可领取任务 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    updateComputeJobProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeProgress"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+        };
+    };
+    completeComputeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    result: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    failComputeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeFailure"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
         };
     };
     streamMedia: {

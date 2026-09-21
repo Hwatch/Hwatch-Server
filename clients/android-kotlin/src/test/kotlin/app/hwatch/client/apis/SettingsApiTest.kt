@@ -20,6 +20,9 @@ import io.kotlintest.specs.ShouldSpec
 
 import app.hwatch.client.apis.SettingsApi
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.Health
+import app.hwatch.client.models.NotificationPage
+import app.hwatch.client.models.RecoveryStatus
 import app.hwatch.client.models.RestoreBackupRequest
 
 class SettingsApiTest : ShouldSpec() {
@@ -45,7 +48,7 @@ class SettingsApiTest : ShouldSpec() {
         // to test health
         should("test health") {
             // uncomment below to test health
-            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.health()
+            //val result : Health = apiInstance.health()
             //result shouldBe ("TODO")
         }
 
@@ -53,6 +56,29 @@ class SettingsApiTest : ShouldSpec() {
         should("test listBackups") {
             // uncomment below to test listBackups
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listBackups()
+            //result shouldBe ("TODO")
+        }
+
+        // to test listNotifications
+        should("test listNotifications") {
+            // uncomment below to test listNotifications
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val result : NotificationPage = apiInstance.listNotifications(limit)
+            //result shouldBe ("TODO")
+        }
+
+        // to test markNotificationsRead
+        should("test markNotificationsRead") {
+            // uncomment below to test markNotificationsRead
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.markNotificationsRead(xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test recoverySummary
+        should("test recoverySummary") {
+            // uncomment below to test recoverySummary
+            //val result : RecoveryStatus = apiInstance.recoverySummary()
             //result shouldBe ("TODO")
         }
 

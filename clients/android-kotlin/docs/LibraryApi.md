@@ -9,6 +9,7 @@ All URIs are relative to *http://localhost*
 | [**listDuplicateCandidates**](LibraryApi.md#listDuplicateCandidates) | **GET** api/duplicates |  |
 | [**listVideos**](LibraryApi.md#listVideos) | **GET** api/videos |  |
 | [**reviewDuplicateCandidate**](LibraryApi.md#reviewDuplicateCandidate) | **POST** api/duplicates/{id}/{action} |  |
+| [**reviewDuplicateCandidatesBatch**](LibraryApi.md#reviewDuplicateCandidatesBatch) | **POST** api/duplicates/batch |  |
 | [**streamMedia**](LibraryApi.md#streamMedia) | **GET** media/{id} |  |
 | [**videoFacets**](LibraryApi.md#videoFacets) | **GET** api/videos/facets |  |
 | [**videoThumbnail**](LibraryApi.md#videoThumbnail) | **GET** thumb/{id} |  |
@@ -216,6 +217,43 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.revi
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val reviewDuplicateCandidatesBatchRequest : ReviewDuplicateCandidatesBatchRequest =  // ReviewDuplicateCandidatesBatchRequest | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.reviewDuplicateCandidatesBatch(xCSRFToken, reviewDuplicateCandidatesBatchRequest)
+```
+
+### Parameters
+| **xCSRFToken** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **reviewDuplicateCandidatesBatchRequest** | [**ReviewDuplicateCandidatesBatchRequest**](ReviewDuplicateCandidatesBatchRequest.md)|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 

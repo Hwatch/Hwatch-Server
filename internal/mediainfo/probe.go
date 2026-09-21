@@ -14,6 +14,7 @@ type Info struct {
 	Width, Height, BitDepth           int
 	FrameRate                         float64
 	BitRate                           int64
+	DurationSeconds                   float64
 }
 
 type probeResult struct {
@@ -30,11 +31,12 @@ type probeResult struct {
 	Format struct {
 		FormatName string `json:"format_name"`
 		BitRate    string `json:"bit_rate"`
+		Duration   string `json:"duration"`
 	} `json:"format"`
 }
 
 func Probe(ctx context.Context, path string) (Info, error) {
-	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,avg_frame_rate,bit_rate,bits_per_raw_sample,pix_fmt:format=format_name,bit_rate", "-of", "json", path).Output()
+	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,avg_frame_rate,bit_rate,bits_per_raw_sample,pix_fmt:format=format_name,bit_rate,duration", "-of", "json", path).Output()
 	if err != nil {
 		return Info{}, fmt.Errorf("ffprobe: %w", err)
 	}
@@ -46,7 +48,7 @@ func Parse(raw []byte) (Info, error) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return Info{}, err
 	}
-	info := Info{Container: first(result.Format.FormatName), BitRate: integer(result.Format.BitRate)}
+	info := Info{Container: first(result.Format.FormatName), BitRate: integer(result.Format.BitRate), DurationSeconds: decimal(result.Format.Duration)}
 	for _, stream := range result.Streams {
 		switch stream.CodecType {
 		case "video":
@@ -101,7 +103,8 @@ func first(value string) string {
 	}
 	return strings.ToUpper(value)
 }
-func integer(value string) int64 { n, _ := strconv.ParseInt(value, 10, 64); return n }
+func integer(value string) int64   { n, _ := strconv.ParseInt(value, 10, 64); return n }
+func decimal(value string) float64 { n, _ := strconv.ParseFloat(value, 64); return n }
 func fraction(value string) float64 {
 	parts := strings.Split(value, "/")
 	if len(parts) != 2 {

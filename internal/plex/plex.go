@@ -58,7 +58,12 @@ func GenerateNFO(layout Layout, sub store.Subscription, v store.Video) error {
 		return err
 	}
 	base := strings.TrimSuffix(layout.FullPath, filepath.Ext(layout.FullPath))
-	episode := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<episodedetails><title>" + xml(v.Title) + "</title><showtitle>" + xml(sub.Name) + "</showtitle><season>" + fmt.Sprint(v.PlexSeason) + "</season><episode>" + fmt.Sprint(v.PlexEpisode) + "</episode><aired>" + xml(v.PublishedAt) + "</aired><runtime>" + fmt.Sprint(v.DurationSeconds/60) + "</runtime><plot>" + xml("Source: "+v.PageURL) + "</plot></episodedetails>\n"
+	plot := strings.TrimSpace(v.Description)
+	if plot != "" {
+		plot += "\n\n"
+	}
+	plot += "Source: " + v.PageURL
+	episode := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<episodedetails><title>" + xml(v.Title) + "</title><showtitle>" + xml(sub.Name) + "</showtitle><season>" + fmt.Sprint(v.PlexSeason) + "</season><episode>" + fmt.Sprint(v.PlexEpisode) + "</episode><aired>" + xml(v.PublishedAt) + "</aired><runtime>" + fmt.Sprint(v.DurationSeconds/60) + "</runtime><plot>" + xml(plot) + "</plot></episodedetails>\n"
 	if err := os.WriteFile(base+".nfo", []byte(episode), 0644); err != nil {
 		return err
 	}

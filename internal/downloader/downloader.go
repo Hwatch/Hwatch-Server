@@ -8,8 +8,8 @@ import (
 var ErrCapacityReached = errors.New("downloader capacity reached")
 
 type Request struct {
-	URL, Directory, FileName, Referer, UserAgent, Proxy string
-	Connections                                         int
+	URL, Directory, FileName, Referer, UserAgent, Proxy, ExternalID string
+	Connections                                                     int
 }
 
 type Status struct {
@@ -42,4 +42,10 @@ type Engine interface {
 
 type CapacityWaiter interface {
 	WaitForCapacity(context.Context) error
+}
+
+// ResultCleaner removes downloader-side history after HWatch has durably
+// recorded a terminal state. Active transfer data is never removed.
+type ResultCleaner interface {
+	CleanResult(context.Context, string) error
 }

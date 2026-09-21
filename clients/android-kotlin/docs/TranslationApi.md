@@ -22,14 +22,18 @@ All URIs are relative to *http://localhost*
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(TranslationApi::class.java)
 val language : kotlin.String = language_example // kotlin.String | 
+val platform : kotlin.String = platform_example // kotlin.String | 
+val subscription : kotlin.String = subscription_example // kotlin.String | 
 
-val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.exportTranslations(language)
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.exportTranslations(language, platform, subscription)
 ```
 
 ### Parameters
+| **language** | **kotlin.String**|  | [optional] [default to &quot;zh-CN&quot;] |
+| **platform** | **kotlin.String**|  | [optional] |
 | Name | Type | Description  | Notes |
 | ------------- | ------------- | ------------- | ------------- |
-| **language** | **kotlin.String**|  | [optional] [default to &quot;zh-CN&quot;] |
+| **subscription** | **kotlin.String**|  | [optional] |
 
 ### Return type
 
@@ -94,14 +98,16 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.impo
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(TranslationApi::class.java)
 val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val refreshNFORequest : RefreshNFORequest =  // RefreshNFORequest | 
 
-val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.refreshNFO(xCSRFToken)
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.refreshNFO(xCSRFToken, refreshNFORequest)
 ```
 
 ### Parameters
+| **xCSRFToken** | **kotlin.String**|  | |
 | Name | Type | Description  | Notes |
 | ------------- | ------------- | ------------- | ------------- |
-| **xCSRFToken** | **kotlin.String**|  | |
+| **refreshNFORequest** | [**RefreshNFORequest**](RefreshNFORequest.md)|  | [optional] |
 
 ### Return type
 
@@ -113,6 +119,6 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.refr
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 

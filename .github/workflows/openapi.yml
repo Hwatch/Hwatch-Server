@@ -13,6 +13,11 @@ jobs:
         with: {go-version: '1.24.x'}
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '21'}
+      - run: npm ci
+      - run: go test ./...
+      - run: go vet ./...
+      - run: npm run build
+      - run: go build ./cmd/r34watch
       - run: npx --yes @redocly/cli@1.34.5 lint openapi.yaml
       - run: npx --yes openapi-typescript@7.10.1 openapi.yaml -o /tmp/api.generated.ts
       - run: diff -u src/api.generated.ts /tmp/api.generated.ts
@@ -25,6 +30,8 @@ jobs:
           diff -u clients/android-kotlin/settings.gradle /tmp/android-kotlin/settings.gradle
           chmod +x /tmp/android-kotlin/gradlew
           cd /tmp/android-kotlin && ./gradlew test
+      - name: Check whitespace errors
+        run: git diff --check
       - name: Detect breaking API changes
         if: github.event_name == 'pull_request'
         run: |

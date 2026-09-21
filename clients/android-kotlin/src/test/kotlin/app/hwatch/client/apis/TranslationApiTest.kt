@@ -19,6 +19,8 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 
 import app.hwatch.client.apis.TranslationApi
+import app.hwatch.client.models.Error
+import app.hwatch.client.models.RefreshNFORequest
 
 class TranslationApiTest : ShouldSpec() {
     init {
@@ -29,7 +31,9 @@ class TranslationApiTest : ShouldSpec() {
         should("test exportTranslations") {
             // uncomment below to test exportTranslations
             //val language : kotlin.String = language_example // kotlin.String | 
-            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.exportTranslations(language)
+            //val platform : kotlin.String = platform_example // kotlin.String | 
+            //val subscription : kotlin.String = subscription_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.exportTranslations(language, platform, subscription)
             //result shouldBe ("TODO")
         }
 
@@ -46,7 +50,8 @@ class TranslationApiTest : ShouldSpec() {
         should("test refreshNFO") {
             // uncomment below to test refreshNFO
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
-            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.refreshNFO(xCSRFToken)
+            //val refreshNFORequest : RefreshNFORequest =  // RefreshNFORequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.refreshNFO(xCSRFToken, refreshNFORequest)
             //result shouldBe ("TODO")
         }
 

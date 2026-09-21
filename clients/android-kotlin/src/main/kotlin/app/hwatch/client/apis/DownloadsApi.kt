@@ -44,14 +44,27 @@ interface DownloadsApi {
      * Responses:
      *  - 200: 视频分页
      *
-     * @param limit  (optional, default to 48)
+     * @param limit  (optional, default to 200)
      * @param offset  (optional, default to 0)
      * @param status  (optional)
      * @param language  (optional, default to "zh-CN")
      * @return [Call]<[VideoPage]>
      */
     @GET("api/tasks")
-    fun listTasks(@Query("limit") limit: kotlin.Int? = 48, @Query("offset") offset: kotlin.Int? = 0, @Query("status") status: kotlin.String? = null, @Query("language") language: kotlin.String? = "zh-CN"): Call<VideoPage>
+    fun listTasks(@Query("limit") limit: kotlin.Int? = 200, @Query("offset") offset: kotlin.Int? = 0, @Query("status") status: kotlin.String? = null, @Query("language") language: kotlin.String? = "zh-CN"): Call<VideoPage>
+
+    /**
+     * GET api/tasks/{id}/history
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param id 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/tasks/{id}/history")
+    fun taskHistory(@Path("id") id: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * POST api/downloads/toggle

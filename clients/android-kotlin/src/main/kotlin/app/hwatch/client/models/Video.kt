@@ -25,7 +25,12 @@ import com.google.gson.annotations.SerializedName
  * @param subscriptionSlug 
  * @param title 
  * @param status 
+ * @param description 
  * @param translatedTitle 
+ * @param views 
+ * @param likes 
+ * @param likeRate 点赞百分比，例如 99 表示 99%
+ * @param tags 
  * @param downloaderId 未分配时为空字符串，已分配时为 aria2 或 wget
  * @param externalTaskId 
  * @param bytesDownloaded 
@@ -52,8 +57,24 @@ data class Video (
     @SerializedName("status")
     val status: Video.Status,
 
+    @SerializedName("description")
+    val description: kotlin.String? = null,
+
     @SerializedName("translated_title")
     val translatedTitle: kotlin.String? = null,
+
+    @SerializedName("views")
+    val views: kotlin.Long? = null,
+
+    @SerializedName("likes")
+    val likes: kotlin.Long? = null,
+
+    /* 点赞百分比，例如 99 表示 99% */
+    @SerializedName("like_rate")
+    val likeRate: kotlin.Double? = null,
+
+    @SerializedName("tags")
+    val tags: kotlin.collections.List<kotlin.collections.Map<kotlin.String, kotlin.Any>>? = null,
 
     /* 未分配时为空字符串，已分配时为 aria2 或 wget */
     @SerializedName("downloader_id")
@@ -89,11 +110,12 @@ data class Video (
     /**
      * 
      *
-     * Values: discovered,queued,waiting,active,paused,failed,excluded,completed
+     * Values: discovered,queued,submitting,waiting,active,paused,failed,excluded,completed
      */
     enum class Status(val value: kotlin.String) {
         @SerializedName(value = "discovered") discovered("discovered"),
         @SerializedName(value = "queued") queued("queued"),
+        @SerializedName(value = "submitting") submitting("submitting"),
         @SerializedName(value = "waiting") waiting("waiting"),
         @SerializedName(value = "active") active("active"),
         @SerializedName(value = "paused") paused("paused"),
