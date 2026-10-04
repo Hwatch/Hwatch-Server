@@ -380,6 +380,10 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
   "download_limit_kbps":0,
   "min_free_bytes":5368709120,
   "require_creator_match":true,
+  "auto_transcode":false,
+  "enable_media_duplicate":false,
+  "media_duplicate_max_candidates":20,
+  "media_duplicate_duration_percent":1,
   "exclude_title_keywords":"compilation,collection,合集,集锦",
   "exclude_uploaders":"",
   "exclude_categories":"",
@@ -400,6 +404,10 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 `downloader_mode` 可为 `aria2`、`wget` 或 `auto`。切换仅影响尚未启动的 `queued` 任务和新任务；已经分配的任务继续使用其持久化 `downloader_id`。wget 使用单连接及 `-c` 断点续传，服务重启后会重新解析临时下载地址并从现有文件继续。
 
 自动排除规则在任务提交下载器前执行。多个文本规则使用逗号、中文逗号、分号或换行分隔；标题规则使用不区分大小写的包含匹配，上传者、分类和标签使用对应字段匹配。`require_creator_match=true` 会排除实际创作者与订阅作者不一致的视频，`max_duration_seconds=0` 表示不限制时长。已下载文件不会因新增规则而自动删除。
+
+`auto_transcode=true` 时，新下载完成的视频会自动建立幂等的 H.265 转码任务，由已授权节点转码；成功后服务端用 `ffprobe` 校验并自动原子替换源文件，无需管理员确认，成功后删除暂存的原文件副本。
+
+`enable_media_duplicate=true` 时，服务端会为已有内容哈希的完成媒体异步建立内容重复比较任务：先按 `abs(durationDelta) <= max(2s, duration * media_duplicate_duration_percent%)` 和排除 `SHA-256` 完全相同、媒体文件缺失、已确认/已忽略的项筛选候选，最多下发 `media_duplicate_max_candidates` 个。候选只在具备 `media_duplicate` 权限与能力的在线节点存在时排队。算法结果只生成重复候选，绝不自动删除媒体。
 
 警告：当前接口会向已认证管理员返回 `aria_secret` 和可能含凭据的 `http_proxy`。客户端不得写入日志、崩溃报告或分析平台。
 
@@ -525,7 +533,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `DELETE /api/nodes/{id}`：撤销节点并回收其未完成租约。
 - `GET/POST /api/compute/jobs`：列出任务或为已下载媒体建立 `dedupe`/`transcode` 任务。
 - `POST /api/compute/jobs/{id}/cancel`：取消未完成任务。
-- `POST /api/compute/jobs/{id}/commit`：显式验证并原子提交处于 `verifying` 的转码产物，默认保留原文件备份。
+- `POST /api/compute/jobs/{id}/commit`：兼容接口，用于提交仍处于 `verifying` 的旧转码任务。节点回传的转码产物现在会在验证通过后自动提交，默认删除暂存的原文件副本。
 
 节点接口位于 `/api/node/v1/*`，使用创建节点时取得的 `Authorization: Bearer <token>`，不使用管理员 Cookie 或 CSRF：
 
@@ -535,4 +543,38 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `POST /jobs/{id}/complete`：回传去重结果或转码临时产物。
 - `POST /jobs/{id}/fail`：失败或安全重新排队。
 
-服务端只向节点返回 NFS 媒体相对路径。租约过期、节点撤销或节点失联后的任务可以重新领取；旧节点随后回传会收到 `409`。去重结果只能生成候选，节点无权删除媒体。转码完成回传只进入 `verifying`，必须由管理员接口提交后才会替换原路径。
+服务端只向节点返回 NFS 媒体相对路径。租约过期、节点撤销或节点失联后的任务可以重新领取；旧节点随后回传会收到 `409`。去重结果只能生成候选，节点无权删除媒体。转码完成回传后，服务端会立即用 `ffprobe` 校验并原子替换源路径；校验失败的任务进入 `failed`，成功则删除暂存原文件副本，管理员无需确认。
+
+`dedupe` 任务现在使用结构化的 `media_duplicate` options，候选由服务端筛选后随任务下发，节点不得自行扫描媒体库：
+
+```json
+{
+  "job_type": "dedupe",
+  "subtype": "media_duplicate",
+  "algorithm_version": "media-fingerprint-v1",
+  "media_relative_path": "Platform/Creator/A.mp4",
+  "input_json": "{\"mode\":\"media_duplicate\",\"candidates\":[{\"video_id\":\"...\",\"media_relative_path\":\"Platform/Creator/B.mkv\"}]}"
+}
+```
+
+节点在 `POST /jobs/{id}/complete` 回传 `MediaDuplicateResult`：
+
+```json
+{
+  "result": {
+    "matches": [
+      {
+        "video_id": "候选 video_id",
+        "classification": "whole-video",
+        "backend": "media-fingerprint-v1",
+        "algorithm_version": "media-fingerprint-v1",
+        "confidence": 0.97,
+        "duration_delta": 0,
+        "metrics": {"sample_count": 32, "matched_samples": 32, "median_hamming_distance": 0, "duration_ratio": 0.999}
+      }
+    ]
+  }
+}
+```
+
+`classification` 仅接受 `whole-video`、`trimmed-video`、`possible-match`、`different`；前三者生成待审核的重复候选，`different` 不生成。服务端只接受任务下发的候选 ID，并按 `min/max(video_id)` 规范化配对，避免 A-B / B-A 重复。`confidence` 仅作展示，不用于自动删除。节点缺少 `media_duplicate` 权限或能力时不会被派发该子类型任务。

@@ -44,10 +44,13 @@ type Settings struct {
 	BackupDir, BackupTime, BackupLastSuccess, BackupLastError                                         string
 	ExcludeTitleKeywords, ExcludeUploaders, ExcludeCategories, ExcludeTags                            string
 	MaxConcurrent, ConnectionsPerDownload                                                             int
+	MediaDuplicateMaxCandidates, MediaDuplicateDurationPercent                                        int
 	BackupRetention                                                                                   int
 	MinFreeBytes, DownloadLimitKBPS                                                                   int64
 	MaxDurationSeconds                                                                                int64
 	RequireCreatorMatch, DownloadPaused, StorageMountRequired, BackupMountRequired                    bool
+	AutoTranscode                                                                                     bool
+	EnableMediaDuplicate                                                                              bool
 }
 type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
@@ -114,7 +117,7 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS media_fingerprints (video_id TEXT PRIMARY KEY,page_url_normalized TEXT NOT NULL DEFAULT '',cover_hash TEXT NOT NULL DEFAULT '',duration_seconds INTEGER NOT NULL DEFAULT 0,file_size INTEGER NOT NULL DEFAULT 0,quick_hash TEXT NOT NULL DEFAULT '',sha256 TEXT NOT NULL DEFAULT '',hash_status TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_fingerprints_url ON media_fingerprints(page_url_normalized);" +
 	"CREATE INDEX IF NOT EXISTS idx_fingerprints_sha ON media_fingerprints(sha256);" +
-	"CREATE TABLE IF NOT EXISTS duplicate_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,match_video_id TEXT NOT NULL,match_type TEXT NOT NULL,confidence REAL NOT NULL DEFAULT 1,duration_delta INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(video_id,match_video_id,match_type),FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE,FOREIGN KEY(match_video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE TABLE IF NOT EXISTS duplicate_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,match_video_id TEXT NOT NULL,match_type TEXT NOT NULL,classification TEXT NOT NULL DEFAULT '',backend TEXT NOT NULL DEFAULT '',algorithm_version TEXT NOT NULL DEFAULT '',metrics_json TEXT NOT NULL DEFAULT '{}',confidence REAL NOT NULL DEFAULT 1,duration_delta INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(video_id,match_video_id,match_type),FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE,FOREIGN KEY(match_video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_duplicate_status ON duplicate_candidates(status,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,actor TEXT NOT NULL DEFAULT '',action TEXT NOT NULL,target_type TEXT NOT NULL DEFAULT '',target_id TEXT NOT NULL DEFAULT '',result TEXT NOT NULL,details_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL);" +
 	"CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);" +
@@ -122,8 +125,9 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_task_events_video ON task_events(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS compute_nodes (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,permissions_json TEXT NOT NULL DEFAULT '{}',capabilities_json TEXT NOT NULL DEFAULT '{}',version TEXT NOT NULL DEFAULT '',platform TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'offline',last_seen_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,revoked_at TEXT NOT NULL DEFAULT '');" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_nodes_seen ON compute_nodes(last_seen_at DESC);" +
-	"CREATE TABLE IF NOT EXISTS compute_jobs (id TEXT PRIMARY KEY,job_type TEXT NOT NULL,video_id TEXT NOT NULL,status TEXT NOT NULL,node_id TEXT NOT NULL DEFAULT '',idempotency_key TEXT NOT NULL UNIQUE,algorithm_version TEXT NOT NULL,media_relative_path TEXT NOT NULL,input_json TEXT NOT NULL DEFAULT '{}',result_json TEXT NOT NULL DEFAULT '{}',progress REAL NOT NULL DEFAULT 0,error_code TEXT NOT NULL DEFAULT '',error_message TEXT NOT NULL DEFAULT '',lease_until TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT NOT NULL DEFAULT '',FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE TABLE IF NOT EXISTS compute_jobs (id TEXT PRIMARY KEY,job_type TEXT NOT NULL,subtype TEXT NOT NULL DEFAULT '',video_id TEXT NOT NULL,status TEXT NOT NULL,node_id TEXT NOT NULL DEFAULT '',idempotency_key TEXT NOT NULL UNIQUE,algorithm_version TEXT NOT NULL,media_relative_path TEXT NOT NULL,input_json TEXT NOT NULL DEFAULT '{}',result_json TEXT NOT NULL DEFAULT '{}',progress REAL NOT NULL DEFAULT 0,error_code TEXT NOT NULL DEFAULT '',error_message TEXT NOT NULL DEFAULT '',lease_until TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT NOT NULL DEFAULT '',FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_queue ON compute_jobs(status,job_type,created_at);" +
+	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_subtype ON compute_jobs(subtype,status,job_type);" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_video ON compute_jobs(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
@@ -172,6 +176,11 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE videos ADD COLUMN description TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE videos ADD COLUMN likes INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE videos ADD COLUMN like_rate REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE compute_jobs ADD COLUMN subtype TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN classification TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN backend TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN algorithm_version TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN metrics_json TEXT NOT NULL DEFAULT '{}'",
 	} {
 		_, _ = db.Exec(statement)
 	}
@@ -179,7 +188,7 @@ func Open(path string) (*Store, error) {
 	_, _ = db.Exec("UPDATE videos SET downloader_id='aria2',external_task_id=aria_gid WHERE aria_gid<>'' AND downloader_id=''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": ""}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": "", "auto_transcode": "false", "enable_media_duplicate": "false", "media_duplicate_max_candidates": "20", "media_duplicate_duration_percent": "1"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -310,6 +319,10 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.DownloadPaused = strings.EqualFold(values["download_paused"], "true")
 	cfg.StorageMountRequired = strings.EqualFold(values["storage_mount_required"], "true")
 	cfg.BackupMountRequired = strings.EqualFold(values["backup_mount_required"], "true")
+	cfg.AutoTranscode = strings.EqualFold(values["auto_transcode"], "true")
+	cfg.EnableMediaDuplicate = strings.EqualFold(values["enable_media_duplicate"], "true")
+	_, _ = fmt.Sscan(values["media_duplicate_max_candidates"], &cfg.MediaDuplicateMaxCandidates)
+	_, _ = fmt.Sscan(values["media_duplicate_duration_percent"], &cfg.MediaDuplicateDurationPercent)
 	_, _ = fmt.Sscan(values["max_concurrent"], &cfg.MaxConcurrent)
 	_, _ = fmt.Sscan(values["connections_per_download"], &cfg.ConnectionsPerDownload)
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
@@ -328,7 +341,7 @@ func (s *Store) SaveSettings(cfg Settings) error {
 		return err
 	}
 	defer tx.Rollback()
-	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention, "storage_mount_required": cfg.StorageMountRequired, "backup_mount_required": cfg.BackupMountRequired}
+	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention, "storage_mount_required": cfg.StorageMountRequired, "backup_mount_required": cfg.BackupMountRequired, "auto_transcode": cfg.AutoTranscode, "enable_media_duplicate": cfg.EnableMediaDuplicate, "media_duplicate_max_candidates": cfg.MediaDuplicateMaxCandidates, "media_duplicate_duration_percent": cfg.MediaDuplicateDurationPercent}
 	values["downloader_mode"] = cfg.DownloaderMode
 	for k, v := range values {
 		if _, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, fmt.Sprint(v)); err != nil {

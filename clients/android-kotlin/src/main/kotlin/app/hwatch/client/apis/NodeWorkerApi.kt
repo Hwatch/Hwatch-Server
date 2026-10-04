@@ -32,7 +32,7 @@ interface NodeWorkerApi {
     /**
      * POST api/node/v1/jobs/{id}/complete
      * 
-     * 
+     * 回传算法结果。&#x60;dedupe&#x60; 任务返回 &#x60;MediaDuplicateResult&#x60;（候选分类仅 whole-video/trimmed-video/possible-match 会生成重复候选）；&#x60;transcode&#x60; 任务返回 &#x60;temp_relative_path&#x60;。服务端将转码产物在验证通过后自动原子提交。
      * Responses:
      *  - 200: 成功
      *  - 409: 请求失败

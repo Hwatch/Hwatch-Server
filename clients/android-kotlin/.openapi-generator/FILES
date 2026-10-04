@@ -8,11 +8,15 @@ docs/CreateComputeJob.md
 docs/CreateComputeNode.md
 docs/CreateSubscriptionRequest.md
 docs/Credentials.md
+docs/DedupeCandidate.md
 docs/DownloadsApi.md
 docs/Error.md
 docs/Health.md
 docs/HealthWarning.md
 docs/LibraryApi.md
+docs/MediaDuplicateMatch.md
+docs/MediaDuplicateOptions.md
+docs/MediaDuplicateResult.md
 docs/NodeCapabilities.md
 docs/NodeFailure.md
 docs/NodeHeartbeat.md
@@ -59,9 +63,13 @@ src/main/kotlin/app/hwatch/client/models/CreateComputeJob.kt
 src/main/kotlin/app/hwatch/client/models/CreateComputeNode.kt
 src/main/kotlin/app/hwatch/client/models/CreateSubscriptionRequest.kt
 src/main/kotlin/app/hwatch/client/models/Credentials.kt
+src/main/kotlin/app/hwatch/client/models/DedupeCandidate.kt
 src/main/kotlin/app/hwatch/client/models/Error.kt
 src/main/kotlin/app/hwatch/client/models/Health.kt
 src/main/kotlin/app/hwatch/client/models/HealthWarning.kt
+src/main/kotlin/app/hwatch/client/models/MediaDuplicateMatch.kt
+src/main/kotlin/app/hwatch/client/models/MediaDuplicateOptions.kt
+src/main/kotlin/app/hwatch/client/models/MediaDuplicateResult.kt
 src/main/kotlin/app/hwatch/client/models/NodeCapabilities.kt
 src/main/kotlin/app/hwatch/client/models/NodeFailure.kt
 src/main/kotlin/app/hwatch/client/models/NodeHeartbeat.kt
@@ -77,3 +85,7 @@ src/main/kotlin/app/hwatch/client/models/ToggleDownloadsRequest.kt
 src/main/kotlin/app/hwatch/client/models/UpdateSubscriptionRequest.kt
 src/main/kotlin/app/hwatch/client/models/Video.kt
 src/main/kotlin/app/hwatch/client/models/VideoPage.kt
+src/test/kotlin/app/hwatch/client/models/DedupeCandidateTest.kt
+src/test/kotlin/app/hwatch/client/models/MediaDuplicateMatchTest.kt
+src/test/kotlin/app/hwatch/client/models/MediaDuplicateOptionsTest.kt
+src/test/kotlin/app/hwatch/client/models/MediaDuplicateResultTest.kt

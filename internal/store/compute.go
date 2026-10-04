@@ -24,6 +24,7 @@ type ComputeNode struct {
 type ComputeJob struct {
 	ID                string  `json:"id"`
 	Type              string  `json:"type"`
+	Subtype           string  `json:"subtype"`
 	VideoID           string  `json:"video_id"`
 	Status            string  `json:"status"`
 	NodeID            string  `json:"node_id"`
@@ -45,11 +46,11 @@ type ComputeJob struct {
 var ErrNoComputeJob = errors.New("没有可领取的计算任务")
 var ErrComputeLease = errors.New("任务租约无效或已被其他节点接管")
 
-const computeJobColumns = "id,job_type,video_id,status,node_id,idempotency_key,algorithm_version,media_relative_path,input_json,result_json,progress,error_code,error_message,lease_until,attempts,created_at,updated_at,completed_at"
+const computeJobColumns = "id,job_type,subtype,video_id,status,node_id,idempotency_key,algorithm_version,media_relative_path,input_json,result_json,progress,error_code,error_message,lease_until,attempts,created_at,updated_at,completed_at"
 
 func scanComputeJob(scanner interface{ Scan(...any) error }) (ComputeJob, error) {
 	var j ComputeJob
-	err := scanner.Scan(&j.ID, &j.Type, &j.VideoID, &j.Status, &j.NodeID, &j.IdempotencyKey, &j.AlgorithmVersion, &j.MediaRelativePath, &j.InputJSON, &j.ResultJSON, &j.Progress, &j.ErrorCode, &j.ErrorMessage, &j.LeaseUntil, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &j.CompletedAt)
+	err := scanner.Scan(&j.ID, &j.Type, &j.Subtype, &j.VideoID, &j.Status, &j.NodeID, &j.IdempotencyKey, &j.AlgorithmVersion, &j.MediaRelativePath, &j.InputJSON, &j.ResultJSON, &j.Progress, &j.ErrorCode, &j.ErrorMessage, &j.LeaseUntil, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &j.CompletedAt)
 	return j, err
 }
 
@@ -109,7 +110,7 @@ func (s *Store) RevokeComputeNode(id string) error {
 
 func (s *Store) CreateComputeJob(j ComputeJob) (ComputeJob, bool, error) {
 	now := Now()
-	res, err := s.DB.Exec("INSERT OR IGNORE INTO compute_jobs(id,job_type,video_id,status,idempotency_key,algorithm_version,media_relative_path,input_json,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?,?,?,?)", j.ID, j.Type, j.VideoID, j.IdempotencyKey, j.AlgorithmVersion, j.MediaRelativePath, j.InputJSON, now, now)
+	res, err := s.DB.Exec("INSERT OR IGNORE INTO compute_jobs(id,job_type,subtype,video_id,status,idempotency_key,algorithm_version,media_relative_path,input_json,created_at,updated_at) VALUES(?,?,?,?,'pending',?,?,?,?,?,?)", j.ID, j.Type, j.Subtype, j.VideoID, j.IdempotencyKey, j.AlgorithmVersion, j.MediaRelativePath, j.InputJSON, now, now)
 	if err != nil {
 		return ComputeJob{}, false, err
 	}
@@ -142,7 +143,7 @@ func (s *Store) ComputeJobs(limit, offset int) ([]ComputeJob, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) ClaimComputeJob(nodeID string, types []string, lease time.Duration) (ComputeJob, error) {
+func (s *Store) ClaimComputeJob(nodeID string, types []string, subtypes []string, lease time.Duration) (ComputeJob, error) {
 	if len(types) == 0 {
 		return ComputeJob{}, ErrNoComputeJob
 	}
@@ -156,11 +157,19 @@ func (s *Store) ClaimComputeJob(nodeID string, types []string, lease time.Durati
 		return ComputeJob{}, err
 	}
 	marks := strings.TrimRight(strings.Repeat("?,", len(types)), ",")
-	args := make([]any, 0, len(types))
+	args := make([]any, 0, len(types)+len(subtypes))
 	for _, v := range types {
 		args = append(args, v)
 	}
-	query := "SELECT " + computeJobColumns + " FROM compute_jobs WHERE status='pending' AND job_type IN (" + marks + ") ORDER BY created_at LIMIT 1"
+	subClause := " AND subtype=''"
+	if len(subtypes) > 0 {
+		subMarks := strings.TrimRight(strings.Repeat("?,", len(subtypes)), ",")
+		subClause = " AND (subtype='' OR subtype IN (" + subMarks + "))"
+		for _, v := range subtypes {
+			args = append(args, v)
+		}
+	}
+	query := "SELECT " + computeJobColumns + " FROM compute_jobs WHERE status='pending' AND job_type IN (" + marks + ")" + subClause + " ORDER BY created_at LIMIT 1"
 	j, err := scanComputeJob(tx.QueryRow(query, args...))
 	if err == sql.ErrNoRows {
 		return ComputeJob{}, ErrNoComputeJob

@@ -24,6 +24,8 @@ const computeLease = 2 * time.Minute
 type nodeCapabilities struct {
 	Dedupe           bool     `json:"dedupe"`
 	Transcode        bool     `json:"transcode"`
+	MediaDuplicate   bool     `json:"media_duplicate,omitempty"`
+	VideoSignature   bool     `json:"video_signature,omitempty"`
 	VideoToolbox     bool     `json:"video_toolbox,omitempty"`
 	Encoders         []string `json:"encoders,omitempty"`
 	DedupeWorkers    int      `json:"max_dedupe_jobs,omitempty"`
@@ -178,7 +180,7 @@ func (a *App) createComputeJob(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.AlgorithmVersion == "" {
 		if input.Type == "dedupe" {
-			input.AlgorithmVersion = "phash-sequence-v1"
+			input.AlgorithmVersion = mediaDuplicateAlgorithm
 		} else {
 			input.AlgorithmVersion = "hevc-v1"
 		}
@@ -196,11 +198,24 @@ func (a *App) createComputeJob(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, errors.New("只有已下载媒体可以建立外部计算任务"))
 		return
 	}
+	cfg, _ := a.store.Settings()
+	if input.Type == "dedupe" {
+		job, created, err := a.createMediaDuplicateJob(v, cfg, false)
+		if err != nil {
+			fail(w, 422, err)
+			return
+		}
+		status := http.StatusCreated
+		if !created {
+			status = http.StatusOK
+		}
+		respond(w, status, map[string]any{"job": job, "created": created})
+		return
+	}
 	path := v.PlexPath
 	if path == "" {
 		path = v.FilePath
 	}
-	cfg, _ := a.store.Settings()
 	rel, info, err := secureMediaRelative(cfg.DownloadDir, path)
 	if err != nil {
 		fail(w, 422, err)
@@ -260,6 +275,32 @@ func safeComputeFilename(value string) string {
 	}, value)
 }
 
+// enqueueAutoTranscode creates an idempotent H.265 transcode job for a freshly
+// downloaded video when automatic transcoding is enabled. It is a no-op when the
+// media directory is unavailable or a matching job already exists.
+func (a *App) enqueueAutoTranscode(v store.Video) {
+	if v.Status != "completed" {
+		return
+	}
+	path := v.PlexPath
+	if path == "" {
+		path = v.FilePath
+	}
+	cfg, _ := a.store.Settings()
+	rel, info, err := secureMediaRelative(cfg.DownloadDir, path)
+	if err != nil {
+		return
+	}
+	const version = "hevc-v1"
+	key := computeIdempotency(v.ID, info, "transcode", version)
+	sum := sha256.Sum256([]byte(key))
+	id := "job_" + hex.EncodeToString(sum[:12])
+	_, created, err := a.store.CreateComputeJob(store.ComputeJob{ID: id, Type: "transcode", VideoID: v.ID, IdempotencyKey: key, AlgorithmVersion: version, MediaRelativePath: rel, InputJSON: "{}"})
+	if err == nil && created {
+		_ = a.store.SetTranscodeStatus(v.ID, "pending")
+	}
+}
+
 func (a *App) commitTranscodeJob(w http.ResponseWriter, r *http.Request) {
 	job, err := a.store.ComputeJob(r.PathValue("id"))
 	if err == sql.ErrNoRows {
@@ -297,94 +338,98 @@ func (a *App) commitTranscodeJob(w http.ResponseWriter, r *http.Request) {
 		fail(w, 422, errors.New("转码结果缺少临时文件路径"))
 		return
 	}
-	video, err := a.store.Video(job.VideoID)
-	if err != nil {
-		fail(w, 500, err)
-		return
-	}
-	cfg, _ := a.store.Settings()
-	source := video.PlexPath
-	if source == "" {
-		source = video.FilePath
-	}
-	sourceRel, _, err := secureMediaRelative(cfg.DownloadDir, source)
-	if err != nil {
+	if err = a.commitTranscodeArtifact(job, result.TempRelativePath, keep); err != nil {
 		fail(w, 422, err)
-		return
-	}
-	temp := filepath.Join(cfg.DownloadDir, filepath.FromSlash(result.TempRelativePath))
-	tempRel, _, err := secureMediaRelative(cfg.DownloadDir, temp)
-	if err != nil {
-		fail(w, 422, err)
-		return
-	}
-	if sourceRel == tempRel {
-		fail(w, 422, errors.New("转码产物不能与源文件相同"))
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-	sourceInfo, err := mediainfo.Probe(ctx, source)
-	if err != nil {
-		fail(w, 422, fmt.Errorf("源文件验证失败: %w", err))
-		return
-	}
-	outputInfo, err := mediainfo.Probe(ctx, temp)
-	if err != nil {
-		fail(w, 422, fmt.Errorf("转码产物验证失败: %w", err))
-		return
-	}
-	tolerance := math.Max(2, sourceInfo.DurationSeconds*.01)
-	if sourceInfo.DurationSeconds > 0 && outputInfo.DurationSeconds > 0 && math.Abs(sourceInfo.DurationSeconds-outputInfo.DurationSeconds) > tolerance {
-		fail(w, 422, fmt.Errorf("转码产物时长差异过大: %.2f 秒", math.Abs(sourceInfo.DurationSeconds-outputInfo.DurationSeconds)))
-		return
-	}
-	backupDir := filepath.Join(cfg.DownloadDir, ".hwatch-originals")
-	if err = os.MkdirAll(backupDir, 0700); err != nil {
-		fail(w, 500, err)
-		return
-	}
-	backup := filepath.Join(backupDir, safeComputeFilename(job.ID)+filepath.Ext(source))
-	if _, statErr := os.Stat(backup); statErr == nil {
-		fail(w, 409, errors.New("该任务的原文件备份已存在"))
-		return
-	} else if !os.IsNotExist(statErr) {
-		fail(w, 500, statErr)
-		return
-	}
-	if err = os.Rename(source, backup); err != nil {
-		fail(w, 500, fmt.Errorf("暂存原文件失败: %w", err))
-		return
-	}
-	if err = os.Rename(temp, source); err != nil {
-		_ = os.Rename(backup, source)
-		fail(w, 500, fmt.Errorf("提交转码产物失败: %w", err))
-		return
-	}
-	if err = a.store.UpdateMediaInfo(video.ID, outputInfo.VideoCodec, outputInfo.AudioCodec, outputInfo.Container, outputInfo.Width, outputInfo.Height, outputInfo.FrameRate, outputInfo.BitRate, outputInfo.BitDepth); err != nil {
-		_ = os.Rename(source, temp)
-		_ = os.Rename(backup, source)
-		fail(w, 500, err)
-		return
-	}
-	if err = a.store.SetTranscodeStatus(video.ID, "completed"); err != nil {
-		fail(w, 500, err)
 		return
 	}
 	if err = a.store.CommitComputeJob(job.ID); err != nil {
 		fail(w, 500, err)
 		return
 	}
+	video, _ := a.store.Video(job.VideoID)
+	respond(w, 200, map[string]any{"status": "completed", "video_id": video.ID, "video_codec": video.VideoCodec, "duration_seconds": video.DurationSeconds})
+}
+
+// commitTranscodeArtifact validates a node-provided transcode output and
+// atomically replaces the source media. The caller moves the compute job to its
+// terminal state. When keepOriginal is false the pre-transcode file is removed
+// after a successful swap.
+func (a *App) commitTranscodeArtifact(job store.ComputeJob, tempRelativePath string, keepOriginal bool) error {
+	video, err := a.store.Video(job.VideoID)
+	if err != nil {
+		return err
+	}
+	cfg, _ := a.store.Settings()
+	source := video.PlexPath
+	if source == "" {
+		source = video.FilePath
+	}
+	if source == "" {
+		return errors.New("媒体路径为空")
+	}
+	sourceRel, _, err := secureMediaRelative(cfg.DownloadDir, source)
+	if err != nil {
+		return err
+	}
+	clean := filepath.Clean(filepath.FromSlash(tempRelativePath))
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return errors.New("转码产物路径无效")
+	}
+	temp := filepath.Join(cfg.DownloadDir, clean)
+	tempRel, _, err := secureMediaRelative(cfg.DownloadDir, temp)
+	if err != nil {
+		return err
+	}
+	if sourceRel == tempRel {
+		return errors.New("转码产物不能与源文件相同")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	sourceInfo, err := mediainfo.Probe(ctx, source)
+	if err != nil {
+		return fmt.Errorf("源文件验证失败: %w", err)
+	}
+	outputInfo, err := mediainfo.Probe(ctx, temp)
+	if err != nil {
+		return fmt.Errorf("转码产物验证失败: %w", err)
+	}
+	tolerance := math.Max(2, sourceInfo.DurationSeconds*.01)
+	if sourceInfo.DurationSeconds > 0 && outputInfo.DurationSeconds > 0 && math.Abs(sourceInfo.DurationSeconds-outputInfo.DurationSeconds) > tolerance {
+		return fmt.Errorf("转码产物时长差异过大: %.2f 秒", math.Abs(sourceInfo.DurationSeconds-outputInfo.DurationSeconds))
+	}
+	backupDir := filepath.Join(cfg.DownloadDir, ".hwatch-originals")
+	if err = os.MkdirAll(backupDir, 0700); err != nil {
+		return err
+	}
+	backup := filepath.Join(backupDir, safeComputeFilename(job.ID)+filepath.Ext(source))
+	if _, statErr := os.Stat(backup); statErr == nil {
+		return errors.New("该任务的原文件备份已存在")
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+	if err = os.Rename(source, backup); err != nil {
+		return fmt.Errorf("暂存原文件失败: %w", err)
+	}
+	if err = os.Rename(temp, source); err != nil {
+		_ = os.Rename(backup, source)
+		return fmt.Errorf("提交转码产物失败: %w", err)
+	}
+	if err = a.store.UpdateMediaInfo(video.ID, outputInfo.VideoCodec, outputInfo.AudioCodec, outputInfo.Container, outputInfo.Width, outputInfo.Height, outputInfo.FrameRate, outputInfo.BitRate, outputInfo.BitDepth); err != nil {
+		_ = os.Rename(source, temp)
+		_ = os.Rename(backup, source)
+		return err
+	}
+	if err = a.store.SetTranscodeStatus(video.ID, "completed"); err != nil {
+		return err
+	}
 	_ = a.store.ClearFileHashes(video.ID)
 	a.hashCompletedMedia(video.ID, source)
-	backupRelative := ""
-	if keep {
-		backupRelative, _ = filepath.Rel(cfg.DownloadDir, backup)
-		backupRelative = filepath.ToSlash(backupRelative)
-	} else if err = os.Remove(backup); err != nil {
-		_, _ = a.store.Notify("transcode_backup_cleanup", "warning", "转码成功，但原文件暂存副本清理失败", job.ID, 24*time.Hour)
+	if !keepOriginal {
+		if err = os.Remove(backup); err != nil {
+			_, _ = a.store.Notify("transcode_backup_cleanup", "warning", "转码成功，但原文件暂存副本清理失败", job.ID, 24*time.Hour)
+		}
 	}
-	respond(w, 200, map[string]any{"status": "completed", "video_id": video.ID, "backup_relative_path": backupRelative, "video_codec": outputInfo.VideoCodec, "duration_seconds": outputInfo.DurationSeconds})
+	return nil
 }
 
 func (a *App) authenticateComputeNode(r *http.Request) (store.ComputeNode, error) {
@@ -444,14 +489,18 @@ func (a *App) nodeClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	allowed := []string{}
+	subtypes := []string{}
 	seen := map[string]bool{}
 	for _, kind := range input.Types {
 		if !seen[kind] && capabilitiesAllow(node.PermissionsJSON, kind) && capabilitiesAllow(node.CapabilitiesJSON, kind) {
 			allowed = append(allowed, kind)
 			seen[kind] = true
+			if kind == "dedupe" && nodeCapabilityFlags(node.PermissionsJSON, node.CapabilitiesJSON, "media_duplicate") {
+				subtypes = append(subtypes, mediaDuplicateSubtype)
+			}
 		}
 	}
-	job, err := a.store.ClaimComputeJob(node.ID, allowed, computeLease)
+	job, err := a.store.ClaimComputeJob(node.ID, allowed, subtypes, computeLease)
 	if errors.Is(err, store.ErrNoComputeJob) {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -484,14 +533,20 @@ func (a *App) nodeProgress(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]any{"lease_seconds": int(computeLease.Seconds())})
 }
 
+type dedupeNodeMatch struct {
+	VideoID          string          `json:"video_id"`
+	Relationship     string          `json:"relationship,omitempty"`
+	Classification   string          `json:"classification,omitempty"`
+	Backend          string          `json:"backend,omitempty"`
+	AlgorithmVersion string          `json:"algorithm_version,omitempty"`
+	Confidence       float64         `json:"confidence"`
+	DurationDelta    int64           `json:"duration_delta"`
+	Coverage         float64         `json:"coverage"`
+	Metrics          json.RawMessage `json:"metrics,omitempty"`
+}
+
 type dedupeNodeResult struct {
-	Matches []struct {
-		VideoID       string  `json:"video_id"`
-		Relationship  string  `json:"relationship"`
-		Confidence    float64 `json:"confidence"`
-		DurationDelta int64   `json:"duration_delta"`
-		Coverage      float64 `json:"coverage"`
-	} `json:"matches"`
+	Matches []dedupeNodeMatch `json:"matches"`
 }
 
 func (a *App) nodeComplete(w http.ResponseWriter, r *http.Request) {
@@ -530,23 +585,29 @@ func (a *App) nodeComplete(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, err)
 			return
 		}
-		allowed := map[string]bool{"exact": true, "reencoded": true, "contained": true, "partial_overlap": true, "compilation_contains": true}
-		for _, match := range result.Matches {
-			if !allowed[match.Relationship] || match.VideoID == job.VideoID || match.Confidence < 0 || match.Confidence > 1 {
-				fail(w, 422, errors.New("去重匹配结果无效"))
+		if job.Subtype == mediaDuplicateSubtype {
+			if err = a.applyMediaDuplicateResult(job, result); err != nil {
+				fail(w, 422, err)
 				return
 			}
-			if _, e := a.store.Video(match.VideoID); e != nil {
-				fail(w, 422, errors.New("匹配视频不存在"))
-				return
-			}
-			if e := a.store.AddDuplicate(job.VideoID, match.VideoID, "external_"+match.Relationship, match.Confidence, match.DurationDelta, false); e != nil {
-				fail(w, 500, e)
-				return
+		} else {
+			allowed := map[string]bool{"exact": true, "reencoded": true, "contained": true, "partial_overlap": true, "compilation_contains": true}
+			for _, match := range result.Matches {
+				if !allowed[match.Relationship] || match.VideoID == job.VideoID || match.Confidence < 0 || match.Confidence > 1 {
+					fail(w, 422, errors.New("去重匹配结果无效"))
+					return
+				}
+				if _, e := a.store.Video(match.VideoID); e != nil {
+					fail(w, 422, errors.New("匹配视频不存在"))
+					return
+				}
+				if e := a.store.AddDuplicate(job.VideoID, match.VideoID, "external_"+match.Relationship, match.Confidence, match.DurationDelta, false); e != nil {
+					fail(w, 500, e)
+					return
+				}
 			}
 		}
 	} else {
-		finalStatus = "verifying"
 		var result struct {
 			TempRelativePath string `json:"temp_relative_path"`
 		}
@@ -559,23 +620,18 @@ func (a *App) nodeComplete(w http.ResponseWriter, r *http.Request) {
 			fail(w, 422, errors.New("转码输出路径无效"))
 			return
 		}
-		cfg, _ := a.store.Settings()
-		path := filepath.Join(cfg.DownloadDir, clean)
 		if filepath.ToSlash(clean) == job.MediaRelativePath {
 			fail(w, 422, errors.New("转码临时产物不能覆盖输入文件"))
 			return
 		}
-		if _, _, pathErr := secureMediaRelative(cfg.DownloadDir, path); pathErr != nil {
-			fail(w, 422, pathErr)
+		// Transcoding is fully automatic: verify the artifact with ffprobe and
+		// atomically replace the source without an administrator confirmation.
+		if err = a.commitTranscodeArtifact(job, result.TempRelativePath, false); err != nil {
+			_ = a.store.SetTranscodeStatus(job.VideoID, "failed")
+			_ = a.store.FailComputeJob(job.ID, node.ID, "transcode_commit_failed", err.Error(), false)
+			fail(w, 422, err)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		if _, err = mediainfo.Probe(ctx, path); err != nil {
-			fail(w, 422, fmt.Errorf("转码产物验证失败: %w", err))
-			return
-		}
-		_ = a.store.SetTranscodeStatus(job.VideoID, "verifying")
 	}
 	if err = a.store.CompleteComputeJob(job.ID, node.ID, finalStatus, string(input.Result)); err != nil {
 		fail(w, 409, err)

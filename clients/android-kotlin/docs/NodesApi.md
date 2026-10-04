@@ -53,7 +53,7 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.canc
 
 
 
-验证并原子提交转码临时产物；必须显式确认，默认保留原文件备份。
+兼容接口。节点回传的转码产物现在会在验证通过后自动原子提交，管理员无需确认；该端点仅用于仍处于 &#x60;verifying&#x60; 的旧任务。
 
 ### Example
 ```kotlin

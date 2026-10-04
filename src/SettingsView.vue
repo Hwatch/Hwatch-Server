@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import NavIcon from './NavIcon.vue'
 
-type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
+type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;auto_transcode:boolean;enable_media_duplicate:boolean;media_duplicate_max_candidates:number;media_duplicate_duration_percent:number;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
 type Backup={name:string;size:number;created_at:string;sha256:string;valid:boolean}
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
@@ -74,6 +74,9 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </button>
       <form v-if="open==='exclude'" class="setting-body" @submit.prevent="emit('save')">
         <label class="setting-check"><input v-model="props.settings.require_creator_match" type="checkbox"><span><b>验证实际创作者</b><small>实际创作者与订阅作者不一致时不下载</small></span></label>
+        <label class="setting-check"><input v-model="props.settings.auto_transcode" type="checkbox"><span><b>下载完成后自动转 H.265</b><small>新下载完成后自动建立转码任务，由外部节点转码并自动校验替换，无需人工确认。</small></span></label>
+        <label class="setting-check"><input v-model="props.settings.enable_media_duplicate" type="checkbox"><span><b>视频内容去重（Media Duplicate）</b><small>由外部计算节点比较内容相同但编码不同的视频；仅生成候选供人工审核，绝不自动删除媒体。需要已授权的在线节点。</small></span></label>
+        <div class="setting-grid"><label>内容去重候选上限<input v-model.number="props.settings.media_duplicate_max_candidates" type="number" min="1" max="200"></label><label>内容去重时长容差（%）<input v-model.number="props.settings.media_duplicate_duration_percent" type="number" min="1" max="50"><small>候选筛选条件：时长差不超过 max(2 秒, 时长 × 容差)。</small></label></div>
         <label>标题关键词<textarea v-model="props.settings.exclude_title_keywords" rows="2" placeholder="compilation, collection, 合集, 集锦"></textarea></label>
         <div class="setting-grid"><label>排除上传者<input v-model="props.settings.exclude_uploaders" placeholder="逗号分隔"></label><label>排除分类<input v-model="props.settings.exclude_categories" placeholder="逗号分隔"></label><label>排除标签<input v-model="props.settings.exclude_tags" placeholder="逗号分隔"></label><label>最大时长（秒）<input v-model.number="props.settings.max_duration_seconds" type="number" min="0"><small>0 表示不限制</small></label></div>
         <div class="actions"><button class="primary save-setting" :disabled="busy">保存规则</button><button type="button" :disabled="busy" @click="emit('previewExclusions')">预览命中</button></div>

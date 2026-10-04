@@ -180,7 +180,7 @@ paths:
     post:
       tags: [Nodes]
       operationId: commitTranscodeJob
-      description: 验证并原子提交转码临时产物；必须显式确认，默认保留原文件备份。
+      description: 兼容接口。节点回传的转码产物现在会在验证通过后自动原子提交，管理员无需确认；该端点仅用于仍处于 `verifying` 的旧任务。
       parameters: [{name: id, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [confirm], properties: {confirm: {type: boolean}, keep_original: {type: boolean, default: true}}}}}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
@@ -212,6 +212,7 @@ paths:
       security: [{nodeBearer: []}]
       operationId: completeComputeJob
       parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      description: 回传算法结果。`dedupe` 任务返回 `MediaDuplicateResult`（候选分类仅 whole-video/trimmed-video/possible-match 会生成重复候选）；`transcode` 任务返回 `temp_relative_path`。服务端将转码产物在验证通过后自动原子提交。
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [result], properties: {result: {type: object, additionalProperties: true}}}}}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
   /api/node/v1/jobs/{id}/fail:
@@ -260,6 +261,8 @@ components:
       properties:
         dedupe: {type: boolean}
         transcode: {type: boolean}
+        media_duplicate: {type: boolean, description: 支持视频内容重复比较（media-fingerprint-v1）。}
+        video_signature: {type: boolean, description: 额外支持 FFmpeg MPEG-7 signature，属可选能力，不作为任务硬性要求。}
         video_toolbox: {type: boolean}
         encoders: {type: array, items: {type: string}}
         max_dedupe_jobs: {type: integer, minimum: 0}
@@ -275,7 +278,50 @@ components:
         video_id: {type: string}
         type: {type: string, enum: [dedupe, transcode]}
         algorithm_version: {type: string}
-        options: {type: object, additionalProperties: true}
+        options:
+          description: 通用 JSON。`dedupe` 任务使用 `MediaDuplicateOptions`；`transcode` 任务使用 `TranscodeOptions`。为兼容历史任务保持开放对象。
+          type: object
+          additionalProperties: true
+    TranscodeOptions:
+      type: object
+      description: 转码任务的 options（当前由服务端默认值驱动，可留空）。
+      additionalProperties: true
+    DedupeCandidate:
+      type: object
+      required: [video_id, media_relative_path]
+      properties:
+        video_id: {type: string, description: 候选视频数据库 ID，用于将比较结果精确映射回媒体。}
+        media_relative_path: {type: string, description: 相对媒体根的路径，节点据此读取文件；绝不下发绝对路径。}
+    MediaDuplicateOptions:
+      type: object
+      required: [mode, candidates]
+      description: "`dedupe` 任务使用的结构化 options；候选由服务端筛选，节点不得自行扫描媒体库。"
+      properties:
+        mode: {type: string, enum: [media_duplicate]}
+        candidates:
+          type: array
+          items: {$ref: '#/components/schemas/DedupeCandidate'}
+    MediaDuplicateMatch:
+      type: object
+      required: [video_id, classification]
+      properties:
+        video_id: {type: string, description: 对应 MediaDuplicateOptions.candidates 中的候选 ID。}
+        classification: {type: string, enum: [whole-video, trimmed-video, possible-match, different]}
+        backend: {type: string, example: media-fingerprint-v1}
+        algorithm_version: {type: string, example: media-fingerprint-v1}
+        confidence: {type: number, minimum: 0, maximum: 1, description: 仅作参考；服务端不会据此自动删除媒体。}
+        duration_delta: {type: integer}
+        coverage: {type: number, minimum: 0, maximum: 1}
+        metrics:
+          type: object
+          additionalProperties: true
+          description: 结构化算法指标，原样保存，供后续校准回溯。
+    MediaDuplicateResult:
+      type: object
+      properties:
+        matches:
+          type: array
+          items: {$ref: '#/components/schemas/MediaDuplicateMatch'}
     NodeHeartbeat:
       type: object
       required: [capabilities, version, platform]

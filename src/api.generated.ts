@@ -671,7 +671,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 验证并原子提交转码临时产物；必须显式确认，默认保留原文件备份。 */
+        /** @description 兼容接口。节点回传的转码产物现在会在验证通过后自动原子提交，管理员无需确认；该端点仅用于仍处于 `verifying` 的旧任务。 */
         post: operations["commitTranscodeJob"];
         delete?: never;
         options?: never;
@@ -736,6 +736,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 回传算法结果。`dedupe` 任务返回 `MediaDuplicateResult`（候选分类仅 whole-video/trimmed-video/possible-match 会生成重复候选）；`transcode` 任务返回 `temp_relative_path`。服务端将转码产物在验证通过后自动原子提交。 */
         post: operations["completeComputeJob"];
         delete?: never;
         options?: never;
@@ -806,6 +807,10 @@ export interface components {
         NodeCapabilities: {
             dedupe: boolean;
             transcode: boolean;
+            /** @description 支持视频内容重复比较（media-fingerprint-v1）。 */
+            media_duplicate?: boolean;
+            /** @description 额外支持 FFmpeg MPEG-7 signature，属可选能力，不作为任务硬性要求。 */
+            video_signature?: boolean;
             video_toolbox?: boolean;
             encoders?: string[];
             max_dedupe_jobs?: number;
@@ -820,9 +825,47 @@ export interface components {
             /** @enum {string} */
             type: "dedupe" | "transcode";
             algorithm_version?: string;
+            /** @description 通用 JSON。`dedupe` 任务使用 `MediaDuplicateOptions`；`transcode` 任务使用 `TranscodeOptions`。为兼容历史任务保持开放对象。 */
             options?: {
                 [key: string]: unknown;
             };
+        };
+        /** @description 转码任务的 options（当前由服务端默认值驱动，可留空）。 */
+        TranscodeOptions: {
+            [key: string]: unknown;
+        };
+        DedupeCandidate: {
+            /** @description 候选视频数据库 ID，用于将比较结果精确映射回媒体。 */
+            video_id: string;
+            /** @description 相对媒体根的路径，节点据此读取文件；绝不下发绝对路径。 */
+            media_relative_path: string;
+        };
+        /** @description `dedupe` 任务使用的结构化 options；候选由服务端筛选，节点不得自行扫描媒体库。 */
+        MediaDuplicateOptions: {
+            /** @enum {string} */
+            mode: "media_duplicate";
+            candidates: components["schemas"]["DedupeCandidate"][];
+        };
+        MediaDuplicateMatch: {
+            /** @description 对应 MediaDuplicateOptions.candidates 中的候选 ID。 */
+            video_id: string;
+            /** @enum {string} */
+            classification: "whole-video" | "trimmed-video" | "possible-match" | "different";
+            /** @example media-fingerprint-v1 */
+            backend?: string;
+            /** @example media-fingerprint-v1 */
+            algorithm_version?: string;
+            /** @description 仅作参考；服务端不会据此自动删除媒体。 */
+            confidence?: number;
+            duration_delta?: number;
+            coverage?: number;
+            /** @description 结构化算法指标，原样保存，供后续校准回溯。 */
+            metrics?: {
+                [key: string]: unknown;
+            };
+        };
+        MediaDuplicateResult: {
+            matches?: components["schemas"]["MediaDuplicateMatch"][];
         };
         NodeHeartbeat: {
             capabilities: components["schemas"]["NodeCapabilities"];

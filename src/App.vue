@@ -115,6 +115,10 @@ type Duplicate = {
   match_title: string;
   match_thumbnail: string;
   match_type: string;
+  classification: string;
+  backend: string;
+  algorithm_version: string;
+  metrics_json: string;
   confidence: number;
   duration_delta: number;
   status: string;
@@ -161,6 +165,10 @@ type Settings = {
   download_limit_kbps: number;
   min_free_bytes: number;
   require_creator_match: boolean;
+  auto_transcode: boolean;
+  enable_media_duplicate: boolean;
+  media_duplicate_max_candidates: number;
+  media_duplicate_duration_percent: number;
   exclude_title_keywords: string;
   exclude_uploaders: string;
   exclude_categories: string;
@@ -278,6 +286,59 @@ const sidebarItems = ref({
   demo: localStorage.getItem("hwatch-sidebar-demo") !== "0",
   aria: localStorage.getItem("hwatch-sidebar-aria") !== "0",
 });
+const navGroups = [
+  { id: "overview", label: "", items: [{ id: "home", label: "概览" }] },
+  {
+    id: "content",
+    label: "内容获取",
+    items: [
+      { id: "subscriptions", label: "订阅管理" },
+      { id: "downloads", label: "下载中心" },
+      { id: "undownloaded", label: "未下载" },
+    ],
+  },
+  {
+    id: "media",
+    label: "媒体库",
+    items: [
+      { id: "library", label: "影视库" },
+      { id: "duplicates", label: "重复审查" },
+    ],
+  },
+  {
+    id: "system",
+    label: "系统",
+    items: [
+      { id: "translations", label: "翻译管理" },
+      { id: "nodes", label: "计算节点" },
+      { id: "notifications", label: "通知" },
+    ],
+  },
+];
+function loadOpenGroups(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem("hwatch-nav-groups");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { overview: true, content: true, media: true, system: true };
+}
+const openGroups = ref<Record<string, boolean>>(loadOpenGroups());
+function persistOpenGroups() {
+  try {
+    localStorage.setItem("hwatch-nav-groups", JSON.stringify(openGroups.value));
+  } catch {}
+}
+function toggleGroup(id: string) {
+  openGroups.value = { ...openGroups.value, [id]: openGroups.value[id] === false };
+  persistOpenGroups();
+}
+function revealGroupFor(viewID: string) {
+  const group = navGroups.find((g) => g.items.some((i) => i.id === viewID));
+  if (group && group.label && openGroups.value[group.id] === false) {
+    openGroups.value = { ...openGroups.value, [group.id]: true };
+    persistOpenGroups();
+  }
+}
 const showOriginal = ref(
   localStorage.getItem("r34watch-show-original") === "1",
 );
@@ -294,6 +355,10 @@ const settings = ref<Settings>({
   download_limit_kbps: 0,
   min_free_bytes: 5368709120,
   require_creator_match: true,
+  auto_transcode: false,
+  enable_media_duplicate: false,
+  media_duplicate_max_candidates: 20,
+  media_duplicate_duration_percent: 1,
   exclude_title_keywords: "compilation,collection,合集,集锦",
   exclude_uploaders: "",
   exclude_categories: "",
@@ -483,6 +548,13 @@ async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
     await refreshDashboard();
   });
 }
+const classificationLabel = (value: string) =>
+  ({
+    "whole-video": "完整视频重复",
+    "trimmed-video": "疑似裁切版本",
+    "possible-match": "可能重复",
+    different: "内容不同",
+  } as Record<string, string>)[value] || value;
 const duplicateReason = (item: Duplicate) => {
   const external: Record<string, string> = {
     external_exact: "外部分析：文件内容一致",
@@ -492,17 +564,18 @@ const duplicateReason = (item: Duplicate) => {
     external_compilation_contains: "外部分析：合集包含匹配视频",
   };
   if (external[item.match_type]) return external[item.match_type];
+  if (item.match_type === "media_duplicate") return `视频内容去重 · ${classificationLabel(item.classification)}`;
   if (item.match_type === "sha256") return "文件 SHA-256 完全一致";
   if (item.match_type === "page_url") return "详情页地址一致";
   return `封面相似 ${Math.round(item.confidence * 100)}% · 时长差 ${item.duration_delta} 秒`;
 };
-async function createExternalJob(video: Video, type: "dedupe" | "transcode") {
-  if (type === "transcode" && !confirm(`将“${displayTitle(video)}”加入 H.265 转码队列？转码完成后仍需人工确认产物。`)) return;
-  await act(async () => {
-    const result = await api("/api/compute/jobs", {method:"POST", body:JSON.stringify({video_id:video.video_id, type})});
-    notice.value = result.created ? (type === "dedupe" ? "外部去重任务已创建" : "H.265 转码任务已创建") : "相同媒体和算法的任务已经存在";
-  });
-}
+const duplicateMetrics = (item: Duplicate) => {
+  try {
+    return JSON.parse(item.metrics_json || "{}");
+  } catch {
+    return {};
+  }
+};
 async function reviewDuplicateBatch(action: "confirm" | "dismiss") {
   if (!selectedDuplicates.value.length) return;
   await act(async () => {
@@ -596,6 +669,7 @@ async function restoreBackup(name: string) {
 async function changeView(next: string, updateHistory = true) {
   if (!viewRoutes[next]) next = "home";
   view.value = next;
+  revealGroupFor(next);
   document.title = (viewTitles[next] || "HWatch") + " · HWatch";
   if (updateHistory && window.location.pathname !== viewRoutes[next])
     window.history.pushState({ view: next }, "", viewRoutes[next]);
@@ -1060,36 +1134,40 @@ watch(
     <aside>
       <div class="brand"><span>H</span><b>HWatch</b></div>
       <nav>
-        <button
-          v-for="item in [
-            { id: 'home', label: '概览' },
-            { id: 'subscriptions', label: '订阅管理' },
-            { id: 'downloads', label: '下载中心' },
-            { id: 'undownloaded', label: '未下载' },
-            { id: 'library', label: '影视库' },
-            { id: 'translations', label: '翻译管理' },
-            { id: 'duplicates', label: '重复审查' },
-            { id: 'nodes', label: '计算节点' },
-            { id: 'notifications', label: '通知' },
-          ]"
-          :key="item.id"
-          :class="{ active: view === item.id }"
-          @click="changeView(item.id)"
-        >
-          <NavIcon :name="item.id" /><span class="nav-text">{{
-            item.label
-          }}</span
-          ><i
-            v-if="
-              item.id === 'downloads' &&
-              data.counts.active + data.counts.waiting
-            "
-            >{{ data.counts.active + data.counts.waiting }}</i
+        <template v-for="group in navGroups" :key="group.id">
+          <button
+            v-if="group.label"
+            type="button"
+            class="nav-group"
+            :aria-expanded="openGroups[group.id] !== false"
+            @click="toggleGroup(group.id)"
           >
-          <i v-if="item.id === 'notifications' && data.unread_notifications">{{
-            data.unread_notifications
-          }}</i>
-        </button>
+            <span>{{ group.label }}</span
+            ><span class="nav-group-caret" :class="{ open: openGroups[group.id] !== false }">⌄</span>
+          </button>
+          <template v-if="openGroups[group.id] !== false">
+            <button
+              v-for="item in group.items"
+              :key="item.id"
+              :class="{ active: view === item.id }"
+              @click="changeView(item.id)"
+            >
+              <NavIcon :name="item.id" /><span class="nav-text">{{
+                item.label
+              }}</span
+              ><i
+                v-if="
+                  item.id === 'downloads' &&
+                  data.counts.active + data.counts.waiting
+                "
+                >{{ data.counts.active + data.counts.waiting }}</i
+              >
+              <i v-if="item.id === 'notifications' && data.unread_notifications">{{
+                data.unread_notifications
+              }}</i>
+            </button>
+          </template>
+        </template>
       </nav>
       <div class="bottom">
         <label v-if="sidebarItems.language" class="sidebar-language"
@@ -1436,6 +1514,15 @@ watch(
               >{{ duplicateReason(item) }}
               · {{ item.status }}</small
             >
+            <details v-if="item.match_type === 'media_duplicate'" class="duplicate-detail">
+              <summary>技术详情</summary>
+              <small>算法 {{ item.algorithm_version || '未知' }} · 后端 {{ item.backend || '未知' }}</small>
+              <small v-if="duplicateMetrics(item).sample_count != null">
+                采样 {{ duplicateMetrics(item).matched_samples ?? '?' }} / {{ duplicateMetrics(item).sample_count }}
+                <template v-if="duplicateMetrics(item).median_hamming_distance != null"> · 中位汉明距离 {{ duplicateMetrics(item).median_hamming_distance }}</template>
+              </small>
+              <small v-if="duplicateMetrics(item).duration_ratio != null">时长比 {{ duplicateMetrics(item).duration_ratio }}</small>
+            </details>
             <small v-if="item.estimated_bytes">预计可释放 {{ size(item.estimated_bytes) }}</small>
             <div v-if="item.status === 'pending'" class="actions">
               <button @click="reviewDuplicate(item, 'dismiss')">
@@ -1723,8 +1810,6 @@ watch(
             </div>
             <div class="library-actions">
               <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
-              <button v-if="view === 'library'" title="提交外部内容去重分析" :disabled="busy" @click="createExternalJob(v,'dedupe')">去重</button>
-              <button v-if="view === 'library'" title="提交 H.265 转码" :disabled="busy||v.video_codec==='H.265/HEVC'||['pending','transcoding','verifying'].includes(v.transcode_status)" @click="createExternalJob(v,'transcode')">H.265</button>
               <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
             </div>
           </article>
@@ -1863,7 +1948,6 @@ watch(
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
-      <div v-if="selected.status === 'completed'" class="player-actions"><button :disabled="busy" @click="createExternalJob(selected,'dedupe')">外部去重分析</button><button class="primary" :disabled="busy||selected.video_codec==='H.265/HEVC'||['pending','transcoding','verifying'].includes(selected.transcode_status)" @click="createExternalJob(selected,'transcode')">转码为 H.265</button></div>
     </div>
   </div>
 </template>

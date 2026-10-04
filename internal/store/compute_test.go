@@ -42,7 +42,7 @@ func TestComputeJobLeaseAndIdempotency(t *testing.T) {
 	if err != nil || created || duplicate.ID != "job_1" {
 		t.Fatalf("idempotent create=%v job=%+v err=%v", created, duplicate, err)
 	}
-	claimed, err := s.ClaimComputeJob("node_a", []string{"dedupe"}, time.Minute)
+	claimed, err := s.ClaimComputeJob("node_a", []string{"dedupe"}, nil, time.Minute)
 	if err != nil || claimed.NodeID != "node_a" || claimed.Attempts != 1 {
 		t.Fatalf("claim=%+v err=%v", claimed, err)
 	}
@@ -74,13 +74,13 @@ func TestExpiredComputeLeaseIsReclaimed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.ClaimComputeJob("node_a", []string{"dedupe"}, time.Minute); err != nil {
+	if _, err = s.ClaimComputeJob("node_a", []string{"dedupe"}, nil, time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.DB.Exec("UPDATE compute_jobs SET lease_until=? WHERE id=?", time.Now().UTC().Add(-time.Minute).Format(time.RFC3339), "job_lease"); err != nil {
 		t.Fatal(err)
 	}
-	reclaimed, err := s.ClaimComputeJob("node_b", []string{"dedupe"}, time.Minute)
+	reclaimed, err := s.ClaimComputeJob("node_b", []string{"dedupe"}, nil, time.Minute)
 	if err != nil || reclaimed.NodeID != "node_b" || reclaimed.Attempts != 2 {
 		t.Fatalf("reclaimed=%+v err=%v", reclaimed, err)
 	}

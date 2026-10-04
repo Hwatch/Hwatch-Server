@@ -23,6 +23,8 @@ import com.google.gson.annotations.SerializedName
  *
  * @param dedupe 
  * @param transcode 
+ * @param mediaDuplicate 支持视频内容重复比较（media-fingerprint-v1）。
+ * @param videoSignature 额外支持 FFmpeg MPEG-7 signature，属可选能力，不作为任务硬性要求。
  * @param videoToolbox 
  * @param encoders 
  * @param maxDedupeJobs 
@@ -37,6 +39,14 @@ data class NodeCapabilities (
 
     @SerializedName("transcode")
     val transcode: kotlin.Boolean,
+
+    /* 支持视频内容重复比较（media-fingerprint-v1）。 */
+    @SerializedName("media_duplicate")
+    val mediaDuplicate: kotlin.Boolean? = null,
+
+    /* 额外支持 FFmpeg MPEG-7 signature，属可选能力，不作为任务硬性要求。 */
+    @SerializedName("video_signature")
+    val videoSignature: kotlin.Boolean? = null,
 
     @SerializedName("video_toolbox")
     val videoToolbox: kotlin.Boolean? = null,

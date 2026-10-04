@@ -751,6 +751,10 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "exclude_categories", &cfg.ExcludeCategories)
 	assignString(input, "exclude_tags", &cfg.ExcludeTags)
 	assignBool(input, "require_creator_match", &cfg.RequireCreatorMatch)
+	assignBool(input, "auto_transcode", &cfg.AutoTranscode)
+	assignBool(input, "enable_media_duplicate", &cfg.EnableMediaDuplicate)
+	assignInt(input, "media_duplicate_max_candidates", &cfg.MediaDuplicateMaxCandidates)
+	assignInt(input, "media_duplicate_duration_percent", &cfg.MediaDuplicateDurationPercent)
 	assignInt(input, "max_concurrent", &cfg.MaxConcurrent)
 	assignInt(input, "connections_per_download", &cfg.ConnectionsPerDownload)
 	assignInt64(input, "download_limit_kbps", &cfg.DownloadLimitKBPS)
@@ -782,6 +786,14 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	if cfg.BackupRetention < 1 || cfg.BackupRetention > 365 {
 		fail(w, 400, errors.New("数据库备份保留数量必须在 1 到 365 之间"))
+		return
+	}
+	if cfg.MediaDuplicateMaxCandidates < 1 || cfg.MediaDuplicateMaxCandidates > 200 {
+		fail(w, 400, errors.New("内容去重候选上限必须在 1 到 200 之间"))
+		return
+	}
+	if cfg.MediaDuplicateDurationPercent < 1 || cfg.MediaDuplicateDurationPercent > 50 {
+		fail(w, 400, errors.New("内容去重时长容差必须在 1% 到 50% 之间"))
 		return
 	}
 	if _, parseErr := time.Parse("15:04", cfg.BackupTime); parseErr != nil {
@@ -833,7 +845,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, settingsMap(cfg))
 }
 func settingsMap(c store.Settings) map[string]any {
-	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
+	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "auto_transcode": c.AutoTranscode, "enable_media_duplicate": c.EnableMediaDuplicate, "media_duplicate_max_candidates": c.MediaDuplicateMaxCandidates, "media_duplicate_duration_percent": c.MediaDuplicateDurationPercent, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
 }
 func assignString(m map[string]any, k string, v *string) {
 	if x, ok := m[k].(string); ok {
@@ -1483,6 +1495,9 @@ func (a *App) pollTasks(ctx context.Context) {
 				_ = plex.Generate(layout, sub, translated, cfg.HTTPProxy)
 				a.probeMedia(v.ID, path)
 				a.hashCompletedMedia(v.ID, path)
+				if cfg.AutoTranscode {
+					a.enqueueAutoTranscode(fresh)
+				}
 				if cleaner, ok := client.(downloader.ResultCleaner); ok {
 					cleanCtx, cleanCancel := context.WithTimeout(ctx, 5*time.Second)
 					_ = cleaner.CleanResult(cleanCtx, externalID)
@@ -1520,6 +1535,7 @@ func (a *App) scheduler(ctx context.Context) {
 			}
 			a.reconcileRecovery()
 			a.hashNextCompletedMedia()
+			a.scheduleMediaDuplicateJobs()
 			notifyCtx, notifyCancel := context.WithTimeout(ctx, 5*time.Second)
 			a.evaluateNotifications(notifyCtx)
 			notifyCancel()

@@ -24,7 +24,7 @@ import com.google.gson.annotations.SerializedName
  * @param videoId 
  * @param type 
  * @param algorithmVersion 
- * @param options 
+ * @param options 通用 JSON。`dedupe` 任务使用 `MediaDuplicateOptions`；`transcode` 任务使用 `TranscodeOptions`。为兼容历史任务保持开放对象。
  */
 
 
@@ -39,6 +39,7 @@ data class CreateComputeJob (
     @SerializedName("algorithm_version")
     val algorithmVersion: kotlin.String? = null,
 
+    /* 通用 JSON。`dedupe` 任务使用 `MediaDuplicateOptions`；`transcode` 任务使用 `TranscodeOptions`。为兼容历史任务保持开放对象。 */
     @SerializedName("options")
     val options: kotlin.collections.Map<kotlin.String, kotlin.Any>? = null
 
