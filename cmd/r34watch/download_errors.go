@@ -28,7 +28,8 @@ func classifyDownloadError(err error) downloadFailure {
 		return downloadFailure{Code: "rate_limited", Retryable: true, Delay: 30 * time.Second}
 	case errors.Is(err, os.ErrPermission) || strings.Contains(message, "permission denied"):
 		return downloadFailure{Code: "permission_denied"}
-	case strings.Contains(message, "no space left") || strings.Contains(message, "低于保留值"):
+	case strings.Contains(message, "no space left") || strings.Contains(message, "低于保留值") ||
+		strings.Contains(message, "媒体目录不可用") || strings.Contains(message, "挂载已断开") || strings.Contains(message, "未挂载"):
 		return downloadFailure{Code: "storage_unavailable", Retryable: true, Delay: 30 * time.Second}
 	case strings.Contains(message, "downloader unavailable") || strings.Contains(message, "connection refused"):
 		return downloadFailure{Code: "downloader_offline", Retryable: true}

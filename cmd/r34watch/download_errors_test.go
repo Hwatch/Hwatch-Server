@@ -18,6 +18,8 @@ func TestClassifyDownloadErrors(t *testing.T) {
 		{"aria2 RPC -1: GID was not found", "detached_task", true},
 		{"permission denied", "permission_denied", false},
 		{"no space left on device", "storage_unavailable", true},
+		{"媒体目录不可用或挂载已断开", "storage_unavailable", true},
+		{"存储目录未挂载，拒绝在本机文件系统创建目录", "storage_unavailable", true},
 		{"HTTP 403", "source_expired", true},
 	}
 	for _, tt := range tests {
