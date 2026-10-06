@@ -184,17 +184,27 @@ HWatch does **not** poll TransRunner, mirror progress/leases, or run a local
 runner state machine. The result comes back through the TransRunner → HWatch
 callback API above.
 
-### Required TransRunner contract additions
+### `POST /api/integrations/transrunner/submit/dedupe`
 
-The current TransRunner HTTP API (v0.1.x) accepts only `input.type` `url`/`path`
-and has no content-duplicate job. For this integration to work end-to-end,
-TransRunner must add:
+Submits a content-duplicate job with `kind = "media_duplicate"` and the same
+`input.type = "hwatch"` payload (no profile, no candidates, no algorithm flags):
 
-1. `input.type = "hwatch"` accepting `video_id` + `media_relative_path`
-   (resolved against TransRunner's configured HWatch media root). HWatch will
-   never send an absolute path.
-2. An HTTP content-duplicate job (e.g. `kind = "dedupe"` / `media_duplicate`) that
-   accepts the same `hwatch` input plus candidates, and posts results back to
-   HWatch's `/api/transrunner/v1/duplicate-results`.
+```json
+{ "kind": "media_duplicate",
+  "input": { "type": "hwatch", "video_id": "rule34video:123", "media_relative_path": "Rule34Video/A/file.mp4" } }
+```
 
-Until (2) exists, HWatch does not expose a duplicate-submission endpoint.
+TransRunner then fetches candidates itself from
+`GET /api/transrunner/v1/media/{video_id}/dedupe-candidates` and posts its
+results to `/api/transrunner/v1/duplicate-results`. HWatch records the
+submission under `operation = "media_duplicate"` and returns
+`202 {runner_job_id}`; a repeat returns `409 already_submitted` unless
+`force: true`.
+
+### TransRunner contract status
+
+TransRunner now provides `input.type = "hwatch"`, `kind = "transcode"` and
+`kind = "media_duplicate"`, so no further contract additions are required for
+HWatch → TransRunner submission. HWatch never performs automatic or
+library-wide dedupe scheduling: submission happens only on explicit API/UI
+request.

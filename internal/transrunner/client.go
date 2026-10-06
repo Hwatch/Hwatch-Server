@@ -50,8 +50,9 @@ type HWInput struct {
 }
 
 type CreateJobRequest struct {
+	Kind     string  `json:"kind,omitempty"`
 	Input    HWInput `json:"input"`
-	Profile  string  `json:"profile"`
+	Profile  string  `json:"profile,omitempty"`
 	Priority string  `json:"priority,omitempty"`
 }
 

@@ -170,6 +170,14 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRF'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [video_id], properties: {video_id: {type: string}, profile: {type: string}, force: {type: boolean, default: false}}}}}}
       responses: {'202': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}
+  /api/integrations/transrunner/submit/dedupe:
+    post:
+      tags: [TransRunner]
+      operationId: submitDedupeToTransRunner
+      description: 提交内容去重任务到 TransRunner（kind=media_duplicate，input.type=hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [video_id], properties: {video_id: {type: string}, force: {type: boolean, default: false}}}}}}
+      responses: {'202': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}
   /api/transrunner/v1/media/{video_id}:
     get:
       tags: [TransRunner]

@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost*
 | [**createTransRunnerToken**](TransRunnerApi.md#createTransRunnerToken) | **POST** api/integrations/transrunner/token |  |
 | [**getTransRunnerToken**](TransRunnerApi.md#getTransRunnerToken) | **GET** api/integrations/transrunner/token |  |
 | [**revokeTransRunnerToken**](TransRunnerApi.md#revokeTransRunnerToken) | **DELETE** api/integrations/transrunner/token |  |
+| [**submitDedupeToTransRunner**](TransRunnerApi.md#submitDedupeToTransRunner) | **POST** api/integrations/transrunner/submit/dedupe |  |
 | [**submitTranscodeToTransRunner**](TransRunnerApi.md#submitTranscodeToTransRunner) | **POST** api/integrations/transrunner/submit/transcode |  |
 | [**testTransRunnerConnection**](TransRunnerApi.md#testTransRunnerConnection) | **POST** api/integrations/transrunner/test |  |
 | [**transRunnerDedupeCandidates**](TransRunnerApi.md#transRunnerDedupeCandidates) | **GET** api/transrunner/v1/media/{video_id}/dedupe-candidates |  |
@@ -117,6 +118,45 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.revo
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+提交内容去重任务到 TransRunner（kind&#x3D;media_duplicate，input.type&#x3D;hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(TransRunnerApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val submitDedupeToTransRunnerRequest : SubmitDedupeToTransRunnerRequest =  // SubmitDedupeToTransRunnerRequest | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.submitDedupeToTransRunner(xCSRFToken, submitDedupeToTransRunnerRequest)
+```
+
+### Parameters
+| **xCSRFToken** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **submitDedupeToTransRunnerRequest** | [**SubmitDedupeToTransRunnerRequest**](SubmitDedupeToTransRunnerRequest.md)|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 

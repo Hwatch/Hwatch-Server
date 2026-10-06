@@ -134,6 +134,73 @@ func (a *App) integrationTransRunnerSubmitTranscode(w http.ResponseWriter, r *ht
 	})
 }
 
+// integrationTransRunnerSubmitDedupe submits a media-duplicate job to
+// TransRunner using an HWatch-relative input. TransRunner fetches the
+// server-filtered candidates from HWatch itself; HWatch sends no candidates,
+// absolute paths or algorithm settings.
+func (a *App) integrationTransRunnerSubmitDedupe(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		VideoID string `json:"video_id"`
+		Force   bool   `json:"force"`
+	}
+	if err := decode(r, &input); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	cfg, _ := a.store.Settings()
+	if !cfg.EnableTransRunner {
+		fail(w, http.StatusConflict, errors.New("TransRunner 未启用"))
+		return
+	}
+	if strings.TrimSpace(cfg.TransRunnerURL) == "" {
+		fail(w, http.StatusConflict, errors.New("尚未配置 TransRunner 地址"))
+		return
+	}
+	v, err := a.store.Video(input.VideoID)
+	if err != nil {
+		fail(w, http.StatusNotFound, errors.New("视频不存在"))
+		return
+	}
+	if v.Status != "completed" {
+		fail(w, http.StatusConflict, errors.New("只有已下载媒体可以提交到 TransRunner"))
+		return
+	}
+	rel, err := mediaRelativePath(cfg.DownloadDir, mediaPathOf(v))
+	if err != nil {
+		fail(w, http.StatusConflict, errors.New("媒体路径不在媒体根目录内"))
+		return
+	}
+	if !input.Force {
+		if existing, e := a.store.LatestTransRunnerSubmission(v.ID, "media_duplicate", ""); e == nil && existing.ID != 0 {
+			respond(w, http.StatusConflict, map[string]any{"code": "already_submitted", "error": "该任务已发送到 TransRunner", "runner_job_id": existing.RunnerJobID})
+			return
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	job, err := a.transRunnerClient(cfg).CreateJob(ctx, transrunner.CreateJobRequest{
+		Kind:  "media_duplicate",
+		Input: transrunner.HWInput{Type: "hwatch", VideoID: v.ID, MediaRelativePath: rel},
+	})
+	if err != nil {
+		_ = a.store.AddAudit("admin", "transrunner_job_submitted", "video", v.ID, "failed", map[string]any{"operation": "media_duplicate", "error": transRunnerErrorMessage(err)})
+		transRunnerFailure(w, err)
+		return
+	}
+	submissionID, err := a.store.AddTransRunnerSubmission(v.ID, "media_duplicate", "", job.ID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	_ = a.store.AddAudit("admin", "transrunner_job_submitted", "video", v.ID, "success", map[string]any{"operation": "media_duplicate", "runner_job_id": job.ID})
+	respond(w, http.StatusAccepted, map[string]any{
+		"status":        "submitted",
+		"runner_job_id": job.ID,
+		"operation":     "media_duplicate",
+		"submission_id": submissionID,
+	})
+}
+
 func transRunnerErrorMessage(err error) string {
 	var target *transrunner.Error
 	if errors.As(err, &target) {

@@ -541,5 +541,6 @@ HWatch → TransRunner（管理员会话 + CSRF）：
 
 - `POST /api/integrations/transrunner/test`：调用 TransRunner `/health` 与 `/api/v1/capabilities`，返回 `{ok,version,platform,capabilities}`；不返回 Token。
 - `POST /api/integrations/transrunner/submit/transcode`：`{video_id, profile?, force?}`，向 TransRunner `/api/v1/jobs` 提交转码任务，只发送 `input.type="hwatch"` 的相对路径；返回 `202 {runner_job_id}`。重复提交返回 `409 already_submitted`，可用 `force:true` 重新提交。HWatch 不轮询、不同步进度、不镜像 Runner 状态。
+- `POST /api/integrations/transrunner/submit/dedupe`：`{video_id, force?}`，以 `kind="media_duplicate"` + `input.type="hwatch"` 提交内容去重任务（不发送候选或算法参数）；TransRunner 自行调用 HWatch 的 `dedupe-candidates` 获取候选并回写结果。返回 `202 {runner_job_id}`，重复提交同样 `409`。
 
-TransRunner 连接设置：`enable_transrunner`、`transrunner_url`、`transrunner_default_profile`，以及只写不回的 `transrunner_api_token`（`GET /api/settings` 只返回 `transrunner_token_configured`；空值不改变，`transrunner_api_token_clear:true` 清除）。内容去重提交依赖 TransRunner 新增 HTTP 契约，当前尚未启用。
+TransRunner 连接设置：`enable_transrunner`、`transrunner_url`、`transrunner_default_profile`，以及只写不回的 `transrunner_api_token`（`GET /api/settings` 只返回 `transrunner_token_configured`；空值不改变，`transrunner_api_token_clear:true` 清除）。内容去重与转码只在显式 API/UI 提交时发生，没有自动或全库调度。

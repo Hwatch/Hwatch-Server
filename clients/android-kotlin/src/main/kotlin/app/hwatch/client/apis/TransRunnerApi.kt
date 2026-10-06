@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.CreateTransRunnerTokenRequest
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.SubmitDedupeToTransRunnerRequest
 import app.hwatch.client.models.SubmitTranscodeToTransRunnerRequest
 import app.hwatch.client.models.TransRunnerDedupeCandidates
 import app.hwatch.client.models.TransRunnerDuplicateResult
@@ -54,6 +55,22 @@ interface TransRunnerApi {
      */
     @DELETE("api/integrations/transrunner/token")
     fun revokeTransRunnerToken(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/integrations/transrunner/submit/dedupe
+     * 
+     * 提交内容去重任务到 TransRunner（kind&#x3D;media_duplicate，input.type&#x3D;hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。
+     * Responses:
+     *  - 202: 成功
+     *  - 409: 请求失败
+     *  - 502: 请求失败
+     *
+     * @param xCSRFToken 
+     * @param submitDedupeToTransRunnerRequest 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/integrations/transrunner/submit/dedupe")
+    fun submitDedupeToTransRunner(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body submitDedupeToTransRunnerRequest: SubmitDedupeToTransRunnerRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * POST api/integrations/transrunner/submit/transcode

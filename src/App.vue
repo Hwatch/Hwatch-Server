@@ -534,6 +534,28 @@ async function submitTranscode(video: Video) {
     }
   });
 }
+async function submitDedupe(video: Video) {
+  await act(async () => {
+    try {
+      const result = await api("/api/integrations/transrunner/submit/dedupe", {
+        method: "POST",
+        body: JSON.stringify({ video_id: video.video_id }),
+      });
+      notice.value = `已发送到 TransRunner · ${result.runner_job_id}`;
+    } catch (e) {
+      if (String(e).includes("已发送到 TransRunner")) {
+        if (!confirm("该内容去重任务已发送到 TransRunner，仍要重新提交吗？")) return;
+        const result = await api("/api/integrations/transrunner/submit/dedupe", {
+          method: "POST",
+          body: JSON.stringify({ video_id: video.video_id, force: true }),
+        });
+        notice.value = `已重新发送到 TransRunner · ${result.runner_job_id}`;
+      } else {
+        throw e;
+      }
+    }
+  });
+}
 async function refreshDashboard() {
   try {
     data.value = await api(
@@ -1834,6 +1856,7 @@ watch(
             <div class="library-actions">
               <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
               <button v-if="view === 'library' && settings.enable_transrunner" :disabled="busy" @click="submitTranscode(v)">TransRunner</button>
+              <button v-if="view === 'library' && settings.enable_transrunner" :disabled="busy" @click="submitDedupe(v)">去重</button>
               <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
             </div>
           </article>
@@ -1972,7 +1995,7 @@ watch(
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
-      <div v-if="selected.status === 'completed' && settings.enable_transrunner" class="player-actions"><button :disabled="busy" @click="submitTranscode(selected)">发送转码到 TransRunner</button></div>
+      <div v-if="selected.status === 'completed' && settings.enable_transrunner" class="player-actions"><button :disabled="busy" @click="submitTranscode(selected)">发送转码到 TransRunner</button><button :disabled="busy" @click="submitDedupe(selected)">发送去重到 TransRunner</button></div>
     </div>
   </div>
 </template>

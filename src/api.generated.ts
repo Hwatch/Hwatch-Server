@@ -648,6 +648,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/transrunner/submit/dedupe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 提交内容去重任务到 TransRunner（kind=media_duplicate，input.type=hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。 */
+        post: operations["submitDedupeToTransRunner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/transrunner/v1/media/{video_id}": {
         parameters: {
             query?: never;
@@ -1757,6 +1774,30 @@ export interface operations {
                 "application/json": {
                     video_id: string;
                     profile?: string;
+                    /** @default false */
+                    force?: boolean;
+                };
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    submitDedupeToTransRunner: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    video_id: string;
                     /** @default false */
                     force?: boolean;
                 };

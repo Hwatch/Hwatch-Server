@@ -17,6 +17,7 @@ docs/RefreshNFORequest.md
 docs/RestoreBackupRequest.md
 docs/ReviewDuplicateCandidatesBatchRequest.md
 docs/SettingsApi.md
+docs/SubmitDedupeToTransRunnerRequest.md
 docs/SubmitTranscodeToTransRunnerRequest.md
 docs/SubscriptionsApi.md
 docs/ToggleDownloadsRequest.md
@@ -62,6 +63,7 @@ src/main/kotlin/app/hwatch/client/models/RecoveryStatusSummary.kt
 src/main/kotlin/app/hwatch/client/models/RefreshNFORequest.kt
 src/main/kotlin/app/hwatch/client/models/RestoreBackupRequest.kt
 src/main/kotlin/app/hwatch/client/models/ReviewDuplicateCandidatesBatchRequest.kt
+src/main/kotlin/app/hwatch/client/models/SubmitDedupeToTransRunnerRequest.kt
 src/main/kotlin/app/hwatch/client/models/SubmitTranscodeToTransRunnerRequest.kt
 src/main/kotlin/app/hwatch/client/models/ToggleDownloadsRequest.kt
 src/main/kotlin/app/hwatch/client/models/TransRunnerDedupeCandidate.kt
@@ -73,4 +75,4 @@ src/main/kotlin/app/hwatch/client/models/TransRunnerTranscodeResult.kt
 src/main/kotlin/app/hwatch/client/models/UpdateSubscriptionRequest.kt
 src/main/kotlin/app/hwatch/client/models/Video.kt
 src/main/kotlin/app/hwatch/client/models/VideoPage.kt
-src/test/kotlin/app/hwatch/client/models/SubmitTranscodeToTransRunnerRequestTest.kt
+src/test/kotlin/app/hwatch/client/models/SubmitDedupeToTransRunnerRequestTest.kt
