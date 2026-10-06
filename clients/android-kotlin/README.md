@@ -85,6 +85,13 @@ All URIs are relative to *http://localhost*
 | *SubscriptionsApi* | [**searchCreators**](docs/SubscriptionsApi.md#searchcreators) | **GET** api/creators/search |  |
 | *SubscriptionsApi* | [**subscriptionAvatar**](docs/SubscriptionsApi.md#subscriptionavatar) | **GET** avatar/{slug} |  |
 | *SubscriptionsApi* | [**updateSubscription**](docs/SubscriptionsApi.md#updatesubscription) | **PATCH** api/subscriptions/{slug} |  |
+| *TransRunnerApi* | [**createTransRunnerToken**](docs/TransRunnerApi.md#createtransrunnertoken) | **POST** api/integrations/transrunner/token |  |
+| *TransRunnerApi* | [**getTransRunnerToken**](docs/TransRunnerApi.md#gettransrunnertoken) | **GET** api/integrations/transrunner/token |  |
+| *TransRunnerApi* | [**revokeTransRunnerToken**](docs/TransRunnerApi.md#revoketransrunnertoken) | **DELETE** api/integrations/transrunner/token |  |
+| *TransRunnerApi* | [**transRunnerDedupeCandidates**](docs/TransRunnerApi.md#transrunnerdedupecandidates) | **GET** api/transrunner/v1/media/{video_id}/dedupe-candidates |  |
+| *TransRunnerApi* | [**transRunnerDuplicateResults**](docs/TransRunnerApi.md#transrunnerduplicateresults) | **POST** api/transrunner/v1/duplicate-results |  |
+| *TransRunnerApi* | [**transRunnerMedia**](docs/TransRunnerApi.md#transrunnermedia) | **GET** api/transrunner/v1/media/{video_id} |  |
+| *TransRunnerApi* | [**transRunnerTranscodeResults**](docs/TransRunnerApi.md#transrunnertranscoderesults) | **POST** api/transrunner/v1/transcode-results |  |
 | *TranslationApi* | [**exportTranslations**](docs/TranslationApi.md#exporttranslations) | **GET** api/translations/export |  |
 | *TranslationApi* | [**importTranslations**](docs/TranslationApi.md#importtranslations) | **POST** api/translations/import |  |
 | *TranslationApi* | [**refreshNFO**](docs/TranslationApi.md#refreshnfo) | **POST** api/plex/refresh-nfo |  |
@@ -94,6 +101,7 @@ All URIs are relative to *http://localhost*
 ## Documentation for Models
 
  - [app.hwatch.client.models.CreateSubscriptionRequest](docs/CreateSubscriptionRequest.md)
+ - [app.hwatch.client.models.CreateTransRunnerTokenRequest](docs/CreateTransRunnerTokenRequest.md)
  - [app.hwatch.client.models.Credentials](docs/Credentials.md)
  - [app.hwatch.client.models.Error](docs/Error.md)
  - [app.hwatch.client.models.Health](docs/Health.md)
@@ -106,6 +114,12 @@ All URIs are relative to *http://localhost*
  - [app.hwatch.client.models.RestoreBackupRequest](docs/RestoreBackupRequest.md)
  - [app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest](docs/ReviewDuplicateCandidatesBatchRequest.md)
  - [app.hwatch.client.models.ToggleDownloadsRequest](docs/ToggleDownloadsRequest.md)
+ - [app.hwatch.client.models.TransRunnerDedupeCandidate](docs/TransRunnerDedupeCandidate.md)
+ - [app.hwatch.client.models.TransRunnerDedupeCandidates](docs/TransRunnerDedupeCandidates.md)
+ - [app.hwatch.client.models.TransRunnerDuplicateMatch](docs/TransRunnerDuplicateMatch.md)
+ - [app.hwatch.client.models.TransRunnerDuplicateResult](docs/TransRunnerDuplicateResult.md)
+ - [app.hwatch.client.models.TransRunnerMedia](docs/TransRunnerMedia.md)
+ - [app.hwatch.client.models.TransRunnerTranscodeResult](docs/TransRunnerTranscodeResult.md)
  - [app.hwatch.client.models.UpdateSubscriptionRequest](docs/UpdateSubscriptionRequest.md)
  - [app.hwatch.client.models.Video](docs/Video.md)
  - [app.hwatch.client.models.VideoPage](docs/VideoPage.md)
@@ -122,4 +136,9 @@ Authentication schemes defined for the API:
 - **Type**: API key
 - **API key parameter name**: hwatch_session
 - **Location**: 
+
+<a id="integrationBearer"></a>
+### integrationBearer
+
+- **Type**: HTTP Bearer Token authentication (opaque-service-token)
 

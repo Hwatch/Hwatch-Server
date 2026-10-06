@@ -518,6 +518,21 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - 不要依赖字段顺序；未知字段应忽略。
 - 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
 
-## 外部计算（Future）
+## TransRunner Service API
 
-HWatch 不再内置外部计算节点的注册、心跳、租约或任务调度。去重分析与转码将由独立的 TransRunner 服务提供，集成接口（HWatch → TransRunner 创建任务，TransRunner → HWatch 回写结果）将在后续版本单独设计，本文件暂不描述。
+HWatch 不再内置外部计算节点的注册、心跳、租约或任务调度。它以受限、可撤销的 Service Token 暴露回调 API 供外部计算服务（TransRunner）使用，详细契约见 [docs/TRANSRUNNER_INTEGRATION.md](docs/TRANSRUNNER_INTEGRATION.md)。
+
+管理接口（管理员会话 + CSRF）：
+
+- `GET /api/integrations/transrunner/token`：仅返回状态（是否已创建、创建/最近使用时间、scopes），绝不返回明文令牌。
+- `POST /api/integrations/transrunner/token`：创建令牌，明文仅返回一次；已存在有效令牌时需 `{"rotate":true}` 轮换。
+- `DELETE /api/integrations/transrunner/token`：撤销，之后请求立即 `401`。
+
+服务接口（`Authorization: Bearer <service-token>`）：
+
+- `GET /api/transrunner/v1/media/{video_id}`：scope `read_media`，返回相对媒体路径与媒体元数据，不含绝对路径或凭据。
+- `GET /api/transrunner/v1/media/{video_id}/dedupe-candidates`：scope `read_dedupe_candidates`，候选由 HWatch 服务端筛选，`?limit=` 默认 20、上限 100。
+- `POST /api/transrunner/v1/duplicate-results`：scope `write_duplicate_results`，只写重复候选，绝不删除/替换媒体。
+- `POST /api/transrunner/v1/transcode-results`：scope `write_transcode_results`，接收 `.transrunner/` 暂存产物，由 HWatch 用 `ffprobe` 校验并记录 `pending` 结果，不替换源文件。
+
+令牌缺失/无效/已撤销返回 `401`；缺少所需 scope 返回 `403`。HWatch 主动向 TransRunner 提交任务（HWatch → TransRunner）将在后续版本设计。

@@ -1856,6 +1856,7 @@ watch(
         <SettingsView
           v-else
           :settings="settings"
+          :api="api"
           :busy="busy"
           :import-html="importHTML"
           :demo-mode="demoMode"

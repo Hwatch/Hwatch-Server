@@ -6,13 +6,21 @@ type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_se
 type Backup={name:string;size:number;created_at:string;sha256:string;valid:boolean}
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
-const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number}>()
+type API=(path:string,init?:RequestInit)=>Promise<any>
+const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
 const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
 const toggle=(name:string)=>open.value=open.value===name?'':name
 const recovery=ref<any>({available:false})
-onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(response.ok)recovery.value=await response.json()}catch{}})
+const trStatus=ref<{configured:boolean;created_at:string;last_used_at:string;scopes:string[]}>({configured:false,created_at:'',last_used_at:'',scopes:[]})
+const trNewToken=ref(''),trBusy=ref(false),trError=ref('')
+const trScopeLabel:Record<string,string>={read_media:'读取媒体',read_dedupe_candidates:'获取去重候选',write_duplicate_results:'写入重复结果',write_transcode_results:'写入转码结果'}
+async function loadTRToken(){try{trStatus.value=await props.api('/api/integrations/transrunner/token')}catch{}}
+async function createTRToken(){trBusy.value=true;trError.value='';try{const result=await props.api('/api/integrations/transrunner/token',{method:'POST',body:JSON.stringify({rotate:trStatus.value.configured})});trNewToken.value=result.token;await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
+async function revokeTRToken(){if(!confirm('撤销 TransRunner 服务令牌？撤销后所有回调请求将立即失效。'))return;trBusy.value=true;try{await props.api('/api/integrations/transrunner/token',{method:'DELETE'});await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
+async function copyTRToken(){try{await navigator.clipboard.writeText(trNewToken.value)}catch{}}
+onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(response.ok)recovery.value=await response.json()}catch{};void loadTRToken()})
 </script>
 
 <template>
@@ -91,6 +99,23 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </div>
     </section>
 
+    <section class="setting-card" :class="{open:open==='transrunner'}">
+      <button class="setting-head" type="button" :aria-expanded="open==='transrunner'" @click="toggle('transrunner')">
+        <span class="setting-symbol"><NavIcon name="network"/></span><span><b>TransRunner 集成</b><small>为外部计算服务签发受限的回调令牌</small></span><i>⌄</i>
+      </button>
+      <div v-if="open==='transrunner'" class="setting-body">
+        <p><b>TransRunner 回调 API</b></p>
+        <small>HWatch 只负责媒体库：外部服务读取媒体信息与去重候选，并回写重复/转码结果。HWatch 不管理计算节点、任务进度或在线状态。</small>
+        <p>状态：{{trStatus.configured?'已创建':'未创建'}}<template v-if="trStatus.configured"> · 创建于 {{trStatus.created_at}} · 最近使用 {{trStatus.last_used_at||'尚未'}}</template></p>
+        <div class="display-setting"><span><b>权限</b></span><small>✓ 读取媒体 · ✓ 获取去重候选 · ✓ 写入重复结果 · ✓ 写入转码结果</small></div>
+        <p v-if="trError" class="error">{{trError}}</p>
+        <div class="actions">
+          <button class="primary" :disabled="trBusy" @click="createTRToken">{{trStatus.configured?'轮换令牌':'生成 Token'}}</button>
+          <button v-if="trStatus.configured" class="danger" :disabled="trBusy" @click="revokeTRToken">撤销</button>
+        </div>
+      </div>
+    </section>
+
     <section class="setting-card" :class="{open:open==='import'}">
       <button class="setting-head" type="button" :aria-expanded="open==='import'" @click="toggle('import')">
         <span class="setting-symbol"><NavIcon name="import"/></span><span><b>数据导入</b><small>粘贴视频详情区域的 HTML 数据</small></span><i>⌄</i>
@@ -100,5 +125,15 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <button :disabled="!importHtml||busy" @click="emit('import')">解析并导入</button>
       </div>
     </section>
+
+    <div v-if="trNewToken" class="modal" @click.self="trNewToken=''">
+      <div class="player" style="max-width:560px">
+        <button class="close" @click="trNewToken=''">关闭</button>
+        <h2>服务令牌只显示一次</h2>
+        <p>请立即复制并保存到 TransRunner。关闭后无法再次查看。</p>
+        <code style="display:block;word-break:break-all;background:#0f1115;padding:14px;border-radius:8px;color:#e5b951">{{trNewToken}}</code>
+        <div class="actions" style="margin-top:14px"><button class="primary" @click="copyTRToken">复制</button></div>
+      </div>
+    </div>
   </div>
 </template>
