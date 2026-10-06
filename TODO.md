@@ -22,7 +22,7 @@
 HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任务调度。去重分析与转码将由独立的 TransRunner 服务提供，集成在后续版本实现：
 
 - [x] HWatch → TransRunner：使用 TransRunner Bearer API 提交转码任务（保存 `transrunner_url`、API Token 与默认 profile；只发送相对路径输入，不镜像进度/队列）。
-- [ ] HWatch → TransRunner：提交内容去重任务。阻塞于 TransRunner 缺少 HTTP dedupe/media_duplicate 契约与 `input.type="hwatch"`。
+- [x] HWatch → TransRunner：以 `kind=media_duplicate` + `input.type="hwatch"` 提交内容去重任务（不发送候选，TransRunner 自行拉取候选并回写）；仅显式提交，不做自动/全库调度。
 - [x] TransRunner → HWatch：提供受限 Service Token 的 callback API，仅允许读取媒体元数据与去重候选、写回重复结果与转码结果；禁止删除媒体、管理用户/订阅或改设置。
 - [x] 复用现有重复审查与 `duplicate_candidates`，由 TransRunner 回写 classification、backend、algorithm_version 与结构化 metrics。
 - [ ] 转码结果的人工确认与原子替换（当前只记录 `pending` transcode result，不替换源文件）。

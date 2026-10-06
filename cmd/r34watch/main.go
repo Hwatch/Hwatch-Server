@@ -1830,6 +1830,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("DELETE /api/integrations/transrunner/token", a.integrationTokenDelete)
 	mux.HandleFunc("POST /api/integrations/transrunner/test", a.integrationTransRunnerTest)
 	mux.HandleFunc("POST /api/integrations/transrunner/submit/transcode", a.integrationTransRunnerSubmitTranscode)
+	mux.HandleFunc("POST /api/integrations/transrunner/submit/dedupe", a.integrationTransRunnerSubmitDedupe)
 	mux.HandleFunc("GET /api/transrunner/v1/media/{video_id}", a.requireIntegrationScope("read_media", a.trGetMedia))
 	mux.HandleFunc("GET /api/transrunner/v1/media/{video_id}/dedupe-candidates", a.requireIntegrationScope("read_dedupe_candidates", a.trDedupeCandidates))
 	mux.HandleFunc("POST /api/transrunner/v1/duplicate-results", a.requireIntegrationScope("write_duplicate_results", a.trDuplicateResults))

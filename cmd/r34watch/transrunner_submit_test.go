@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -115,6 +116,142 @@ func TestTransRunnerSubmitTranscode(t *testing.T) {
 	// duplicate click protected unless forced
 	requireStatus(t, submit(map[string]any{"video_id": "t:src"}), http.StatusConflict)
 	requireStatus(t, submit(map[string]any{"video_id": "t:src", "force": true}), http.StatusAccepted)
+}
+
+func TestTransRunnerSubmitDedupe(t *testing.T) {
+	var rawBody []byte
+	runner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/jobs" {
+			rawBody, _ = io.ReadAll(r.Body)
+			_, _ = w.Write([]byte(`{"id":"job_md_1","state":"queued"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer runner.Close()
+
+	mediaRoot := t.TempDir()
+	a, s := newTransRunnerTestApp(t, mediaRoot)
+	defer s.Close()
+	seedTRVideo(t, s, mediaRoot, "t:src", 10, "sha-src", "A/src.mp4")
+	cfg, _ := s.Settings()
+	cfg.EnableTransRunner = true
+	cfg.TransRunnerURL = runner.URL
+	cfg.TransRunnerAPIToken = "runner-token"
+	if err := s.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
+	}
+	uid, _ := s.CreateFirstAdmin("admin", "x")
+	cookie, csrf := "c3", "s3"
+	if err := s.CreateSession(tokenHash(cookie), uid, csrf, time.Now().UTC().Add(time.Hour).Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(a.router(mediaRoot))
+	defer server.Close()
+	client := server.Client()
+
+	submit := func(body map[string]any) *http.Response {
+		payload, _ := json.Marshal(body)
+		req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/integrations/transrunner/submit/dedupe", bytes.NewReader(payload))
+		req.Header.Set("Cookie", "hwatch_session="+cookie)
+		req.Header.Set("X-CSRF-Token", csrf)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	res := submit(map[string]any{"video_id": "t:src"})
+	if res.StatusCode != http.StatusAccepted {
+		buf := make([]byte, 256)
+		n, _ := res.Body.Read(buf)
+		t.Fatalf("status=%d body=%s", res.StatusCode, buf[:n])
+	}
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	res.Body.Close()
+	if out["runner_job_id"] != "job_md_1" || out["operation"] != "media_duplicate" {
+		t.Fatalf("out=%v", out)
+	}
+
+	var payload struct {
+		Kind  string `json:"kind"`
+		Input struct {
+			Type              string `json:"type"`
+			VideoID           string `json:"video_id"`
+			MediaRelativePath string `json:"media_relative_path"`
+		} `json:"input"`
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Kind != "media_duplicate" || payload.Input.Type != "hwatch" || payload.Input.VideoID != "t:src" || payload.Input.MediaRelativePath != "A/src.mp4" {
+		t.Fatalf("payload=%+v", payload)
+	}
+	if payload.Profile != "" {
+		t.Fatalf("dedupe must not send a profile: %q", payload.Profile)
+	}
+	for _, forbidden := range []string{"candidates", "callback", "/mnt/", "/Volumes/"} {
+		if bytes.Contains(rawBody, []byte(forbidden)) {
+			t.Fatalf("payload must not contain %q: %s", forbidden, rawBody)
+		}
+	}
+
+	var op, profile, jobID string
+	if err := s.DB.QueryRow("SELECT operation,profile,runner_job_id FROM transrunner_submissions WHERE video_id='t:src'").Scan(&op, &profile, &jobID); err != nil {
+		t.Fatal(err)
+	}
+	if op != "media_duplicate" || profile != "" || jobID != "job_md_1" {
+		t.Fatalf("submission op=%q profile=%q job=%q", op, profile, jobID)
+	}
+
+	requireStatus(t, submit(map[string]any{"video_id": "t:src"}), http.StatusConflict)
+	requireStatus(t, submit(map[string]any{"video_id": "t:src", "force": true}), http.StatusAccepted)
+	requireStatus(t, submit(map[string]any{"video_id": "t:missing"}), http.StatusNotFound)
+}
+
+func TestTransRunnerSubmitDedupeErrorMapping(t *testing.T) {
+	mediaRoot := t.TempDir()
+	a, s := newTransRunnerTestApp(t, mediaRoot)
+	defer s.Close()
+	seedTRVideo(t, s, mediaRoot, "t:src", 10, "sha-src", "A/src.mp4")
+	uid, _ := s.CreateFirstAdmin("admin", "x")
+	cookie, csrf := "c4", "s4"
+	if err := s.CreateSession(tokenHash(cookie), uid, csrf, time.Now().UTC().Add(time.Hour).Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		status int
+	}{
+		{"unauthorized", http.StatusUnauthorized},
+		{"server", http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status) }))
+			defer runner.Close()
+			cfg, _ := s.Settings()
+			cfg.EnableTransRunner = true
+			cfg.TransRunnerURL = runner.URL
+			cfg.TransRunnerAPIToken = "tok"
+			_ = s.SaveSettings(cfg)
+			server := httptest.NewServer(a.router(mediaRoot))
+			defer server.Close()
+			payload, _ := json.Marshal(map[string]any{"video_id": "t:src", "force": true})
+			req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/integrations/transrunner/submit/dedupe", bytes.NewReader(payload))
+			req.Header.Set("Cookie", "hwatch_session="+cookie)
+			req.Header.Set("X-CSRF-Token", csrf)
+			req.Header.Set("Content-Type", "application/json")
+			res, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireStatus(t, res, http.StatusBadGateway)
+		})
+	}
 }
 
 func TestTransRunnerTestConnectionEndpoint(t *testing.T) {
