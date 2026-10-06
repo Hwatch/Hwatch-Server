@@ -236,6 +236,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description 媒体分页列表。管理员会话可用；持有 read_media scope 的 Service Token（integrationBearer）也可只读调用以枚举媒体，此时响应中的 file_path/plex_path 会被清空。 */
         get: operations["listVideos"];
         put?: never;
         post?: never;
@@ -614,57 +615,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/integrations/transrunner/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。 */
-        post: operations["testTransRunnerConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/integrations/transrunner/submit/transcode": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。 */
-        post: operations["submitTranscodeToTransRunner"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/integrations/transrunner/submit/dedupe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 提交内容去重任务到 TransRunner（kind=media_duplicate，input.type=hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。 */
-        post: operations["submitDedupeToTransRunner"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/transrunner/v1/media/{video_id}": {
         parameters: {
             query?: never;
@@ -725,7 +675,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 需要 write_transcode_results。接收暂存产物并由 HWatch 用 ffprobe 验证，只记录 pending 结果，不替换源文件。 */
+        /** @description 需要 write_transcode_results。接收暂存产物并由 HWatch 自己 ffprobe 验证。默认只记录 pending 结果，不替换源文件；仅当 apply_mode=replace_source 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、source_sha256 一致）时才由 HWatch 原子替换源文件并刷新元数据。 */
         post: operations["transRunnerTranscodeResults"];
         delete?: never;
         options?: never;
@@ -838,6 +788,11 @@ export interface components {
             output_relative_path: string;
             /** @example hevc-1080p */
             profile?: string;
+            /**
+             * @description 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。
+             * @enum {string}
+             */
+            apply_mode?: "replace_source";
         };
         RecoveryStatus: {
             available: boolean;
@@ -1744,71 +1699,6 @@ export interface operations {
             200: components["responses"]["JSON"];
         };
     };
-    testTransRunnerConnection: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": components["parameters"]["CSRF"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            409: components["responses"]["Error"];
-            502: components["responses"]["Error"];
-        };
-    };
-    submitTranscodeToTransRunner: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": components["parameters"]["CSRF"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    video_id: string;
-                    profile?: string;
-                    /** @default false */
-                    force?: boolean;
-                };
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
-            409: components["responses"]["Error"];
-            502: components["responses"]["Error"];
-        };
-    };
-    submitDedupeToTransRunner: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": components["parameters"]["CSRF"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    video_id: string;
-                    /** @default false */
-                    force?: boolean;
-                };
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
-            409: components["responses"]["Error"];
-            502: components["responses"]["Error"];
-        };
-    };
     transRunnerMedia: {
         parameters: {
             query?: never;
@@ -1895,6 +1785,7 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["JSON"];
             202: components["responses"]["JSON"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];

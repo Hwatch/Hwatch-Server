@@ -29,7 +29,7 @@ Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体�
 - 结构化审计、任务状态历史、持久通知和下载器健康检查
 - iPhone Safari 添加到主屏幕所需的 Manifest、图标和安全区域适配
 
-视频计算（去重分析、转码）由独立的 TransRunner 服务提供。HWatch 是媒体库权威，不再承担计算节点注册、心跳、租约或任务调度；它以受限、可撤销的 Service Token 暴露回调 API 供 TransRunner 读取媒体/候选并回写结果，并可通过 TransRunner 现有 API 提交转码与内容去重任务（使用相对路径输入，不镜像进度/队列，也不做任何自动或全库调度）。详见 [docs/TRANSRUNNER_INTEGRATION.md](docs/TRANSRUNNER_INTEGRATION.md)。
+视频计算（去重分析、转码）由独立运行的 TransRunner 服务主导。职责边界：**HWatch 是媒体库权威**（内容获取、下载、订阅、元数据、Plex/NFO、媒体文件最终落库与安全替换、去重/转码结果持久化）；**TransRunner 是计算权威**（批量扫描、H.264→HEVC、VDF 去重、FFmpeg/VideoToolbox、任务队列与进度）。HWatch 不再启动或控制 TransRunner 任务、不轮询进度，也不做下载前去重；它只签发受限、可撤销的 Service Token，供 TransRunner 读取媒体数据并回写结果。详见 [docs/TRANSRUNNER_INTEGRATION.md](docs/TRANSRUNNER_INTEGRATION.md)。
 
 ## 平台适配器
 

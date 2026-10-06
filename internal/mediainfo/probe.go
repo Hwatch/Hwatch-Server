@@ -15,18 +15,24 @@ type Info struct {
 	FrameRate                         float64
 	BitRate                           int64
 	DurationSeconds                   float64
+	ColorPrimaries, ColorTransfer     string
+	ColorSpace, SampleAspectRatio     string
 }
 
 type probeResult struct {
 	Streams []struct {
-		CodecType        string `json:"codec_type"`
-		CodecName        string `json:"codec_name"`
-		AvgFrameRate     string `json:"avg_frame_rate"`
-		BitRate          string `json:"bit_rate"`
-		Width            int    `json:"width"`
-		Height           int    `json:"height"`
-		BitsPerRawSample string `json:"bits_per_raw_sample"`
-		PixelFormat      string `json:"pix_fmt"`
+		CodecType         string `json:"codec_type"`
+		CodecName         string `json:"codec_name"`
+		AvgFrameRate      string `json:"avg_frame_rate"`
+		BitRate           string `json:"bit_rate"`
+		Width             int    `json:"width"`
+		Height            int    `json:"height"`
+		BitsPerRawSample  string `json:"bits_per_raw_sample"`
+		PixelFormat       string `json:"pix_fmt"`
+		ColorPrimaries    string `json:"color_primaries"`
+		ColorTransfer     string `json:"color_transfer"`
+		ColorSpace        string `json:"color_space"`
+		SampleAspectRatio string `json:"sample_aspect_ratio"`
 	} `json:"streams"`
 	Format struct {
 		FormatName string `json:"format_name"`
@@ -36,7 +42,7 @@ type probeResult struct {
 }
 
 func Probe(ctx context.Context, path string) (Info, error) {
-	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,avg_frame_rate,bit_rate,bits_per_raw_sample,pix_fmt:format=format_name,bit_rate,duration", "-of", "json", path).Output()
+	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,avg_frame_rate,bit_rate,bits_per_raw_sample,pix_fmt,color_primaries,color_transfer,color_space,sample_aspect_ratio:format=format_name,bit_rate,duration", "-of", "json", path).Output()
 	if err != nil {
 		return Info{}, fmt.Errorf("ffprobe: %w", err)
 	}
@@ -67,6 +73,8 @@ func Parse(raw []byte) (Info, error) {
 				if info.BitRate == 0 {
 					info.BitRate = integer(stream.BitRate)
 				}
+				info.ColorPrimaries, info.ColorTransfer = strings.ToLower(stream.ColorPrimaries), strings.ToLower(stream.ColorTransfer)
+				info.ColorSpace, info.SampleAspectRatio = strings.ToLower(stream.ColorSpace), stream.SampleAspectRatio
 			}
 		case "audio":
 			if info.AudioCodec == "" {

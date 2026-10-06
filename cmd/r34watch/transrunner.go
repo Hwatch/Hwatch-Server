@@ -133,6 +133,50 @@ func transRunnerTolerance(duration int64) int64 {
 	return tolerance
 }
 
+// integrationTokenKey carries the authenticated Service Token through the
+// request context so standard read handlers can tailor their response.
+type integrationTokenKey struct{}
+
+func integrationTokenFromContext(r *http.Request) (store.IntegrationToken, bool) {
+	token, ok := r.Context().Value(integrationTokenKey{}).(store.IntegrationToken)
+	return token, ok
+}
+
+// integrationReadablePaths are standard read-only endpoints a Service Token with
+// read_media may call in addition to /api/transrunner/v1.
+var integrationReadablePaths = map[string]bool{
+	"/api/videos": true,
+}
+
+// integrationReadableRequest authenticates a read_media Service Token for a
+// whitelisted read-only path. It is used by requireAuth as a second, scoped auth
+// path so TransRunner can enumerate the library without an admin session.
+func (a *App) integrationReadableRequest(r *http.Request) (store.IntegrationToken, bool) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return store.IntegrationToken{}, false
+	}
+	if !integrationReadablePaths[r.URL.Path] {
+		return store.IntegrationToken{}, false
+	}
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		return store.IntegrationToken{}, false
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+	if raw == "" {
+		return store.IntegrationToken{}, false
+	}
+	token, err := a.store.IntegrationTokenByHash(tokenHash(raw))
+	if err != nil {
+		return store.IntegrationToken{}, false
+	}
+	if !hasScope(parseScopes(token.ScopesJSON), "read_media") {
+		return store.IntegrationToken{}, false
+	}
+	a.touchIntegrationToken(token)
+	return token, true
+}
+
 // requireIntegrationScope authenticates a scoped bearer token and enforces the
 // required scope. Missing/invalid/revoked tokens are 401; a valid token without
 // the scope is 403.
@@ -146,7 +190,7 @@ func (a *App) requireIntegrationScope(scope string, next http.HandlerFunc) http.
 			integrationError(w, http.StatusForbidden, "insufficient_scope", "集成令牌缺少权限: "+scope)
 			return
 		}
-		next(w, r)
+		next(w, r.WithContext(context.WithValue(r.Context(), integrationTokenKey{}, token)))
 	}
 }
 
@@ -353,9 +397,15 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 		SourceSHA256       string `json:"source_sha256"`
 		OutputRelativePath string `json:"output_relative_path"`
 		Profile            string `json:"profile"`
+		ApplyMode          string `json:"apply_mode"`
 	}
 	if err := decode(r, &input); err != nil {
 		integrationError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	applyMode := strings.TrimSpace(input.ApplyMode)
+	if applyMode != "" && applyMode != transcodeApplyReplace {
+		integrationError(w, http.StatusUnprocessableEntity, "invalid_apply_mode", "未知的 apply_mode")
 		return
 	}
 	v, err := a.store.Video(input.VideoID)
@@ -423,6 +473,26 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 		"bit_depth":        probe.BitDepth,
 		"duration_seconds": probe.DurationSeconds,
 	})
+	if applyMode == transcodeApplyReplace {
+		if applyErr := a.applyTranscodeResult(v, realOutput, input.SourceSHA256); applyErr != nil {
+			_, _ = a.store.AddTranscodeResult(store.TranscodeResult{VideoID: v.ID, RunnerJobID: input.RunnerJobID, SourceSHA256: input.SourceSHA256, OutputRelativePath: clean, Profile: input.Profile, ProbeJSON: string(probeJSON), Status: "failed"})
+			_ = a.store.AddAudit("integration:"+transRunnerName, "transcode_result_received", "video", v.ID, "failed", map[string]any{"profile": input.Profile, "apply_mode": applyMode})
+			if errors.Is(applyErr, errSourceChanged) {
+				integrationError(w, http.StatusConflict, "source_changed", "源媒体已变化，拒绝替换")
+				return
+			}
+			integrationError(w, http.StatusUnprocessableEntity, "apply_failed", applyErr.Error())
+			return
+		}
+		id, addErr := a.store.AddTranscodeResult(store.TranscodeResult{VideoID: v.ID, RunnerJobID: input.RunnerJobID, SourceSHA256: input.SourceSHA256, OutputRelativePath: clean, Profile: input.Profile, ProbeJSON: string(probeJSON), Status: "applied"})
+		if addErr != nil {
+			integrationError(w, http.StatusInternalServerError, "internal_error", addErr.Error())
+			return
+		}
+		_ = a.store.AddAudit("integration:"+transRunnerName, "transcode_result_received", "video", v.ID, "success", map[string]any{"result_id": id, "profile": input.Profile, "apply_mode": applyMode})
+		respond(w, http.StatusOK, map[string]any{"status": "applied", "id": id})
+		return
+	}
 	id, err := a.store.AddTranscodeResult(store.TranscodeResult{
 		VideoID:            v.ID,
 		RunnerJobID:        input.RunnerJobID,
@@ -437,7 +507,7 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.store.AddAudit("integration:"+transRunnerName, "transcode_result_received", "video", v.ID, "success", map[string]any{"result_id": id, "profile": input.Profile})
-	// The source is never replaced here; a validated result is only recorded.
+	// Without apply_mode the source is never replaced; only a pending result is recorded.
 	respond(w, http.StatusAccepted, map[string]any{"status": "validated", "id": id})
 }
 

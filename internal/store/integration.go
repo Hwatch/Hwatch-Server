@@ -70,6 +70,12 @@ func (s *Store) MediaFingerprint(videoID string) (size int64, sha256 string, err
 	return size, sha256, err
 }
 
+// SetVideoDuration updates the stored duration after a transcode apply.
+func (s *Store) SetVideoDuration(videoID string, duration int64) error {
+	_, err := s.DB.Exec("UPDATE videos SET duration_seconds=?,updated_at=? WHERE id=?", duration, Now(), videoID)
+	return err
+}
+
 // TranscodeResult is a validated-but-uncommitted transcode output staged by an
 // external service. HWatch does not manage runner jobs; this is only a result
 // record.

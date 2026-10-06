@@ -520,7 +520,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 ## TransRunner Service API
 
-HWatch 不再内置外部计算节点的注册、心跳、租约或任务调度。它以受限、可撤销的 Service Token 暴露回调 API 供外部计算服务（TransRunner）使用，详细契约见 [docs/TRANSRUNNER_INTEGRATION.md](docs/TRANSRUNNER_INTEGRATION.md)。
+职责边界：HWatch 是被动的媒体库权威（不再启动/控制计算任务、不轮询进度、不做下载前去重）；TransRunner 是计算权威，主动读取 HWatch 媒体并回写结果。HWatch 只签发受限、可撤销的 Service Token，详细契约见 [docs/TRANSRUNNER_INTEGRATION.md](docs/TRANSRUNNER_INTEGRATION.md)。
 
 管理接口（管理员会话 + CSRF）：
 
@@ -530,17 +530,10 @@ HWatch 不再内置外部计算节点的注册、心跳、租约或任务调度�
 
 服务接口（`Authorization: Bearer <service-token>`）：
 
+- `GET /api/videos`：scope `read_media`，标准媒体分页列表，用于枚举库；该令牌调用时响应中的 `file_path`/`plex_path` 会被清空。
 - `GET /api/transrunner/v1/media/{video_id}`：scope `read_media`，返回相对媒体路径与媒体元数据，不含绝对路径或凭据。
 - `GET /api/transrunner/v1/media/{video_id}/dedupe-candidates`：scope `read_dedupe_candidates`，候选由 HWatch 服务端筛选，`?limit=` 默认 20、上限 100。
 - `POST /api/transrunner/v1/duplicate-results`：scope `write_duplicate_results`，只写重复候选，绝不删除/替换媒体。
-- `POST /api/transrunner/v1/transcode-results`：scope `write_transcode_results`，接收 `.transrunner/` 暂存产物，由 HWatch 用 `ffprobe` 校验并记录 `pending` 结果，不替换源文件。
+- `POST /api/transrunner/v1/transcode-results`：scope `write_transcode_results`，接收 `.transrunner/` 暂存产物，由 HWatch 自己 `ffprobe` 校验。默认仅记录 `pending`；当 `apply_mode="replace_source"` 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、`source_sha256` 一致）时，HWatch 原子替换源文件并刷新元数据，状态记为 `applied`。
 
-令牌缺失/无效/已撤销返回 `401`；缺少所需 scope 返回 `403`。
-
-HWatch → TransRunner（管理员会话 + CSRF）：
-
-- `POST /api/integrations/transrunner/test`：调用 TransRunner `/health` 与 `/api/v1/capabilities`，返回 `{ok,version,platform,capabilities}`；不返回 Token。
-- `POST /api/integrations/transrunner/submit/transcode`：`{video_id, profile?, force?}`，向 TransRunner `/api/v1/jobs` 提交转码任务，只发送 `input.type="hwatch"` 的相对路径；返回 `202 {runner_job_id}`。重复提交返回 `409 already_submitted`，可用 `force:true` 重新提交。HWatch 不轮询、不同步进度、不镜像 Runner 状态。
-- `POST /api/integrations/transrunner/submit/dedupe`：`{video_id, force?}`，以 `kind="media_duplicate"` + `input.type="hwatch"` 提交内容去重任务（不发送候选或算法参数）；TransRunner 自行调用 HWatch 的 `dedupe-candidates` 获取候选并回写结果。返回 `202 {runner_job_id}`，重复提交同样 `409`。
-
-TransRunner 连接设置：`enable_transrunner`、`transrunner_url`、`transrunner_default_profile`，以及只写不回的 `transrunner_api_token`（`GET /api/settings` 只返回 `transrunner_token_configured`；空值不改变，`transrunner_api_token_clear:true` 清除）。内容去重与转码只在显式 API/UI 提交时发生，没有自动或全库调度。
+令牌缺失/无效/已撤销返回 `401`；缺少所需 scope 返回 `403`。OpenAPI 描述全部接口，但 Service Token 只按 scope 获得最小权限：不能删除媒体、改设置、管理用户/订阅或执行任何 admin 操作。
