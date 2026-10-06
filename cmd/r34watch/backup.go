@@ -72,6 +72,28 @@ func validateSQLite(path string) error {
 	return nil
 }
 
+func verifyBackupChecksum(path string) error {
+	data, err := os.ReadFile(path + ".sha256")
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // Older backups did not always include a checksum sidecar.
+	}
+	if err != nil {
+		return err
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 || len(fields[0]) != sha256.Size*2 {
+		return errors.New("备份校验文件格式无效")
+	}
+	actual, err := checksumFile(path)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(fields[0], actual) {
+		return errors.New("备份 SHA-256 校验失败")
+	}
+	return nil
+}
+
 func (a *App) createBackup(rollback bool) (backupInfo, error) {
 	a.backupMu.Lock()
 	defer a.backupMu.Unlock()
@@ -80,7 +102,15 @@ func (a *App) createBackup(rollback bool) (backupInfo, error) {
 		return backupInfo{}, err
 	}
 	dir := backupDirectory(cfg)
-	if err = os.MkdirAll(dir, 0700); err != nil {
+	requireMount := cfg.StorageMountRequired
+	if cfg.BackupDir != "" {
+		requireMount = cfg.BackupMountRequired
+	}
+	if rollback {
+		dir = filepath.Dir(a.store.Path)
+		requireMount = false
+	}
+	if err = ensureStorageDirectory(dir, 0700, requireMount); err != nil {
 		return backupInfo{}, err
 	}
 	suffix := ""
@@ -89,23 +119,49 @@ func (a *App) createBackup(rollback bool) (backupInfo, error) {
 	}
 	name := "hwatch-" + time.Now().UTC().Format("20060102T150405Z") + suffix + ".db"
 	path := filepath.Join(dir, name)
-	if _, err = a.store.DB.Exec("VACUUM INTO ?", path); err != nil {
-		_ = a.store.SetBackupResult(false, err.Error())
-		return backupInfo{}, err
+	workDir := filepath.Dir(a.store.Path)
+	if absolute, absErr := filepath.Abs(workDir); absErr == nil {
+		workDir = absolute
 	}
-	if err = os.Chmod(path, 0600); err != nil {
-		return backupInfo{}, err
-	}
-	if err = validateSQLite(path); err != nil {
-		_ = os.Remove(path)
-		_ = a.store.SetBackupResult(false, err.Error())
-		return backupInfo{}, err
-	}
-	sum, err := checksumFile(path)
+	localFile, err := os.CreateTemp(workDir, ".hwatch-snapshot-*.db")
 	if err != nil {
 		return backupInfo{}, err
 	}
-	if err = os.WriteFile(path+".sha256", []byte(sum+"  "+name+"\n"), 0600); err != nil {
+	localPath := localFile.Name()
+	_ = localFile.Close()
+	_ = os.Remove(localPath) // SQLite VACUUM INTO requires the destination not to exist.
+	defer os.Remove(localPath)
+	if _, err = a.store.DB.Exec("VACUUM INTO ?", localPath); err != nil {
+		_ = a.store.SetBackupResult(false, err.Error())
+		return backupInfo{}, err
+	}
+	if err = os.Chmod(localPath, 0600); err != nil {
+		return backupInfo{}, err
+	}
+	if err = validateSQLite(localPath); err != nil {
+		_ = a.store.SetBackupResult(false, err.Error())
+		return backupInfo{}, err
+	}
+	sum, err := checksumFile(localPath)
+	if err != nil {
+		return backupInfo{}, err
+	}
+	tmpPath := path + ".tmp"
+	_ = os.Remove(tmpPath)
+	if err = copyPrivateFile(localPath, tmpPath); err != nil {
+		_ = a.store.SetBackupResult(false, err.Error())
+		return backupInfo{}, err
+	}
+	if err = os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return backupInfo{}, err
+	}
+	checksumTmp := path + ".sha256.tmp"
+	if err = os.WriteFile(checksumTmp, []byte(sum+"  "+name+"\n"), 0600); err != nil {
+		return backupInfo{}, err
+	}
+	if err = os.Rename(checksumTmp, path+".sha256"); err != nil {
+		_ = os.Remove(checksumTmp)
 		return backupInfo{}, err
 	}
 	info, _ := os.Stat(path)
@@ -185,6 +241,12 @@ func copyPrivateFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			_ = os.Remove(dst)
+		}
+	}()
 	_, copyErr := io.Copy(out, in)
 	syncErr := out.Sync()
 	closeErr := out.Close()
@@ -193,6 +255,9 @@ func copyPrivateFile(src, dst string) error {
 	}
 	if syncErr != nil {
 		return syncErr
+	}
+	if closeErr == nil {
+		succeeded = true
 	}
 	return closeErr
 }
@@ -210,8 +275,33 @@ func (a *App) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, errors.New("恢复数据库需要明确确认"))
 		return
 	}
-	cfg, _ := a.store.Settings()
+	if !a.maintenance.CompareAndSwap(false, true) {
+		fail(w, http.StatusConflict, errors.New("已有数据库维护任务正在运行"))
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			a.maintenance.Store(false)
+		}
+	}()
+	a.mu.Lock()
+	checksRunning := len(a.checking)
+	a.mu.Unlock()
+	if checksRunning > 0 {
+		fail(w, http.StatusConflict, errors.New("订阅检查仍在运行，请稍后再恢复数据库"))
+		return
+	}
+	cfg, err := a.store.Settings()
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
 	source := filepath.Join(backupDirectory(cfg), name)
+	if err := verifyBackupChecksum(source); err != nil {
+		fail(w, 422, err)
+		return
+	}
 	if err := validateSQLite(source); err != nil {
 		fail(w, 422, err)
 		return
@@ -220,10 +310,41 @@ func (a *App) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, fmt.Errorf("创建恢复前回滚快照失败: %w", err))
 		return
 	}
-	_ = a.store.SetDownloadPaused(true)
+	// Wait for a currently submitting queue item, then keep new submissions out
+	// until the database has been atomically replaced.
+	a.queueMu.Lock()
+	defer a.queueMu.Unlock()
+	if err = a.store.SetDownloadPaused(true); err != nil {
+		fail(w, 500, fmt.Errorf("暂停下载队列失败: %w", err))
+		return
+	}
+	needsAria, needsWget := false, false
+	for _, state := range []string{"waiting", "active"} {
+		items, _ := a.store.Videos(100000, 0, state, "")
+		for _, item := range items {
+			switch a.engineFor(item, cfg).ID() {
+			case "aria2":
+				needsAria = true
+			case "wget":
+				needsWget = true
+			}
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	_ = a.aria(cfg).PauseAll(ctx)
+	ariaErr := a.aria(cfg).PauseAll(ctx)
+	wgetErr := a.wget.PauseAll(ctx)
 	cancel()
+	if needsAria && ariaErr != nil || needsWget && wgetErr != nil {
+		_ = a.store.SetDownloadPaused(cfg.DownloadPaused)
+		if !cfg.DownloadPaused {
+			resumeCtx, resumeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = a.aria(cfg).ResumeAll(resumeCtx)
+			_ = a.wget.ResumeAll(resumeCtx)
+			resumeCancel()
+		}
+		fail(w, http.StatusServiceUnavailable, fmt.Errorf("无法安全暂停下载器: aria2=%v, wget=%v", ariaErr, wgetErr))
+		return
+	}
 	dbPath, err := filepath.Abs(a.store.Path)
 	if err != nil {
 		fail(w, 500, err)
@@ -282,10 +403,27 @@ func (a *App) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		err = os.Rename(tmp, dbPath)
 	}
 	if err != nil {
-		_ = os.Rename(old, dbPath)
-		fail(w, 500, fmt.Errorf("原子替换数据库失败: %w", err))
+		if _, oldErr := os.Stat(old); oldErr == nil {
+			_ = os.Rename(old, dbPath)
+		}
+		_ = os.Remove(tmp)
+		reopened, reopenErr := store.Open(dbPath)
+		if reopenErr == nil {
+			a.store.DB = reopened.DB
+			a.store.Path = reopened.Path
+		}
+		if reopenErr != nil {
+			fail(w, 500, fmt.Errorf("原子替换数据库失败且无法重新打开原数据库: %v; reopen: %w", err, reopenErr))
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+				os.Exit(1)
+			}()
+			return
+		}
+		fail(w, 500, fmt.Errorf("原子替换数据库失败，已重新打开原数据库: %w", err))
 		return
 	}
+	committed = true
 	_ = os.Remove(dbPath + "-wal")
 	_ = os.Remove(dbPath + "-shm")
 	respond(w, http.StatusAccepted, map[string]any{"restoring": true, "backup": name, "restart_required": true})

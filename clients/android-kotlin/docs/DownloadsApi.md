@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost*
 | [**downloadAll**](DownloadsApi.md#downloadAll) | **POST** api/videos/download-all |  |
 | [**downloadEvents**](DownloadsApi.md#downloadEvents) | **GET** api/events |  |
 | [**listTasks**](DownloadsApi.md#listTasks) | **GET** api/tasks |  |
+| [**taskHistory**](DownloadsApi.md#taskHistory) | **GET** api/tasks/{id}/history |  |
 | [**toggleDownloads**](DownloadsApi.md#toggleDownloads) | **POST** api/downloads/toggle |  |
 | [**videoAction**](DownloadsApi.md#videoAction) | **POST** api/videos/{id}/{action} |  |
 
@@ -103,7 +104,7 @@ val result : VideoPage = webService.listTasks(limit, offset, status, language)
 ```
 
 ### Parameters
-| **limit** | **kotlin.Int**|  | [optional] [default to 48] |
+| **limit** | **kotlin.Int**|  | [optional] [default to 200] |
 | **offset** | **kotlin.Int**|  | [optional] [default to 0] |
 | **status** | **kotlin.String**|  | [optional] |
 | Name | Type | Description  | Notes |
@@ -113,6 +114,41 @@ val result : VideoPage = webService.listTasks(limit, offset, status, language)
 ### Return type
 
 [**VideoPage**](VideoPage.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(DownloadsApi::class.java)
+val id : kotlin.String = id_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.taskHistory(id)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **id** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
 
 ### Authorization
 

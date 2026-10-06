@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.CreateSubscriptionRequest
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.UpdateSubscriptionRequest
 
 interface SubscriptionsApi {
     /**
@@ -44,6 +45,8 @@ interface SubscriptionsApi {
      * Responses:
      *  - 201: 成功
      *  - 400: 请求失败
+     *  - 409: 请求失败
+     *  - 502: 请求失败
      *
      * @param xCSRFToken 
      * @param createSubscriptionRequest 
@@ -105,6 +108,20 @@ interface SubscriptionsApi {
     fun searchCreators(@Query("q") q: kotlin.String, @Query("platform") platform: kotlin.String? = null): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
+     * GET avatar/{slug}
+     * 
+     * 
+     * Responses:
+     *  - 200: 本地缓存的订阅头像或 SVG 占位图
+     *  - 404: 请求失败
+     *
+     * @param slug 
+     * @return [Call]<[Unit]>
+     */
+    @GET("avatar/{slug}")
+    fun subscriptionAvatar(@Path("slug") slug: kotlin.String): Call<Unit>
+
+    /**
      * PATCH api/subscriptions/{slug}
      * 
      * 
@@ -113,9 +130,10 @@ interface SubscriptionsApi {
      *
      * @param slug 
      * @param xCSRFToken 
+     * @param updateSubscriptionRequest 
      * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
      */
     @PATCH("api/subscriptions/{slug}")
-    fun updateSubscription(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+    fun updateSubscription(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body updateSubscriptionRequest: UpdateSubscriptionRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
 }

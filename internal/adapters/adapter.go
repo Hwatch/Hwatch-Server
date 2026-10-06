@@ -35,6 +35,12 @@ type Adapter interface {
 	ParseImported(string) (store.Video, error)
 }
 
+// SubscriptionEnricher is optional for platforms whose display name or avatar
+// can only be learned from the subscription page itself.
+type SubscriptionEnricher interface {
+	EnrichSubscription(context.Context, store.Subscription, string) store.Subscription
+}
+
 type Registry struct {
 	mu   sync.RWMutex
 	byID map[string]Adapter

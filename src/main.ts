@@ -4,4 +4,9 @@ import './style.css'
 import './health.css'
 import './auth.css'
 import './privacy.css'
+
+const standalone = window.matchMedia('(display-mode: standalone)').matches ||
+  ('standalone' in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true)
+document.documentElement.classList.toggle('standalone', standalone)
+
 createApp(App).mount('#app')

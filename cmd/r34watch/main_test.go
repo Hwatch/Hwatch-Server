@@ -2,9 +2,29 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"r34watch/internal/store"
 )
+
+func TestRateLimitBackoffIsExponentialAndCapped(t *testing.T) {
+	a := &App{}
+	want := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 15 * time.Minute, 15 * time.Minute}
+	for i, expected := range want {
+		if got := a.record429(); got != expected {
+			t.Fatalf("attempt %d: got %s want %s", i+1, got, expected)
+		}
+	}
+	if wait := a.rateLimitWait(); wait <= 0 || wait > 15*time.Minute {
+		t.Fatalf("invalid active wait %s", wait)
+	}
+	a.rateMu.Lock()
+	a.last429 = time.Now().Add(-11 * time.Minute)
+	a.rateMu.Unlock()
+	if wait := a.rateLimitWait(); wait != 0 {
+		t.Fatalf("stale backoff was not reset: %s", wait)
+	}
+}
 
 func TestExclusionReason(t *testing.T) {
 	sub := store.Subscription{Slug: "source:akt", Platform: "source", URL: "https://source.example/models/akt/"}

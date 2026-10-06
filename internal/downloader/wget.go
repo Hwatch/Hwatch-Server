@@ -37,6 +37,14 @@ func NewWget() *Wget {
 func (*Wget) ID() string { return "wget" }
 func (w *Wget) Add(_ context.Context, r Request) (string, error) {
 	w.mu.Lock()
+	id := r.ExternalID
+	if id == "" {
+		id = uuid.NewString()
+	}
+	if existing, ok := w.tasks[id]; ok && (existing.state == "active" || existing.state == "waiting" || existing.state == "paused") {
+		w.mu.Unlock()
+		return id, nil
+	}
 	active := 0
 	for _, t := range w.tasks {
 		if t.state == "active" || t.state == "waiting" {
@@ -73,7 +81,6 @@ func (w *Wget) Add(_ context.Context, r Request) (string, error) {
 		w.mu.Unlock()
 		return "", err
 	}
-	id := uuid.NewString()
 	t := &wgetTask{cmd: cmd, path: path, state: "active", lastCheck: time.Now()}
 	w.tasks[id] = t
 	w.mu.Unlock()

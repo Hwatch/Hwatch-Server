@@ -49,13 +49,43 @@ class VideoTest : ShouldSpec() {
             //modelInstance.status shouldBe ("TODO")
         }
 
+        // to test the property `description`
+        should("test description") {
+            // uncomment below to test the property
+            //modelInstance.description shouldBe ("TODO")
+        }
+
         // to test the property `translatedTitle`
         should("test translatedTitle") {
             // uncomment below to test the property
             //modelInstance.translatedTitle shouldBe ("TODO")
         }
 
-        // to test the property `downloaderId`
+        // to test the property `views`
+        should("test views") {
+            // uncomment below to test the property
+            //modelInstance.views shouldBe ("TODO")
+        }
+
+        // to test the property `likes`
+        should("test likes") {
+            // uncomment below to test the property
+            //modelInstance.likes shouldBe ("TODO")
+        }
+
+        // to test the property `likeRate` - 点赞百分比，例如 99 表示 99%
+        should("test likeRate") {
+            // uncomment below to test the property
+            //modelInstance.likeRate shouldBe ("TODO")
+        }
+
+        // to test the property `tags`
+        should("test tags") {
+            // uncomment below to test the property
+            //modelInstance.tags shouldBe ("TODO")
+        }
+
+        // to test the property `downloaderId` - 未分配时为空字符串，已分配时为 aria2 或 wget
         should("test downloaderId") {
             // uncomment below to test the property
             //modelInstance.downloaderId shouldBe ("TODO")
@@ -89,6 +119,24 @@ class VideoTest : ShouldSpec() {
         should("test connections") {
             // uncomment below to test the property
             //modelInstance.connections shouldBe ("TODO")
+        }
+
+        // to test the property `error`
+        should("test error") {
+            // uncomment below to test the property
+            //modelInstance.error shouldBe ("TODO")
+        }
+
+        // to test the property `errorCode` - 稳定下载错误分类；无错误时为空字符串
+        should("test errorCode") {
+            // uncomment below to test the property
+            //modelInstance.errorCode shouldBe ("TODO")
+        }
+
+        // to test the property `errorRetryable`
+        should("test errorRetryable") {
+            // uncomment below to test the property
+            //modelInstance.errorRetryable shouldBe ("TODO")
         }
 
     }

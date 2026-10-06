@@ -27,9 +27,10 @@ type Subscription struct {
 	Enabled, BaselineComplete                                                      bool
 }
 type Video struct {
-	ID, SubscriptionSlug, Title, PageURL, PublishedAt, DiscoveredAt, ThumbnailURL                 string
+	ID, SubscriptionSlug, Title, Description, PageURL, PublishedAt, DiscoveredAt, ThumbnailURL    string
 	Platform, SourceID                                                                            string
-	Views, DurationSeconds                                                                        int64
+	Views, Likes, DurationSeconds                                                                 int64
+	LikeRate                                                                                      float64
 	CreatorName, CreatorURL, CreatorAvatar, UploaderName, UploaderURL, UploaderAvatar             string
 	CategoriesJSON, TagsJSON, ExternalLinksJSON, CreatorsJSON, SourceRelationJSON, RawHTML        string
 	Status, AriaGID, DownloaderID, ExternalID, FilePath, PlexPath, Error, DownloadedAt, UpdatedAt string
@@ -46,7 +47,8 @@ type Settings struct {
 	BackupRetention                                                                                   int
 	MinFreeBytes, DownloadLimitKBPS                                                                   int64
 	MaxDurationSeconds                                                                                int64
-	RequireCreatorMatch, DownloadPaused                                                               bool
+	RequireCreatorMatch, DownloadPaused, StorageMountRequired, BackupMountRequired                    bool
+	AutoTranscode                                                                                     bool
 }
 type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
@@ -71,6 +73,16 @@ type Notification struct {
 	CreatedAt   string `json:"created_at"`
 	ReadAt      string `json:"read_at"`
 }
+type AuditLog struct {
+	ID         int64  `json:"id"`
+	Actor      string `json:"actor"`
+	Action     string `json:"action"`
+	TargetType string `json:"target_type"`
+	TargetID   string `json:"target_id"`
+	Result     string `json:"result"`
+	Details    string `json:"details_json"`
+	CreatedAt  string `json:"created_at"`
+}
 
 const schema = "PRAGMA journal_mode=WAL;" +
 	"PRAGMA foreign_keys=ON;" +
@@ -81,9 +93,9 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"avatar_url TEXT NOT NULL DEFAULT '',external_links TEXT NOT NULL DEFAULT '[]',enabled INTEGER NOT NULL DEFAULT 1," +
 	"baseline_complete INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,last_checked_at TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '');" +
 	"CREATE TABLE IF NOT EXISTS videos (" +
-	"id TEXT PRIMARY KEY,subscription_slug TEXT NOT NULL,title TEXT NOT NULL,page_url TEXT NOT NULL,published_at TEXT NOT NULL DEFAULT ''," +
+	"id TEXT PRIMARY KEY,subscription_slug TEXT NOT NULL,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',page_url TEXT NOT NULL,published_at TEXT NOT NULL DEFAULT ''," +
 	"platform TEXT NOT NULL DEFAULT 'rule34video',source_id TEXT NOT NULL DEFAULT ''," +
-	"discovered_at TEXT NOT NULL,thumbnail_url TEXT NOT NULL DEFAULT '',views INTEGER NOT NULL DEFAULT 0,duration_seconds INTEGER NOT NULL DEFAULT 0," +
+	"discovered_at TEXT NOT NULL,thumbnail_url TEXT NOT NULL DEFAULT '',views INTEGER NOT NULL DEFAULT 0,likes INTEGER NOT NULL DEFAULT 0,like_rate REAL NOT NULL DEFAULT 0,duration_seconds INTEGER NOT NULL DEFAULT 0," +
 	"creator_name TEXT NOT NULL DEFAULT '',creator_url TEXT NOT NULL DEFAULT '',creator_avatar TEXT NOT NULL DEFAULT ''," +
 	"uploader_name TEXT NOT NULL DEFAULT '',uploader_url TEXT NOT NULL DEFAULT '',uploader_avatar TEXT NOT NULL DEFAULT ''," +
 	"categories_json TEXT NOT NULL DEFAULT '[]',tags_json TEXT NOT NULL DEFAULT '[]',external_links_json TEXT NOT NULL DEFAULT '[]',creators_json TEXT NOT NULL DEFAULT '[]',source_relation_json TEXT NOT NULL DEFAULT '{}'," +
@@ -103,8 +115,12 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS media_fingerprints (video_id TEXT PRIMARY KEY,page_url_normalized TEXT NOT NULL DEFAULT '',cover_hash TEXT NOT NULL DEFAULT '',duration_seconds INTEGER NOT NULL DEFAULT 0,file_size INTEGER NOT NULL DEFAULT 0,quick_hash TEXT NOT NULL DEFAULT '',sha256 TEXT NOT NULL DEFAULT '',hash_status TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_fingerprints_url ON media_fingerprints(page_url_normalized);" +
 	"CREATE INDEX IF NOT EXISTS idx_fingerprints_sha ON media_fingerprints(sha256);" +
-	"CREATE TABLE IF NOT EXISTS duplicate_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,match_video_id TEXT NOT NULL,match_type TEXT NOT NULL,confidence REAL NOT NULL DEFAULT 1,duration_delta INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(video_id,match_video_id,match_type),FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE,FOREIGN KEY(match_video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE TABLE IF NOT EXISTS duplicate_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,match_video_id TEXT NOT NULL,match_type TEXT NOT NULL,classification TEXT NOT NULL DEFAULT '',backend TEXT NOT NULL DEFAULT '',algorithm_version TEXT NOT NULL DEFAULT '',metrics_json TEXT NOT NULL DEFAULT '{}',confidence REAL NOT NULL DEFAULT 1,duration_delta INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(video_id,match_video_id,match_type),FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE,FOREIGN KEY(match_video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_duplicate_status ON duplicate_candidates(status,created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,actor TEXT NOT NULL DEFAULT '',action TEXT NOT NULL,target_type TEXT NOT NULL DEFAULT '',target_id TEXT NOT NULL DEFAULT '',result TEXT NOT NULL,details_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL);" +
+	"CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS task_events (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,from_status TEXT NOT NULL DEFAULT '',to_status TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
+	"CREATE INDEX IF NOT EXISTS idx_task_events_video ON task_events(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"
@@ -148,13 +164,20 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE videos ADD COLUMN source_relation_json TEXT NOT NULL DEFAULT '{}'",
 		"ALTER TABLE videos ADD COLUMN downloader_id TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE videos ADD COLUMN external_task_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE videos ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE videos ADD COLUMN likes INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE videos ADD COLUMN like_rate REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE duplicate_candidates ADD COLUMN classification TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN backend TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN algorithm_version TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE duplicate_candidates ADD COLUMN metrics_json TEXT NOT NULL DEFAULT '{}'",
 	} {
 		_, _ = db.Exec(statement)
 	}
 	_, _ = db.Exec("UPDATE videos SET downloader_id='aria2',external_task_id=aria_gid WHERE aria_gid<>'' AND downloader_id=''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": ""}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": "", "auto_transcode": "false"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -283,6 +306,9 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.ExcludeTags = values["exclude_tags"]
 	cfg.RequireCreatorMatch = strings.EqualFold(values["require_creator_match"], "true")
 	cfg.DownloadPaused = strings.EqualFold(values["download_paused"], "true")
+	cfg.StorageMountRequired = strings.EqualFold(values["storage_mount_required"], "true")
+	cfg.BackupMountRequired = strings.EqualFold(values["backup_mount_required"], "true")
+	cfg.AutoTranscode = strings.EqualFold(values["auto_transcode"], "true")
 	_, _ = fmt.Sscan(values["max_concurrent"], &cfg.MaxConcurrent)
 	_, _ = fmt.Sscan(values["connections_per_download"], &cfg.ConnectionsPerDownload)
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
@@ -301,7 +327,7 @@ func (s *Store) SaveSettings(cfg Settings) error {
 		return err
 	}
 	defer tx.Rollback()
-	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention}
+	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention, "storage_mount_required": cfg.StorageMountRequired, "backup_mount_required": cfg.BackupMountRequired, "auto_transcode": cfg.AutoTranscode}
 	values["downloader_mode"] = cfg.DownloaderMode
 	for k, v := range values {
 		if _, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, fmt.Sprint(v)); err != nil {
@@ -405,14 +431,18 @@ func (s *Store) UpsertDiscovered(v Video) (bool, error) {
 }
 func scanVideo(scanner interface{ Scan(...any) error }) (Video, error) {
 	var v Video
-	err := scanner.Scan(&v.ID, &v.SubscriptionSlug, &v.Platform, &v.SourceID, &v.Title, &v.PageURL, &v.PublishedAt, &v.DiscoveredAt, &v.ThumbnailURL, &v.Views, &v.DurationSeconds, &v.CreatorName, &v.CreatorURL, &v.CreatorAvatar, &v.UploaderName, &v.UploaderURL, &v.UploaderAvatar, &v.CategoriesJSON, &v.TagsJSON, &v.ExternalLinksJSON, &v.CreatorsJSON, &v.SourceRelationJSON, &v.RawHTML, &v.Status, &v.AriaGID, &v.DownloaderID, &v.ExternalID, &v.FilePath, &v.PlexPath, &v.BytesDownloaded, &v.TotalBytes, &v.DownloadSpeed, &v.Connections, &v.VideoCodec, &v.AudioCodec, &v.Container, &v.Width, &v.Height, &v.FrameRate, &v.BitRate, &v.BitDepth, &v.MediaProbedAt, &v.TranscodeStatus, &v.PlexSeason, &v.PlexEpisode, &v.Error, &v.DownloadedAt, &v.UpdatedAt)
+	err := scanner.Scan(&v.ID, &v.SubscriptionSlug, &v.Platform, &v.SourceID, &v.Title, &v.Description, &v.PageURL, &v.PublishedAt, &v.DiscoveredAt, &v.ThumbnailURL, &v.Views, &v.Likes, &v.LikeRate, &v.DurationSeconds, &v.CreatorName, &v.CreatorURL, &v.CreatorAvatar, &v.UploaderName, &v.UploaderURL, &v.UploaderAvatar, &v.CategoriesJSON, &v.TagsJSON, &v.ExternalLinksJSON, &v.CreatorsJSON, &v.SourceRelationJSON, &v.RawHTML, &v.Status, &v.AriaGID, &v.DownloaderID, &v.ExternalID, &v.FilePath, &v.PlexPath, &v.BytesDownloaded, &v.TotalBytes, &v.DownloadSpeed, &v.Connections, &v.VideoCodec, &v.AudioCodec, &v.Container, &v.Width, &v.Height, &v.FrameRate, &v.BitRate, &v.BitDepth, &v.MediaProbedAt, &v.TranscodeStatus, &v.PlexSeason, &v.PlexEpisode, &v.Error, &v.DownloadedAt, &v.UpdatedAt)
 	return v, err
 }
 
-const videoColumns = "id,subscription_slug,platform,source_id,title,page_url,published_at,discovered_at,thumbnail_url,views,duration_seconds,creator_name,creator_url,creator_avatar,uploader_name,uploader_url,uploader_avatar,categories_json,tags_json,external_links_json,creators_json,source_relation_json,raw_html,status,aria_gid,downloader_id,external_task_id,file_path,plex_path,bytes_downloaded,total_bytes,download_speed,connections,video_codec,audio_codec,container,width,height,frame_rate,bit_rate,bit_depth,media_probed_at,transcode_status,plex_season,plex_episode,error,downloaded_at,updated_at"
+const videoColumns = "id,subscription_slug,platform,source_id,title,description,page_url,published_at,discovered_at,thumbnail_url,views,likes,like_rate,duration_seconds,creator_name,creator_url,creator_avatar,uploader_name,uploader_url,uploader_avatar,categories_json,tags_json,external_links_json,creators_json,source_relation_json,raw_html,status,aria_gid,downloader_id,external_task_id,file_path,plex_path,bytes_downloaded,total_bytes,download_speed,connections,video_codec,audio_codec,container,width,height,frame_rate,bit_rate,bit_depth,media_probed_at,transcode_status,plex_season,plex_episode,error,downloaded_at,updated_at"
 
 func (s *Store) Video(id string) (Video, error) {
 	return scanVideo(s.DB.QueryRow("SELECT "+videoColumns+" FROM videos WHERE id=?", id))
+}
+func (s *Store) SubscriptionVideos(slug string) ([]Video, error) {
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE subscription_slug=? ORDER BY discovered_at DESC,id DESC", slug)
+	return scanVideos(rows, err)
 }
 func (s *Store) Videos(limit, offset int, status, query string) ([]Video, error) {
 	where := " WHERE 1=1"
@@ -473,12 +503,12 @@ func videoSearchWhere(opts VideoSearch) (string, []any) {
 	}
 	if q := strings.TrimSpace(opts.Query); q != "" {
 		like := "%" + q + "%"
-		original := "(v.title LIKE ? OR v.creator_name LIKE ? OR v.uploader_name LIKE ? OR v.categories_json LIKE ? OR v.tags_json LIKE ? OR v.id LIKE ?)"
+		original := "(v.title LIKE ? OR v.description LIKE ? OR v.creator_name LIKE ? OR v.uploader_name LIKE ? OR v.categories_json LIKE ? OR v.tags_json LIKE ? OR v.id LIKE ?)"
 		translated := "(tt.translated_text LIKE ? OR EXISTS(SELECT 1 FROM translations tq WHERE tq.entity_id=v.id AND tq.language=? AND tq.field='tags' AND tq.translated_text LIKE ?))"
 		switch opts.Scope {
 		case "original":
 			where += " AND " + original
-			for range 6 {
+			for range 7 {
 				args = append(args, like)
 			}
 		case "translated":
@@ -486,7 +516,7 @@ func videoSearchWhere(opts VideoSearch) (string, []any) {
 			args = append(args, like, opts.Language, like)
 		default:
 			where += " AND (" + original + " OR " + translated + ")"
-			for range 6 {
+			for range 7 {
 				args = append(args, like)
 			}
 			args = append(args, like, opts.Language, like)
@@ -577,6 +607,31 @@ func (s *Store) QueueVideo(id string) error {
 	}
 	return nil
 }
+func (s *Store) BeginSubmission(id, downloaderID, externalID, plexPath string) error {
+	var previous string
+	_ = s.DB.QueryRow("SELECT status FROM videos WHERE id=?", id).Scan(&previous)
+	legacyGID := ""
+	if downloaderID == "aria2" {
+		legacyGID = externalID
+	}
+	result, err := s.DB.Exec("UPDATE videos SET status='submitting',downloader_id=?,external_task_id=?,aria_gid=?,plex_path=?,error='',updated_at=? WHERE id=? AND status='queued'", downloaderID, externalID, legacyGID, plexPath, Now(), id)
+	if err != nil {
+		return err
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 0 {
+		return errors.New("任务状态已变化，取消重复提交")
+	}
+	_ = s.AddTaskEvent(id, previous, "submitting", "已提交到 "+downloaderID)
+	return nil
+}
+func (s *Store) RequeueSubmitting() (int64, error) {
+	result, err := s.DB.Exec("UPDATE videos SET status='queued',error='服务在提交下载器期间重启，正在使用原任务标识恢复',updated_at=? WHERE status='submitting'", Now())
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
 func (s *Store) RequeueTransientFailures() (int64, error) {
 	result, err := s.DB.Exec("UPDATE videos SET status='queued',aria_gid='',external_task_id='',downloader_id='',error='',updated_at=? WHERE status='failed' AND (error LIKE '%HTTP 429%' OR error LIKE '%status=429%' OR error LIKE '%deadline exceeded%' OR error LIKE '%Timeout%' OR error LIKE '%capacity reached%')", Now())
 	if err != nil {
@@ -595,7 +650,7 @@ func (s *Store) TaskVideos(limit, offset int, status string) ([]Video, error) {
 	if status != "" {
 		return s.Videos(limit, offset, status, "")
 	}
-	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status<>'discovered' ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'queued' THEN 2 WHEN 'paused' THEN 3 WHEN 'failed' THEN 4 ELSE 5 END,updated_at DESC LIMIT ? OFFSET ?", limit, offset)
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status<>'discovered' ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'submitting' THEN 2 WHEN 'queued' THEN 3 WHEN 'paused' THEN 4 WHEN 'failed' THEN 5 ELSE 6 END,updated_at DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -654,11 +709,11 @@ func (s *Store) CountTasks(status string) (int64, error) {
 }
 func (s *Store) SubscriptionProgress(slug string) (SubscriptionProgress, error) {
 	var p SubscriptionProgress
-	err := s.DB.QueryRow("SELECT count(*),COALESCE(SUM(status='completed'),0),COALESCE(SUM(status='active'),0),COALESCE(SUM(status IN ('waiting','queued')),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(bytes_downloaded),0),COALESCE(SUM(total_bytes),0) FROM videos WHERE subscription_slug=?", slug).Scan(&p.Total, &p.Completed, &p.Active, &p.Waiting, &p.Failed, &p.BytesDownloaded, &p.TotalBytes)
+	err := s.DB.QueryRow("SELECT count(*),COALESCE(SUM(status='completed'),0),COALESCE(SUM(status='active'),0),COALESCE(SUM(status IN ('waiting','queued','submitting')),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(bytes_downloaded),0),COALESCE(SUM(total_bytes),0) FROM videos WHERE subscription_slug=?", slug).Scan(&p.Total, &p.Completed, &p.Active, &p.Waiting, &p.Failed, &p.BytesDownloaded, &p.TotalBytes)
 	return p, err
 }
 func (s *Store) UpdateDetails(v Video) error {
-	_, err := s.DB.Exec("UPDATE videos SET title=?,published_at=?,thumbnail_url=?,views=?,duration_seconds=?,creator_name=?,creator_url=?,creator_avatar=?,uploader_name=?,uploader_url=?,uploader_avatar=?,categories_json=?,tags_json=?,external_links_json=?,creators_json=?,source_relation_json=CASE WHEN ?='' OR ?='{}' THEN source_relation_json ELSE ? END,raw_html=?,updated_at=? WHERE id=?", v.Title, v.PublishedAt, v.ThumbnailURL, v.Views, v.DurationSeconds, v.CreatorName, v.CreatorURL, v.CreatorAvatar, v.UploaderName, v.UploaderURL, v.UploaderAvatar, v.CategoriesJSON, v.TagsJSON, v.ExternalLinksJSON, v.CreatorsJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.RawHTML, Now(), v.ID)
+	_, err := s.DB.Exec("UPDATE videos SET title=?,description=?,published_at=?,thumbnail_url=?,views=?,likes=?,like_rate=?,duration_seconds=?,creator_name=?,creator_url=?,creator_avatar=?,uploader_name=?,uploader_url=?,uploader_avatar=?,categories_json=?,tags_json=?,external_links_json=?,creators_json=?,source_relation_json=CASE WHEN ?='' OR ?='{}' THEN source_relation_json ELSE ? END,raw_html=?,updated_at=? WHERE id=?", v.Title, v.Description, v.PublishedAt, v.ThumbnailURL, v.Views, v.Likes, v.LikeRate, v.DurationSeconds, v.CreatorName, v.CreatorURL, v.CreatorAvatar, v.UploaderName, v.UploaderURL, v.UploaderAvatar, v.CategoriesJSON, v.TagsJSON, v.ExternalLinksJSON, v.CreatorsJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.RawHTML, Now(), v.ID)
 	return err
 }
 func (s *Store) RequeueTrustedCreatorMismatches(slug string) (int64, error) {
@@ -669,7 +724,12 @@ func (s *Store) RequeueTrustedCreatorMismatches(slug string) (int64, error) {
 	return res.RowsAffected()
 }
 func (s *Store) UpdateTask(id, status, gid, path, plexPath, errText string, done, total int64) error {
+	var previous string
+	_ = s.DB.QueryRow("SELECT status FROM videos WHERE id=?", id).Scan(&previous)
 	_, err := s.DB.Exec("UPDATE videos SET status=?,aria_gid=?,file_path=?,plex_path=?,error=?,bytes_downloaded=?,total_bytes=?,download_speed=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE download_speed END,connections=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE connections END,downloaded_at=CASE WHEN ?='completed' THEN ? ELSE downloaded_at END,updated_at=? WHERE id=?", status, gid, path, plexPath, errText, done, total, status, status, status, Now(), Now(), id)
+	if err == nil {
+		_ = s.AddTaskEvent(id, previous, status, errText)
+	}
 	return err
 }
 func (s *Store) BindDownloader(id, downloaderID, externalID, status, plexPath string) error {
@@ -681,11 +741,16 @@ func (s *Store) BindDownloader(id, downloaderID, externalID, status, plexPath st
 	return err
 }
 func (s *Store) UpdateDownloaderTask(id, status, downloaderID, externalID, path, plexPath, errText string, done, total int64) error {
+	var previous string
+	_ = s.DB.QueryRow("SELECT status FROM videos WHERE id=?", id).Scan(&previous)
 	legacyGID := ""
 	if downloaderID == "aria2" {
 		legacyGID = externalID
 	}
 	_, err := s.DB.Exec("UPDATE videos SET status=?,downloader_id=?,external_task_id=?,aria_gid=?,file_path=?,plex_path=?,error=?,bytes_downloaded=?,total_bytes=?,download_speed=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE download_speed END,connections=CASE WHEN ? IN ('completed','failed','discovered') THEN 0 ELSE connections END,downloaded_at=CASE WHEN ?='completed' THEN ? ELSE downloaded_at END,updated_at=? WHERE id=?", status, downloaderID, externalID, legacyGID, path, plexPath, errText, done, total, status, status, status, Now(), Now(), id)
+	if err == nil {
+		_ = s.AddTaskEvent(id, previous, status, errText)
+	}
 	return err
 }
 func (s *Store) UpdateTransfer(id string, speed int64, connections int) error {

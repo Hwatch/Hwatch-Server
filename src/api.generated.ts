@@ -180,6 +180,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/duplicates/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewDuplicateCandidatesBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exclusions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 使用尚未保存的规则草稿预览命中项，不改变视频状态。 */
+        post: operations["previewExclusions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/videos": {
         parameters: {
             query?: never;
@@ -220,6 +269,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["taskHistory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -286,6 +351,22 @@ export interface paths {
         get: operations["listSubscriptions"];
         put?: never;
         post: operations["createSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatar/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["subscriptionAvatar"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -584,9 +665,22 @@ export interface components {
             video_id: string;
             subscription_slug: string;
             title: string;
+            description?: string;
             translated_title?: string;
+            /** Format: int64 */
+            views?: number;
+            /** Format: int64 */
+            likes?: number;
+            /**
+             * Format: double
+             * @description 点赞百分比，例如 99 表示 99%
+             */
+            like_rate?: number;
+            tags?: {
+                [key: string]: unknown;
+            }[];
             /** @enum {string} */
-            status: "discovered" | "queued" | "waiting" | "active" | "paused" | "failed" | "excluded" | "completed";
+            status: "discovered" | "queued" | "submitting" | "waiting" | "active" | "paused" | "failed" | "excluded" | "completed";
             /** @description 未分配时为空字符串，已分配时为 aria2 或 wget */
             downloader_id?: string;
             external_task_id?: string;
@@ -692,6 +786,7 @@ export interface components {
         VideoID: string;
         Slug: string;
         Limit: number;
+        TaskLimit: number;
         Offset: number;
         Language: string;
     };
@@ -879,6 +974,58 @@ export interface operations {
             400: components["responses"]["Error"];
         };
     };
+    reviewDuplicateCandidatesBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: number[];
+                    /** @enum {string} */
+                    action: "confirm" | "dismiss";
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            400: components["responses"]["Error"];
+        };
+    };
+    previewExclusions: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSONObject"];
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    listAuditLogs: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
     listVideos: {
         parameters: {
             query?: {
@@ -922,7 +1069,7 @@ export interface operations {
     listTasks: {
         parameters: {
             query?: {
-                limit?: components["parameters"]["Limit"];
+                limit?: components["parameters"]["TaskLimit"];
                 offset?: components["parameters"]["Offset"];
                 status?: string;
                 language?: components["parameters"]["Language"];
@@ -934,6 +1081,20 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["VideoPage"];
+        };
+    };
+    taskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["VideoID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
         };
     };
     downloadAll: {
@@ -1014,9 +1175,17 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: uri */
+                    /**
+                     * Format: uri
+                     * @description 已注册适配器支持的订阅链接
+                     */
                     url: string;
-                    type?: string;
+                    /**
+                     * @description 可省略，由链接自动识别
+                     * @enum {string}
+                     */
+                    type?: "creator" | "playlist";
+                    /** @default false */
                     download_existing?: boolean;
                 };
             };
@@ -1024,6 +1193,33 @@ export interface operations {
         responses: {
             201: components["responses"]["JSON"];
             400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    subscriptionAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本地缓存的订阅头像或 SVG 占位图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/svg+xml": unknown;
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     deleteSubscription: {
@@ -1053,7 +1249,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
         responses: {
             200: components["responses"]["JSON"];
         };
@@ -1215,6 +1417,8 @@ export interface operations {
         parameters: {
             query?: {
                 language?: components["parameters"]["Language"];
+                platform?: string;
+                subscription?: string;
             };
             header?: never;
             path?: never;
@@ -1248,9 +1452,17 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default zh-CN */
+                    language?: string;
+                };
+            };
+        };
         responses: {
             202: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
         };
     };
     importHTML: {

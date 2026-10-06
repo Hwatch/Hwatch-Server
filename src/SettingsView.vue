@@ -5,8 +5,9 @@ import NavIcon from './NavIcon.vue'
 type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
 type Backup={name:string;size:number;created_at:string;sha256:string;valid:boolean}
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
-const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean}>()
-const emit=defineEmits<{save:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
+type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
+const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number}>()
+const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
 const toggle=(name:string)=>open.value=open.value===name?'':name
@@ -75,7 +76,8 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <label class="setting-check"><input v-model="props.settings.require_creator_match" type="checkbox"><span><b>验证实际创作者</b><small>实际创作者与订阅作者不一致时不下载</small></span></label>
         <label>标题关键词<textarea v-model="props.settings.exclude_title_keywords" rows="2" placeholder="compilation, collection, 合集, 集锦"></textarea></label>
         <div class="setting-grid"><label>排除上传者<input v-model="props.settings.exclude_uploaders" placeholder="逗号分隔"></label><label>排除分类<input v-model="props.settings.exclude_categories" placeholder="逗号分隔"></label><label>排除标签<input v-model="props.settings.exclude_tags" placeholder="逗号分隔"></label><label>最大时长（秒）<input v-model.number="props.settings.max_duration_seconds" type="number" min="0"><small>0 表示不限制</small></label></div>
-        <button class="primary save-setting" :disabled="busy">保存规则</button>
+        <div class="actions"><button class="primary save-setting" :disabled="busy">保存规则</button><button type="button" :disabled="busy" @click="emit('previewExclusions')">预览命中</button></div>
+        <div v-if="exclusionPreview.length" class="backup-list"><small>共命中 {{exclusionTotal}} 项，当前显示 {{exclusionPreview.length}} 项</small><article v-for="item in exclusionPreview" :key="item.id"><span><b>{{item.title}}</b><small>{{item.reason}} · {{item.status}}</small></span></article></div>
       </form>
     </section>
 

@@ -39,6 +39,7 @@ source:3144962 -> source%3A3144962
   "video_id": "source:3144962",
   "subscription_slug": "source:creator",
   "title": "Original title",
+  "description": "Structured source description",
   "translated_title": "中文标题",
   "translated_tags": ["标签一", "标签二"],
   "translation_language": "zh-CN",
@@ -49,6 +50,8 @@ source:3144962 -> source%3A3144962
   "updated_at": "2026-09-11T18:00:00Z",
   "thumbnail_url": "",
   "views": 63132,
+  "likes": 1866,
+  "like_rate": 99,
   "duration_seconds": 171,
   "creator_name": "Creator",
   "creator_url": "",
@@ -87,12 +90,13 @@ source:3144962 -> source%3A3144962
 }
 ```
 
-`creator_name`、`creator_url` 和 `creator_avatar` 保留为主要创作者兼容字段；`creators` 包含详情页识别到的全部关联创作者。`source_relation` 记录视频由哪个订阅列表发现，用于解释归属和避免联合创作内容被主要创作者字段误排除。
+`creator_name`、`creator_url` 和 `creator_avatar` 保留为主要创作者兼容字段；`creators` 包含详情页识别到的全部关联创作者。`source_relation` 记录视频由哪个订阅列表发现，用于解释归属和避免联合创作内容被主要创作者字段误排除。`description` 是清洗后的详情正文；`likes` 为点赞数量，`like_rate` 为百分比数值（`99` 表示 99%）。
 
 视频状态：
 
 - `discovered`：已发现、尚未选择下载
 - `queued`：持久队列中，正在解析下载源
+- `submitting`：已持久化外部任务标识，正在原子提交给下载器
 - `waiting`：已提交到任务绑定的下载器，等待下载
 - `active`：正在下载
 - `paused`：已暂停
@@ -190,7 +194,7 @@ source:3144962 -> source%3A3144962
 | `offset` | 分页偏移 |
 | `status` | 影视库传 `completed`；未下载页传 `discovered` |
 | `language` | 当前译文语言 |
-| `q` | 标题、译文、作者、上传者、分类、标签或 ID |
+| `q` | 标题、简介、译文、作者、上传者、分类、标签或 ID |
 | `scope` | `all`、`translated`、`original` |
 | `creator` | 作者精确名称或订阅 slug |
 | `tags` | 逗号分隔的包含标签 |
@@ -231,11 +235,13 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ## 5. 下载任务
 
+`GET /api/tasks/{id}/history` 读取单个任务最近的持久状态变更历史。
+
 ### `GET /api/tasks`
 
 参数：`limit`（最大 1000）、`offset`、`status`、`language`。不传状态时返回除 `discovered` 外的所有任务。
 
-`status` 可使用 `queued`、`waiting`、`active`、`paused`、`failed`、`excluded` 或 `completed`。响应结构：
+`status` 可使用 `queued`、`submitting`、`waiting`、`active`、`paused`、`failed`、`excluded` 或 `completed`。响应结构：
 
 ```json
 {"items":[Video],"total":168,"limit":200,"offset":0}
@@ -287,6 +293,13 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 返回：`{"items":[Subscription...]}`。
 
+`avatar_url` 保留上游原始地址；界面和客户端应优先使用同一对象中的
+`avatar_proxy_url`，由 HWatch 代理并持久缓存头像，远端失效时返回占位图。
+
+### `GET /avatar/{slug}`
+
+返回订阅头像或 SVG 占位图。该接口需要登录会话，响应可由客户端缓存。
+
 ### `GET /api/platforms`
 
 返回服务端已注册的适配器：`{"items":[{"id":"source","name":"Source"}]}`。
@@ -318,6 +331,8 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 - `download_existing=false`：只建立现有内容基线，以后发现的新视频自动下载。
 - `download_existing=true`：订阅并将全部现有视频加入持久队列。
+- `type` 可省略；显式提供时只允许与链接相符的 `creator` 或 `playlist`。
+- 带时效签名的下载源会在任务开始前刷新，不在 API 或数据库中长期保存签名地址。
 
 返回 `201`：
 
@@ -331,7 +346,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 ### `DELETE /api/subscriptions/{slug}`
 
-删除订阅及其数据库视频记录。返回：`{"deleted":true}`。这是破坏性操作，客户端必须二次确认。
+删除订阅及其数据库视频记录，并先停止该订阅进行中的下载。已完成媒体文件保留在磁盘，但不再出现在影视库。返回：`{"deleted":true}`。这是破坏性操作，客户端必须二次确认。
 
 ### `POST /api/check`
 
@@ -342,6 +357,11 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 异步检查指定订阅，响应同上。
 
 ## 7. 设置
+
+新增运维接口：
+
+- `POST /api/exclusions/preview` 使用未保存的规则草稿预览命中项及原因，不改变任务状态。
+- `GET /api/audit?limit=&offset=` 分页读取结构化审计；服务不记录请求体、代理凭据、令牌或签名 URL。
 
 ### `GET /api/settings`
 
@@ -479,6 +499,8 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 ## 11. 重复内容审查
 
+`POST /api/duplicates/batch` 可批量确认或忽略候选，响应包含本批候选涉及的预计空间；确认操作仍不会自动删除媒体。
+
 - `GET /api/duplicates` 返回重复候选及两侧视频信息。
 - `POST /api/duplicates/{id}/confirm` 确认重复并保持停止下载；不会删除任何已有媒体。
 - `POST /api/duplicates/{id}/dismiss` 忽略该次匹配并将尚未下载的视频重新排队。
@@ -495,3 +517,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `video_id`、`slug` 和所有查询参数都必须 URL 编码。
 - 不要依赖字段顺序；未知字段应忽略。
 - 对 `202` 不要当作任务已完成，它只表示异步任务已接受。
+
+## 外部计算（Future）
+
+HWatch 不再内置外部计算节点的注册、心跳、租约或任务调度。去重分析与转码将由独立的 TransRunner 服务提供，集成接口（HWatch → TransRunner 创建任务，TransRunner → HWatch 回写结果）将在后续版本单独设计，本文件暂不描述。

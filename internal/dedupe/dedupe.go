@@ -22,9 +22,23 @@ func NormalizeURL(raw string) string {
 		return strings.TrimSpace(raw)
 	}
 	u.Fragment = ""
-	u.RawQuery = ""
 	u.Host = strings.ToLower(u.Host)
 	u.Path = strings.TrimRight(u.Path, "/")
+	// Most query strings seen here are expiring signatures or tracking data and
+	// must not become identity. Hanime1 is an exception: /watch uses the v query
+	// parameter as the stable video ID, so dropping it collapses every video into
+	// the same URL.
+	if strings.EqualFold(u.Hostname(), "hanime1.me") && u.Path == "/watch" {
+		videoID := u.Query().Get("v")
+		u.RawQuery = ""
+		if videoID != "" {
+			q := url.Values{}
+			q.Set("v", videoID)
+			u.RawQuery = q.Encode()
+		}
+	} else {
+		u.RawQuery = ""
+	}
 	return u.String()
 }
 func ImageHash(r io.Reader) (string, error) {
