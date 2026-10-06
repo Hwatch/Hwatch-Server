@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import NavIcon from './NavIcon.vue'
 
-type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
+type Settings={http_proxy:string;download_dir:string;aria_rpc_url:string;aria_secret:string;downloader_mode:string;check_time:string;timezone:string;max_concurrent:number;connections_per_download:number;download_limit_kbps:number;min_free_bytes:number;require_creator_match:boolean;enable_transrunner:boolean;transrunner_url:string;transrunner_default_profile:string;transrunner_token_configured:boolean;transrunner_api_token:string;transrunner_api_token_clear:boolean;exclude_title_keywords:string;exclude_uploaders:string;exclude_categories:string;exclude_tags:string;max_duration_seconds:number;backup_dir:string;backup_time:string;backup_retention:number;backup_last_success:string;backup_last_error:string}
 type Backup={name:string;size:number;created_at:string;sha256:string;valid:boolean}
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
@@ -16,6 +16,9 @@ const recovery=ref<any>({available:false})
 const trStatus=ref<{configured:boolean;created_at:string;last_used_at:string;scopes:string[]}>({configured:false,created_at:'',last_used_at:'',scopes:[]})
 const trNewToken=ref(''),trBusy=ref(false),trError=ref('')
 const trScopeLabel:Record<string,string>={read_media:'读取媒体',read_dedupe_candidates:'获取去重候选',write_duplicate_results:'写入重复结果',write_transcode_results:'写入转码结果'}
+const trTestResult=ref<any>(null),trTestBusy=ref(false)
+async function testTRConnection(){trTestBusy.value=true;trError.value='';trTestResult.value=null;try{trTestResult.value=await props.api('/api/integrations/transrunner/test',{method:'POST'})}catch(e){trError.value=String(e)}finally{trTestBusy.value=false}}
+function clearTRToken(){props.settings.transrunner_api_token='';props.settings.transrunner_api_token_clear=true;emit('save')}
 async function loadTRToken(){try{trStatus.value=await props.api('/api/integrations/transrunner/token')}catch{}}
 async function createTRToken(){trBusy.value=true;trError.value='';try{const result=await props.api('/api/integrations/transrunner/token',{method:'POST',body:JSON.stringify({rotate:trStatus.value.configured})});trNewToken.value=result.token;await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
 async function revokeTRToken(){if(!confirm('撤销 TransRunner 服务令牌？撤销后所有回调请求将立即失效。'))return;trBusy.value=true;try{await props.api('/api/integrations/transrunner/token',{method:'DELETE'});await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
@@ -97,6 +100,25 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <div class="display-setting"><span><b>演示模式</b><small>{{demoMode===0?'当前正常显示':demoMode===1?'当前已模糊图片和视频':'当前已隐藏敏感文字并加强模糊'}}</small></span><button :class="{primary:demoMode>0}" @click="emit('toggleDemo')">{{demoMode===0?'开启演示模式':demoMode===1?'进入强演示模式':'关闭演示模式'}}</button></div>
         <div class="sidebar-options"><b>侧栏底部项目</b><small>“设置”入口始终保留，避免隐藏后无法恢复。</small><label><input type="checkbox" :checked="sidebarItems.language" @change="emit('updateSidebarItem','language',($event.target as HTMLInputElement).checked)">语言选择</label><label><input type="checkbox" :checked="sidebarItems.original" @change="emit('updateSidebarItem','original',($event.target as HTMLInputElement).checked)">原文 / 译文切换</label><label><input type="checkbox" :checked="sidebarItems.demo" @change="emit('updateSidebarItem','demo',($event.target as HTMLInputElement).checked)">演示模式快捷按钮</label><label><input type="checkbox" :checked="sidebarItems.aria" @change="emit('updateSidebarItem','aria',($event.target as HTMLInputElement).checked)">aria2 在线状态</label></div>
       </div>
+    </section>
+
+    <section class="setting-card" :class="{open:open==='transrunner-conn'}">
+      <button class="setting-head" type="button" :aria-expanded="open==='transrunner-conn'" @click="toggle('transrunner-conn')">
+        <span class="setting-symbol"><NavIcon name="downloads"/></span><span><b>TransRunner 连接</b><small>把转码任务提交到外部 TransRunner</small></span><i>⌄</i>
+      </button>
+      <form v-if="open==='transrunner-conn'" class="setting-body" @submit.prevent="emit('save')">
+        <label class="setting-check"><input v-model="props.settings.enable_transrunner" type="checkbox"><span><b>启用 TransRunner</b><small>启用后可把已下载媒体提交到 TransRunner 转码；计算、队列和进度都由 TransRunner 负责。</small></span></label>
+        <label>TransRunner 地址<input v-model="props.settings.transrunner_url" placeholder="http://192.168.0.x:8787"></label>
+        <label>TransRunner API Token<input v-model="props.settings.transrunner_api_token" type="password" autocomplete="new-password" :placeholder="props.settings.transrunner_token_configured?'已配置，留空则不修改':'粘贴 TransRunner 的 API Token'"></label>
+        <label>默认转码 Profile<input v-model="props.settings.transrunner_default_profile" placeholder="hevc-1080p"><small>只发送 profile ID，HWatch 不解释或拼接 ffmpeg 参数。</small></label>
+        <p v-if="trError" class="error">{{trError}}</p>
+        <p v-if="trTestResult" class="notice">已连接 · {{trTestResult.version||'版本未知'}}<template v-if="trTestResult.platform"> · {{trTestResult.platform}}</template></p>
+        <div class="actions">
+          <button class="primary" :disabled="busy">保存连接设置</button>
+          <button type="button" :disabled="trTestBusy||busy" @click="testTRConnection">测试连接</button>
+          <button v-if="props.settings.transrunner_token_configured" type="button" class="danger" :disabled="busy" @click="clearTRToken">清除 Token</button>
+        </div>
+      </form>
     </section>
 
     <section class="setting-card" :class="{open:open==='transrunner'}">

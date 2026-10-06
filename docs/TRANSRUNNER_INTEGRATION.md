@@ -142,3 +142,59 @@ media, and never auto-confirms.
 
 This version **does not** replace the source, delete the original, or refresh
 Plex. Commit/replace is a later phase.
+
+## HWatch → TransRunner (submission)
+
+HWatch can submit a **transcode** job to TransRunner's own task system.
+
+Settings (`GET/PUT /api/settings`):
+
+- `enable_transrunner` — enable submission.
+- `transrunner_url` — TransRunner base URL.
+- `transrunner_api_token` — write-only secret; **never** returned by `GET /api/settings`
+  (only `transrunner_token_configured` is exposed). An empty value preserves the
+  existing token; clear it with `transrunner_api_token_clear: true`.
+- `transrunner_default_profile` — profile ID used when the request omits one.
+
+Admin endpoints (session cookie + CSRF):
+
+```
+POST /api/integrations/transrunner/test
+POST /api/integrations/transrunner/submit/transcode   {"video_id":"...","profile":"...","force":false}
+```
+
+`test` calls TransRunner `/health` then the authenticated `/api/v1/capabilities`
+and returns `{ok, version, platform, capabilities}`. Result is audited as
+`transrunner_tested`; submission is audited as `transrunner_job_submitted`.
+
+Submission sends to TransRunner `POST /api/v1/jobs`:
+
+```json
+{ "input": { "type": "hwatch", "video_id": "rule34video:123", "media_relative_path": "Rule34Video/A/file.mp4" },
+  "profile": "hevc-1080p" }
+```
+
+HWatch sends only `video_id` and `media_relative_path` (never an absolute path,
+ffmpeg arguments, callback URL or callback token — TransRunner already holds the
+HWatch URL, HWatch Service Token and media root). The returned `runner_job_id` is
+stored in `transrunner_submissions`; a repeat submission of the same
+video/operation/profile returns `409 already_submitted` unless `force: true`.
+
+HWatch does **not** poll TransRunner, mirror progress/leases, or run a local
+runner state machine. The result comes back through the TransRunner → HWatch
+callback API above.
+
+### Required TransRunner contract additions
+
+The current TransRunner HTTP API (v0.1.x) accepts only `input.type` `url`/`path`
+and has no content-duplicate job. For this integration to work end-to-end,
+TransRunner must add:
+
+1. `input.type = "hwatch"` accepting `video_id` + `media_relative_path`
+   (resolved against TransRunner's configured HWatch media root). HWatch will
+   never send an absolute path.
+2. An HTTP content-duplicate job (e.g. `kind = "dedupe"` / `media_duplicate`) that
+   accepts the same `hwatch` input plus candidates, and posts results back to
+   HWatch's `/api/transrunner/v1/duplicate-results`.
+
+Until (2) exists, HWatch does not expose a duplicate-submission endpoint.

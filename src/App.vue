@@ -164,6 +164,12 @@ type Settings = {
   download_limit_kbps: number;
   min_free_bytes: number;
   require_creator_match: boolean;
+  enable_transrunner: boolean;
+  transrunner_url: string;
+  transrunner_default_profile: string;
+  transrunner_token_configured: boolean;
+  transrunner_api_token: string;
+  transrunner_api_token_clear: boolean;
   exclude_title_keywords: string;
   exclude_uploaders: string;
   exclude_categories: string;
@@ -348,6 +354,12 @@ const settings = ref<Settings>({
   download_limit_kbps: 0,
   min_free_bytes: 5368709120,
   require_creator_match: true,
+  enable_transrunner: false,
+  transrunner_url: "",
+  transrunner_default_profile: "hevc-1080p",
+  transrunner_token_configured: false,
+  transrunner_api_token: "",
+  transrunner_api_token_clear: false,
   exclude_title_keywords: "compilation,collection,合集,集锦",
   exclude_uploaders: "",
   exclude_categories: "",
@@ -498,6 +510,29 @@ async function logout() {
     authPassword.value = "";
     data.value = empty;
   }
+}
+async function submitTranscode(video: Video) {
+  await act(async () => {
+    const profile = settings.value.transrunner_default_profile || "hevc-1080p";
+    try {
+      const result = await api("/api/integrations/transrunner/submit/transcode", {
+        method: "POST",
+        body: JSON.stringify({ video_id: video.video_id, profile }),
+      });
+      notice.value = `已发送到 TransRunner · ${result.runner_job_id}`;
+    } catch (e) {
+      if (String(e).includes("已发送到 TransRunner")) {
+        if (!confirm("该任务已发送到 TransRunner，仍要重新提交吗？")) return;
+        const result = await api("/api/integrations/transrunner/submit/transcode", {
+          method: "POST",
+          body: JSON.stringify({ video_id: video.video_id, profile, force: true }),
+        });
+        notice.value = `已重新发送到 TransRunner · ${result.runner_job_id}`;
+      } else {
+        throw e;
+      }
+    }
+  });
 }
 async function refreshDashboard() {
   try {
@@ -1798,6 +1833,7 @@ watch(
             </div>
             <div class="library-actions">
               <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
+              <button v-if="view === 'library' && settings.enable_transrunner" :disabled="busy" @click="submitTranscode(v)">TransRunner</button>
               <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
             </div>
           </article>
@@ -1936,6 +1972,7 @@ watch(
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
+      <div v-if="selected.status === 'completed' && settings.enable_transrunner" class="player-actions"><button :disabled="busy" @click="submitTranscode(selected)">发送转码到 TransRunner</button></div>
     </div>
   </div>
 </template>

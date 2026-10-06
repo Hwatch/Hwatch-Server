@@ -49,6 +49,8 @@ type Settings struct {
 	MaxDurationSeconds                                                                                int64
 	RequireCreatorMatch, DownloadPaused, StorageMountRequired, BackupMountRequired                    bool
 	AutoTranscode                                                                                     bool
+	EnableTransRunner                                                                                 bool
+	TransRunnerURL, TransRunnerAPIToken, TransRunnerDefaultProfile                                    string
 }
 type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
@@ -125,6 +127,8 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_integration_tokens_name ON integration_tokens(name,revoked_at);" +
 	"CREATE TABLE IF NOT EXISTS transcode_results (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,runner_job_id TEXT NOT NULL DEFAULT '',source_sha256 TEXT NOT NULL DEFAULT '',output_relative_path TEXT NOT NULL,profile TEXT NOT NULL DEFAULT '',probe_json TEXT NOT NULL DEFAULT '{}',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL);" +
 	"CREATE INDEX IF NOT EXISTS idx_transcode_results_video ON transcode_results(video_id,created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS transrunner_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,operation TEXT NOT NULL,profile TEXT NOT NULL DEFAULT '',runner_job_id TEXT NOT NULL,created_at TEXT NOT NULL);" +
+	"CREATE INDEX IF NOT EXISTS idx_transrunner_submissions_video ON transrunner_submissions(video_id,operation,profile,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"
@@ -181,7 +185,7 @@ func Open(path string) (*Store, error) {
 	_, _ = db.Exec("UPDATE videos SET downloader_id='aria2',external_task_id=aria_gid WHERE aria_gid<>'' AND downloader_id=''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
-	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": "", "auto_transcode": "false"}
+	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": "", "auto_transcode": "false", "enable_transrunner": "false", "transrunner_url": "", "transrunner_api_token": "", "transrunner_default_profile": "hevc-1080p"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
 	}
@@ -313,6 +317,10 @@ func (s *Store) Settings() (Settings, error) {
 	cfg.StorageMountRequired = strings.EqualFold(values["storage_mount_required"], "true")
 	cfg.BackupMountRequired = strings.EqualFold(values["backup_mount_required"], "true")
 	cfg.AutoTranscode = strings.EqualFold(values["auto_transcode"], "true")
+	cfg.EnableTransRunner = strings.EqualFold(values["enable_transrunner"], "true")
+	cfg.TransRunnerURL = values["transrunner_url"]
+	cfg.TransRunnerAPIToken = values["transrunner_api_token"]
+	cfg.TransRunnerDefaultProfile = values["transrunner_default_profile"]
 	_, _ = fmt.Sscan(values["max_concurrent"], &cfg.MaxConcurrent)
 	_, _ = fmt.Sscan(values["connections_per_download"], &cfg.ConnectionsPerDownload)
 	_, _ = fmt.Sscan(values["download_limit_kbps"], &cfg.DownloadLimitKBPS)
@@ -331,7 +339,7 @@ func (s *Store) SaveSettings(cfg Settings) error {
 		return err
 	}
 	defer tx.Rollback()
-	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention, "storage_mount_required": cfg.StorageMountRequired, "backup_mount_required": cfg.BackupMountRequired, "auto_transcode": cfg.AutoTranscode}
+	values := map[string]any{"http_proxy": cfg.HTTPProxy, "download_dir": cfg.DownloadDir, "aria_rpc_url": cfg.AriaRPCURL, "aria_secret": cfg.AriaSecret, "check_time": cfg.CheckTime, "timezone": cfg.Timezone, "plex_language": cfg.PlexLanguage, "max_concurrent": cfg.MaxConcurrent, "connections_per_download": cfg.ConnectionsPerDownload, "download_limit_kbps": cfg.DownloadLimitKBPS, "min_free_bytes": cfg.MinFreeBytes, "require_creator_match": cfg.RequireCreatorMatch, "exclude_title_keywords": cfg.ExcludeTitleKeywords, "exclude_uploaders": cfg.ExcludeUploaders, "exclude_categories": cfg.ExcludeCategories, "exclude_tags": cfg.ExcludeTags, "max_duration_seconds": cfg.MaxDurationSeconds, "backup_dir": cfg.BackupDir, "backup_time": cfg.BackupTime, "backup_retention": cfg.BackupRetention, "storage_mount_required": cfg.StorageMountRequired, "backup_mount_required": cfg.BackupMountRequired, "auto_transcode": cfg.AutoTranscode, "enable_transrunner": cfg.EnableTransRunner, "transrunner_url": cfg.TransRunnerURL, "transrunner_api_token": cfg.TransRunnerAPIToken, "transrunner_default_profile": cfg.TransRunnerDefaultProfile}
 	values["downloader_mode"] = cfg.DownloaderMode
 	for k, v := range values {
 		if _, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, fmt.Sprint(v)); err != nil {
