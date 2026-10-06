@@ -14,6 +14,7 @@ tags:
   - name: Subscriptions
   - name: Settings
   - name: Translation
+  - name: TransRunner
 paths:
   /api/auth/status:
     get: {tags: [Auth], security: [], operationId: authStatus, responses: {'200': {$ref: '#/components/responses/JSON'}}}
@@ -150,6 +151,42 @@ paths:
       description: text/event-stream。客户端断线后自动重连，并通过 GET /api/dashboard 与 GET /api/tasks 恢复全量状态。
       responses:
         '200': {description: SSE 下载状态流, content: {text/event-stream: {schema: {type: string}}}}
+  /api/integrations/transrunner/token:
+    get: {tags: [TransRunner], operationId: getTransRunnerToken, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    post: {tags: [TransRunner], operationId: createTransRunnerToken, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {content: {application/json: {schema: {type: object, properties: {rotate: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [TransRunner], operationId: revokeTransRunnerToken, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/transrunner/v1/media/{video_id}:
+    get:
+      tags: [TransRunner]
+      security: [{integrationBearer: []}]
+      operationId: transRunnerMedia
+      description: 需要 read_media。只返回相对媒体路径与媒体元数据，不返回绝对路径或凭据。
+      parameters: [{name: video_id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 媒体元数据, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerMedia'}}}}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/transrunner/v1/media/{video_id}/dedupe-candidates:
+    get:
+      tags: [TransRunner]
+      security: [{integrationBearer: []}]
+      operationId: transRunnerDedupeCandidates
+      description: 需要 read_dedupe_candidates。候选由 HWatch 服务端筛选，调用方不扫描全库。
+      parameters: [{name: video_id, in: path, required: true, schema: {type: string}}, {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}]
+      responses: {'200': {description: 去重候选, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerDedupeCandidates'}}}}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}}
+  /api/transrunner/v1/duplicate-results:
+    post:
+      tags: [TransRunner]
+      security: [{integrationBearer: []}]
+      operationId: transRunnerDuplicateResults
+      description: 需要 write_duplicate_results。仅写入重复候选，绝不删除或替换媒体。
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerDuplicateResult'}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /api/transrunner/v1/transcode-results:
+    post:
+      tags: [TransRunner]
+      security: [{integrationBearer: []}]
+      operationId: transRunnerTranscodeResults
+      description: 需要 write_transcode_results。接收暂存产物并由 HWatch 用 ffprobe 验证，只记录 pending 结果，不替换源文件。
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerTranscodeResult'}}}}
+      responses: {'202': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
   /media/{id}:
     get: {tags: [Library], operationId: streamMedia, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {description: 支持 Range 的媒体流}}}
   /thumb/{id}:
@@ -157,6 +194,7 @@ paths:
 components:
   securitySchemes:
     cookieAuth: {type: apiKey, in: cookie, name: hwatch_session}
+    integrationBearer: {type: http, scheme: bearer, bearerFormat: opaque-service-token, description: 受限的 TransRunner 服务令牌，携带 scope。}
   parameters:
     CSRF: {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}
     VideoID: {name: id, in: path, required: true, schema: {type: string}}
@@ -181,6 +219,64 @@ components:
       type: object
       required: [username, password]
       properties: {username: {type: string, minLength: 3, maxLength: 64}, password: {type: string, minLength: 10, maxLength: 256, writeOnly: true}}
+    TransRunnerMedia:
+      type: object
+      required: [video_id, media_relative_path]
+      properties:
+        video_id: {type: string}
+        media_relative_path: {type: string, description: 相对媒体根的路径，绝不返回绝对路径。}
+        file_size: {type: integer, format: int64}
+        duration: {type: integer, format: int64}
+        container: {type: string}
+        video_codec: {type: string}
+        audio_codec: {type: string}
+        width: {type: integer}
+        height: {type: integer}
+        fps: {type: number, format: double}
+        bit_depth: {type: integer}
+        bitrate: {type: integer, format: int64}
+        sha256: {type: string}
+    TransRunnerDedupeCandidate:
+      type: object
+      required: [video_id, media_relative_path]
+      properties:
+        video_id: {type: string}
+        media_relative_path: {type: string}
+        duration: {type: integer, format: int64}
+        sha256: {type: string}
+        file_size: {type: integer, format: int64}
+    TransRunnerDedupeCandidates:
+      type: object
+      required: [video_id, algorithm_version, candidates]
+      properties:
+        video_id: {type: string}
+        algorithm_version: {type: string, example: media-fingerprint-v1}
+        candidates: {type: array, items: {$ref: '#/components/schemas/TransRunnerDedupeCandidate'}}
+    TransRunnerDuplicateMatch:
+      type: object
+      required: [video_id, classification]
+      properties:
+        video_id: {type: string}
+        classification: {type: string, enum: [whole-video, trimmed-video, possible-match, different]}
+        backend: {type: string, example: phash}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        metrics: {type: object, additionalProperties: true}
+    TransRunnerDuplicateResult:
+      type: object
+      required: [video_id, matches]
+      properties:
+        video_id: {type: string}
+        algorithm_version: {type: string, example: media-fingerprint-v1}
+        matches: {type: array, items: {$ref: '#/components/schemas/TransRunnerDuplicateMatch'}}
+    TransRunnerTranscodeResult:
+      type: object
+      required: [video_id, output_relative_path]
+      properties:
+        video_id: {type: string}
+        runner_job_id: {type: string}
+        source_sha256: {type: string, description: 提交源文件的 SHA-256；与当前不一致时返回 409 source_changed。}
+        output_relative_path: {type: string, description: 必须位于暂存目录 .transrunner/ 内。}
+        profile: {type: string, example: hevc-1080p}
     RecoveryStatus:
       type: object
       required: [available]

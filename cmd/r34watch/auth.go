@@ -203,7 +203,7 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 			fail(w, http.StatusServiceUnavailable, errors.New("服务正在执行数据库维护，请稍后重试"))
 			return
 		}
-		if r.URL.Path == "/api/auth/status" || r.URL.Path == "/api/auth/setup" || r.URL.Path == "/api/auth/login" || !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/media/") && !strings.HasPrefix(r.URL.Path, "/thumb/") {
+		if r.URL.Path == "/api/auth/status" || r.URL.Path == "/api/auth/setup" || r.URL.Path == "/api/auth/login" || strings.HasPrefix(r.URL.Path, "/api/transrunner/v1/") || !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/media/") && !strings.HasPrefix(r.URL.Path, "/thumb/") {
 			next.ServeHTTP(w, r)
 			return
 		}

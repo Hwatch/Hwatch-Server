@@ -121,6 +121,10 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS task_events (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,from_status TEXT NOT NULL DEFAULT '',to_status TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_task_events_video ON task_events(video_id,created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS integration_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,scopes_json TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,last_used_at TEXT NOT NULL DEFAULT '',revoked_at TEXT NOT NULL DEFAULT '');" +
+	"CREATE INDEX IF NOT EXISTS idx_integration_tokens_name ON integration_tokens(name,revoked_at);" +
+	"CREATE TABLE IF NOT EXISTS transcode_results (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,runner_job_id TEXT NOT NULL DEFAULT '',source_sha256 TEXT NOT NULL DEFAULT '',output_relative_path TEXT NOT NULL,profile TEXT NOT NULL DEFAULT '',probe_json TEXT NOT NULL DEFAULT '{}',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL);" +
+	"CREATE INDEX IF NOT EXISTS idx_transcode_results_video ON transcode_results(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"

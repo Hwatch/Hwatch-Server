@@ -22,10 +22,11 @@
 HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任务调度。去重分析与转码将由独立的 TransRunner 服务提供，集成在后续版本实现：
 
 - [ ] HWatch → TransRunner：使用 TransRunner 现有 Bearer API 创建转码/去重任务（保存 `transrunner_url` 与 API Token）。
-- [ ] TransRunner → HWatch：提供受限 Service Token 的回写接口，仅允许读取媒体元数据与去重候选、写回重复结果与转码结果；禁止删除媒体、管理用户/订阅或改设置。
+- [x] TransRunner → HWatch：提供受限 Service Token 的 callback API，仅允许读取媒体元数据与去重候选、写回重复结果与转码结果；禁止删除媒体、管理用户/订阅或改设置。
+- [x] 复用现有重复审查与 `duplicate_candidates`，由 TransRunner 回写 classification、backend、algorithm_version 与结构化 metrics。
+- [ ] 转码结果的人工确认与原子替换（当前只记录 `pending` transcode result，不替换源文件）。
 - [ ] 转码完成后自动刷新 SQLite 媒体信息、Plex NFO、海报和 Plex 扫描状态。
 - [ ] 支持 H.264 转 H.265/HEVC，并可配置码率、质量、分辨率、音轨和字幕保留策略。
-- [ ] 复用现有重复审查与 `duplicate_candidates`，由 TransRunner 回写分类、backend、algorithm_version 与结构化 metrics。
 
 ## P1：OpenAPI 与客户端契约
 

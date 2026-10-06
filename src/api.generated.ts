@@ -598,6 +598,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/transrunner/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTransRunnerToken"];
+        put?: never;
+        post: operations["createTransRunnerToken"];
+        delete: operations["revokeTransRunnerToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transrunner/v1/media/{video_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 需要 read_media。只返回相对媒体路径与媒体元数据，不返回绝对路径或凭据。 */
+        get: operations["transRunnerMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transrunner/v1/media/{video_id}/dedupe-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 需要 read_dedupe_candidates。候选由 HWatch 服务端筛选，调用方不扫描全库。 */
+        get: operations["transRunnerDedupeCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transrunner/v1/duplicate-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 需要 write_duplicate_results。仅写入重复候选，绝不删除或替换媒体。 */
+        post: operations["transRunnerDuplicateResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transrunner/v1/transcode-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 需要 write_transcode_results。接收暂存产物并由 HWatch 用 ffprobe 验证，只记录 pending 结果，不替换源文件。 */
+        post: operations["transRunnerTranscodeResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}": {
         parameters: {
             query?: never;
@@ -641,6 +725,68 @@ export interface components {
         Credentials: {
             username: string;
             password: string;
+        };
+        TransRunnerMedia: {
+            video_id: string;
+            /** @description 相对媒体根的路径，绝不返回绝对路径。 */
+            media_relative_path: string;
+            /** Format: int64 */
+            file_size?: number;
+            /** Format: int64 */
+            duration?: number;
+            container?: string;
+            video_codec?: string;
+            audio_codec?: string;
+            width?: number;
+            height?: number;
+            /** Format: double */
+            fps?: number;
+            bit_depth?: number;
+            /** Format: int64 */
+            bitrate?: number;
+            sha256?: string;
+        };
+        TransRunnerDedupeCandidate: {
+            video_id: string;
+            media_relative_path: string;
+            /** Format: int64 */
+            duration?: number;
+            sha256?: string;
+            /** Format: int64 */
+            file_size?: number;
+        };
+        TransRunnerDedupeCandidates: {
+            video_id: string;
+            /** @example media-fingerprint-v1 */
+            algorithm_version: string;
+            candidates: components["schemas"]["TransRunnerDedupeCandidate"][];
+        };
+        TransRunnerDuplicateMatch: {
+            video_id: string;
+            /** @enum {string} */
+            classification: "whole-video" | "trimmed-video" | "possible-match" | "different";
+            /** @example phash */
+            backend?: string;
+            confidence?: number;
+            metrics?: {
+                [key: string]: unknown;
+            };
+        };
+        TransRunnerDuplicateResult: {
+            video_id: string;
+            /** @example media-fingerprint-v1 */
+            algorithm_version?: string;
+            matches: components["schemas"]["TransRunnerDuplicateMatch"][];
+        };
+        TransRunnerTranscodeResult: {
+            video_id: string;
+            runner_job_id?: string;
+            /** @description 提交源文件的 SHA-256；与当前不一致时返回 409 source_changed。 */
+            source_sha256?: string;
+            /** @description 必须位于暂存目录 .transrunner/ 内。 */
+            output_relative_path: string;
+            /** @example hevc-1080p */
+            profile?: string;
         };
         RecoveryStatus: {
             available: boolean;
@@ -1497,6 +1643,148 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
+        };
+    };
+    getTransRunnerToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    createTransRunnerToken: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default false */
+                    rotate?: boolean;
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+        };
+    };
+    revokeTransRunnerToken: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    transRunnerMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 媒体元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransRunnerMedia"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    transRunnerDedupeCandidates: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 去重候选 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransRunnerDedupeCandidates"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    transRunnerDuplicateResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransRunnerDuplicateResult"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    transRunnerTranscodeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransRunnerTranscodeResult"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     streamMedia: {

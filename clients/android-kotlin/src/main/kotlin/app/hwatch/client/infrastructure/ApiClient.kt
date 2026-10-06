@@ -1,6 +1,7 @@
 package app.hwatch.client.infrastructure
 
 import app.hwatch.client.auth.ApiKeyAuth
+import app.hwatch.client.auth.HttpBearerAuth
 
 import okhttp3.Call
 import okhttp3.Interceptor
@@ -71,12 +72,31 @@ class ApiClient(
             val auth: Interceptor? = when (authName) { 
                 "cookieAuth" -> ApiKeyAuth("cookie", "hwatch_session")
                 
+                "integrationBearer" -> HttpBearerAuth("bearer")
+                
                 else -> throw RuntimeException("auth name $authName not found in available auth names")
             }
             if (auth != null) {
                 addAuthorization(authName, auth)
             }
         }
+    }
+
+    constructor(
+        baseUrl: String = defaultBasePath,
+        okHttpClientBuilder: OkHttpClient.Builder? = null,
+        serializerBuilder: GsonBuilder = Serializer.gsonBuilder,
+        authName: String,
+        bearerToken: String
+    ) : this(baseUrl, okHttpClientBuilder, serializerBuilder, arrayOf(authName)) {
+        setBearerToken(bearerToken)
+    }
+
+    fun setBearerToken(bearerToken: String): ApiClient {
+        apiAuthorizations.values.runOnFirst<Interceptor, HttpBearerAuth> {
+            this.bearerToken = bearerToken
+        }
+        return this
     }
 
     /**
