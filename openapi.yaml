@@ -56,6 +56,27 @@ paths:
         - {name: action, in: path, required: true, schema: {type: string, enum: [confirm, dismiss]}}
         - {$ref: '#/components/parameters/CSRF'}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}
+  /api/duplicates/batch:
+    post:
+      tags: [Library]
+      operationId: reviewDuplicateCandidatesBatch
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [ids, action], properties: {ids: {type: array, maxItems: 500, items: {type: integer, format: int64}}, action: {type: string, enum: [confirm, dismiss]}}}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}
+  /api/exclusions/preview:
+    post:
+      tags: [Settings]
+      operationId: previewExclusions
+      description: 使用尚未保存的规则草稿预览命中项，不改变视频状态。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/JSONObject'}
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
+  /api/audit:
+    get:
+      tags: [Settings]
+      operationId: listAuditLogs
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
   /api/videos:
     get:
       tags: [Library]
@@ -79,7 +100,9 @@ paths:
   /api/videos/facets:
     get: {tags: [Library], operationId: videoFacets, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/tasks:
-    get: {tags: [Downloads], operationId: listTasks, parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}, {name: status, in: query, schema: {type: string}}, {$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/VideoPage'}}}
+    get: {tags: [Downloads], operationId: listTasks, parameters: [{$ref: '#/components/parameters/TaskLimit'}, {$ref: '#/components/parameters/Offset'}, {name: status, in: query, schema: {type: string}}, {$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/VideoPage'}}}
+  /api/tasks/{id}/history:
+    get: {tags: [Downloads], operationId: taskHistory, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/videos/download-all:
     post: {tags: [Downloads], operationId: downloadAll, parameters: [{$ref: '#/components/parameters/CSRF'}, {name: subscription, in: query, schema: {type: string}}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
   /api/downloads/toggle:
@@ -88,9 +111,11 @@ paths:
     post: {tags: [Downloads], operationId: videoAction, parameters: [{$ref: '#/components/parameters/VideoID'}, {name: action, in: path, required: true, schema: {type: string, enum: [download, retry, pause, resume, delete]}}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
   /api/subscriptions:
     get: {tags: [Subscriptions], operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/JSON'}}}
-    post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri}, type: {type: string}, download_existing: {type: boolean}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+    post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri, description: 已注册适配器支持的订阅链接}, type: {type: string, enum: [creator, playlist], description: 可省略，由链接自动识别}, download_existing: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}}
+  /avatar/{slug}:
+    get: {tags: [Subscriptions], operationId: subscriptionAvatar, parameters: [{$ref: '#/components/parameters/Slug'}], responses: {'200': {description: 本地缓存的订阅头像或 SVG 占位图, content: {image/jpeg: {}, image/png: {}, image/svg+xml: {}}}, '404': {$ref: '#/components/responses/Error'}}}
   /api/subscriptions/{slug}:
-    patch: {tags: [Subscriptions], operationId: updateSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    patch: {tags: [Subscriptions], operationId: updateSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [enabled], properties: {enabled: {type: boolean}}, additionalProperties: false}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     delete: {tags: [Subscriptions], operationId: deleteSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/platforms:
     get: {tags: [Subscriptions], operationId: listPlatforms, responses: {'200': {$ref: '#/components/responses/JSON'}}}
@@ -111,11 +136,11 @@ paths:
   /api/backups/{name}/restore:
     post: {tags: [Settings], operationId: restoreBackup, parameters: [{name: name, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [confirm], properties: {confirm: {type: boolean, description: 必须为 true}}}}}}, responses: {'202': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}}}
   /api/translations/export:
-    get: {tags: [Translation], operationId: exportTranslations, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    get: {tags: [Translation], operationId: exportTranslations, parameters: [{$ref: '#/components/parameters/Language'}, {name: platform, in: query, schema: {type: string}}, {name: subscription, in: query, schema: {type: string}}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/translations/import:
     post: {tags: [Translation], operationId: importTranslations, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/plex/refresh-nfo:
-    post: {tags: [Translation], operationId: refreshNFO, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+    post: {tags: [Translation], operationId: refreshNFO, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {content: {application/json: {schema: {type: object, properties: {language: {type: string, default: zh-CN}}, additionalProperties: false}}}}, responses: {'202': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
   /api/import/html:
     post: {tags: [Library], operationId: importHTML, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/events:
@@ -137,6 +162,7 @@ components:
     VideoID: {name: id, in: path, required: true, schema: {type: string}}
     Slug: {name: slug, in: path, required: true, schema: {type: string}}
     Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 48}}
+    TaskLimit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
     Offset: {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
     Language: {name: language, in: query, schema: {type: string, default: zh-CN}}
   requestBodies:
@@ -183,8 +209,13 @@ components:
         video_id: {type: string}
         subscription_slug: {type: string}
         title: {type: string}
+        description: {type: string}
         translated_title: {type: string}
-        status: {type: string, enum: [discovered, queued, waiting, active, paused, failed, excluded, completed]}
+        views: {type: integer, format: int64}
+        likes: {type: integer, format: int64}
+        like_rate: {type: number, format: double, description: 点赞百分比，例如 99 表示 99%}
+        tags: {type: array, items: {type: object, additionalProperties: true}}
+        status: {type: string, enum: [discovered, queued, submitting, waiting, active, paused, failed, excluded, completed]}
         downloader_id: {type: string, description: 未分配时为空字符串，已分配时为 aria2 或 wget}
         external_task_id: {type: string}
         bytes_downloaded: {type: integer, format: int64}

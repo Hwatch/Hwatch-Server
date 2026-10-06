@@ -21,6 +21,7 @@ import io.kotlintest.specs.ShouldSpec
 import app.hwatch.client.apis.SubscriptionsApi
 import app.hwatch.client.models.CreateSubscriptionRequest
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.UpdateSubscriptionRequest
 
 class SubscriptionsApiTest : ShouldSpec() {
     init {
@@ -85,12 +86,20 @@ class SubscriptionsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test subscriptionAvatar
+        should("test subscriptionAvatar") {
+            // uncomment below to test subscriptionAvatar
+            //val slug : kotlin.String = slug_example // kotlin.String | 
+            //apiInstance.subscriptionAvatar(slug)
+        }
+
         // to test updateSubscription
         should("test updateSubscription") {
             // uncomment below to test updateSubscription
             //val slug : kotlin.String = slug_example // kotlin.String | 
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
-            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.updateSubscription(slug, xCSRFToken)
+            //val updateSubscriptionRequest : UpdateSubscriptionRequest =  // UpdateSubscriptionRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.updateSubscription(slug, xCSRFToken, updateSubscriptionRequest)
             //result shouldBe ("TODO")
         }
 

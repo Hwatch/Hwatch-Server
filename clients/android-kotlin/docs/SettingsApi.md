@@ -7,9 +7,11 @@ All URIs are relative to *http://localhost*
 | [**createBackup**](SettingsApi.md#createBackup) | **POST** api/backups |  |
 | [**getSettings**](SettingsApi.md#getSettings) | **GET** api/settings |  |
 | [**health**](SettingsApi.md#health) | **GET** api/health |  |
+| [**listAuditLogs**](SettingsApi.md#listAuditLogs) | **GET** api/audit |  |
 | [**listBackups**](SettingsApi.md#listBackups) | **GET** api/backups |  |
 | [**listNotifications**](SettingsApi.md#listNotifications) | **GET** api/notifications |  |
 | [**markNotificationsRead**](SettingsApi.md#markNotificationsRead) | **POST** api/notifications/read-all |  |
+| [**previewExclusions**](SettingsApi.md#previewExclusions) | **POST** api/exclusions/preview |  |
 | [**recoverySummary**](SettingsApi.md#recoverySummary) | **GET** api/recovery/latest |  |
 | [**restoreBackup**](SettingsApi.md#restoreBackup) | **POST** api/backups/{name}/restore |  |
 | [**updateSettings**](SettingsApi.md#updateSettings) | **PUT** api/settings |  |
@@ -126,6 +128,43 @@ This endpoint does not need any parameter.
 
 val apiClient = ApiClient()
 val webService = apiClient.createWebservice(SettingsApi::class.java)
+val limit : kotlin.Int = 56 // kotlin.Int | 
+val offset : kotlin.Int = 56 // kotlin.Int | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.listAuditLogs(limit, offset)
+```
+
+### Parameters
+| **limit** | **kotlin.Int**|  | [optional] [default to 48] |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **offset** | **kotlin.Int**|  | [optional] [default to 0] |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SettingsApi::class.java)
 
 val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.listBackups()
 ```
@@ -214,6 +253,45 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.mark
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+使用尚未保存的规则草稿预览命中项，不改变视频状态。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SettingsApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val requestBody : kotlin.collections.Map<kotlin.String, kotlin.Any> = Object // kotlin.collections.Map<kotlin.String, kotlin.Any> | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.previewExclusions(xCSRFToken, requestBody)
+```
+
+### Parameters
+| **xCSRFToken** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **requestBody** | [**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 

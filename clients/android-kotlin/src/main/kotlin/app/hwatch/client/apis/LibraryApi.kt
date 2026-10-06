@@ -7,6 +7,7 @@ import okhttp3.RequestBody
 import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest
 import app.hwatch.client.models.VideoPage
 
 interface LibraryApi {
@@ -128,6 +129,21 @@ interface LibraryApi {
      */
     @POST("api/duplicates/{id}/{action}")
     fun reviewDuplicateCandidate(@Path("id") id: kotlin.Long, @Path("action") action: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/duplicates/batch
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *  - 400: 请求失败
+     *
+     * @param xCSRFToken 
+     * @param reviewDuplicateCandidatesBatchRequest 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/duplicates/batch")
+    fun reviewDuplicateCandidatesBatch(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body reviewDuplicateCandidatesBatchRequest: ReviewDuplicateCandidatesBatchRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET media/{id}

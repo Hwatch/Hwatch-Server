@@ -73,8 +73,11 @@ func (c *Client) Version(ctx context.Context) error {
 	var out map[string]any
 	return c.call(ctx, "getVersion", nil, &out)
 }
-func (c *Client) Add(ctx context.Context, uri, dir, name, referer, userAgent, proxy string, connections int) (string, error) {
+func (c *Client) Add(ctx context.Context, uri, dir, name, referer, userAgent, proxy, requestedGID string, connections int) (string, error) {
 	opts := map[string]string{"dir": dir, "out": name, "continue": "true", "auto-file-renaming": "false", "allow-overwrite": "true", "max-tries": "12", "retry-wait": "30", "timeout": "60", "connect-timeout": "20", "lowest-speed-limit": "1K", "summary-interval": "1", "header": "Referer: " + referer + "\nUser-Agent: " + userAgent}
+	if requestedGID != "" {
+		opts["gid"] = requestedGID
+	}
 	if connections < 1 {
 		connections = 1
 	}
@@ -122,6 +125,10 @@ func (c *Client) Remove(ctx context.Context, gid string) error {
 		err = c.call(ctx, "removeDownloadResult", []any{gid}, &out)
 	}
 	return err
+}
+func (c *Client) RemoveResult(ctx context.Context, gid string) error {
+	var out string
+	return c.call(ctx, "removeDownloadResult", []any{gid}, &out)
 }
 func (c *Client) ReplaceURI(ctx context.Context, gid, uri string) error {
 	var out []int

@@ -75,6 +75,15 @@ func validateCredentials(input authInput) error {
 }
 
 func (a *App) authSetup(w http.ResponseWriter, r *http.Request) {
+	configured, err := a.store.HasUsers()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if configured {
+		fail(w, http.StatusConflict, store.ErrAdminExists)
+		return
+	}
 	var input authInput
 	if err := decode(r, &input); err != nil || validateCredentials(input) != nil {
 		if err == nil {
@@ -189,6 +198,11 @@ func (a *App) authMe(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.maintenance.Load() && (strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/media/") || strings.HasPrefix(r.URL.Path, "/thumb/")) {
+			w.Header().Set("Retry-After", "5")
+			fail(w, http.StatusServiceUnavailable, errors.New("服务正在执行数据库维护，请稍后重试"))
+			return
+		}
 		if r.URL.Path == "/api/auth/status" || r.URL.Path == "/api/auth/setup" || r.URL.Path == "/api/auth/login" || !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/media/") && !strings.HasPrefix(r.URL.Path, "/thumb/") {
 			next.ServeHTTP(w, r)
 			return
@@ -205,6 +219,29 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 				return
 			}
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authContextKey{}, session)))
+		request := r.WithContext(context.WithValue(r.Context(), authContextKey{}, session))
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, request)
+			return
+		}
+		recorder := &auditResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, request)
+		result := "success"
+		if recorder.status >= 400 {
+			result = "failed"
+		}
+		// Only method and URL path are retained. Bodies, query strings, credentials,
+		// proxy values and signed download URLs are deliberately never audited.
+		_ = a.store.AddAudit(session.Username, r.Method+" "+r.URL.Path, "http", "", result, map[string]any{"status": recorder.status})
 	})
+}
+
+type auditResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *auditResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
 }

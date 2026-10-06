@@ -90,3 +90,38 @@ func TestQueuedTaskSurvivesDatabaseReopen(t *testing.T) {
 		t.Fatalf("restart recovery lost state: %+v", got)
 	}
 }
+
+func TestSubmissionStateIsIdempotentAndRecoverable(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "submission.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	sub := store.Subscription{Slug: "rule34video:submission", Name: "submission", URL: "https://example.invalid/submission", Enabled: true, CreatedAt: store.Now()}
+	if err = s.AddSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+	v := store.Video{ID: "rule34video:submission", SubscriptionSlug: sub.Slug, Title: "submission", PageURL: "https://example.invalid/video", DiscoveredAt: store.Now(), UpdatedAt: store.Now()}
+	if _, err = s.UpsertDiscovered(v); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.QueueVideo(v.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.BeginSubmission(v.ID, "aria2", "0123456789abcdef", "/media/test.mp4"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.BeginSubmission(v.ID, "aria2", "fedcba9876543210", "/media/other.mp4"); err == nil {
+		t.Fatal("second submission unexpectedly replaced the persisted binding")
+	}
+	if n, requeueErr := s.RequeueSubmitting(); requeueErr != nil || n != 1 {
+		t.Fatalf("requeued=%d err=%v", n, requeueErr)
+	}
+	got, err := s.Video(v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "queued" || got.ExternalID != "0123456789abcdef" {
+		t.Fatalf("unexpected recovered submission: %+v", got)
+	}
+}

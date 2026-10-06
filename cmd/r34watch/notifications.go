@@ -14,7 +14,7 @@ func (a *App) evaluateNotifications(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	total, free := diskStats(cfg.DownloadDir)
+	total, free := diskStats(cfg.DownloadDir, cfg.StorageMountRequired)
 	fsType := filesystemType(cfg.DownloadDir)
 	previousFS, _ := a.store.Setting("media_filesystem_type")
 	previousPath, _ := a.store.Setting("media_filesystem_path")

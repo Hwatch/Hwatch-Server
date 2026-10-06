@@ -44,6 +44,13 @@ class LibraryApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test listDuplicateCandidates
+        should("test listDuplicateCandidates") {
+            // uncomment below to test listDuplicateCandidates
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listDuplicateCandidates()
+            //result shouldBe ("TODO")
+        }
+
         // to test listVideos
         should("test listVideos") {
             // uncomment below to test listVideos
@@ -62,6 +69,16 @@ class LibraryApiTest : ShouldSpec() {
             //val order : kotlin.String = order_example // kotlin.String | 
             //val language : kotlin.String = language_example // kotlin.String | 
             //val result : VideoPage = apiInstance.listVideos(limit, offset, status, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, sort, order, language)
+            //result shouldBe ("TODO")
+        }
+
+        // to test reviewDuplicateCandidate
+        should("test reviewDuplicateCandidate") {
+            // uncomment below to test reviewDuplicateCandidate
+            //val id : kotlin.Long = 789 // kotlin.Long | 
+            //val action : kotlin.String = action_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.reviewDuplicateCandidate(id, action, xCSRFToken)
             //result shouldBe ("TODO")
         }
 

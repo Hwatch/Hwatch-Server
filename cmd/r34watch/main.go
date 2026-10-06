@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"mime"
@@ -17,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -50,6 +52,7 @@ type App struct {
 	hashRunning    map[string]bool
 	backupMu       sync.Mutex
 	recoveryMu     sync.Mutex
+	maintenance    atomic.Bool
 	authMu         sync.Mutex
 	loginAttempts  map[string][]time.Time
 	checking       map[string]bool
@@ -59,7 +62,7 @@ type App struct {
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
+	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}, adapters.Hanime1{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -148,7 +151,7 @@ func parseModelURL(raw string) (string, error) {
 }
 
 func subMap(s store.Subscription) map[string]any {
-	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
+	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "avatar_proxy_url": "/avatar/" + url.PathEscape(s.Slug), "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
 }
 func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
@@ -162,7 +165,7 @@ func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 }
 func videoMap(v store.Video) map[string]any {
 	failure := classifyDownloadMessage(v.Error)
-	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "error_code": failure.Code, "error_retryable": failure.Retryable, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
+	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "description": v.Description, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "likes": v.Likes, "like_rate": v.LikeRate, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "error_code": failure.Code, "error_retryable": failure.Retryable, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
 }
 func translatedVideoMap(v store.Video, language string, translations map[string]store.Translation) map[string]any {
 	item := videoMap(v)
@@ -211,7 +214,7 @@ func (a *App) selectedEngine(cfg store.Settings) downloader.Engine {
 		return a.wget
 	}
 	if cfg.DownloaderMode == "auto" {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 		defer cancel()
 		if a.aria(cfg).Health(ctx).Online {
 			return a.aria(cfg)
@@ -233,12 +236,12 @@ func externalTaskID(v store.Video) string {
 	return v.AriaGID
 }
 func (a *App) ariaOnline(cfg store.Settings) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
 	return a.aria(cfg).Health(ctx).Online
 }
 func (a *App) downloaderHealth(ctx context.Context, cfg store.Settings) []downloader.Health {
-	ariaCtx, ariaCancel := context.WithTimeout(ctx, 2*time.Second)
+	ariaCtx, ariaCancel := context.WithTimeout(ctx, 7*time.Second)
 	ariaHealth := a.aria(cfg).Health(ariaCtx)
 	ariaCancel()
 	wgetCtx, wgetCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -257,7 +260,7 @@ func (a *App) downloaderHealth(ctx context.Context, cfg store.Settings) []downlo
 }
 func (a *App) health(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := a.store.Settings()
-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	respond(w, 200, a.healthSnapshot(ctx, cfg))
 }
@@ -267,7 +270,7 @@ func (a *App) healthSnapshot(ctx context.Context, cfg store.Settings) map[string
 	if dbErr != nil {
 		warnings = append(warnings, map[string]string{"code": "database_unavailable", "severity": "error", "message": "SQLite 数据库不可用"})
 	}
-	total, free := diskStats(cfg.DownloadDir)
+	total, free := diskStats(cfg.DownloadDir, cfg.StorageMountRequired)
 	storageOnline := total > 0
 	if !storageOnline {
 		warnings = append(warnings, map[string]string{"code": "storage_unavailable", "severity": "error", "message": "媒体目录或 NFS 不可用"})
@@ -293,11 +296,13 @@ func (a *App) healthSnapshot(ctx context.Context, cfg store.Settings) map[string
 	degraded := dbErr != nil || !storageOnline || (cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes) || !selectedOnline
 	return map[string]any{"status": map[bool]string{true: "degraded", false: "ok"}[degraded], "warnings": warnings, "database": map[string]any{"online": dbErr == nil}, "storage": map[string]any{"online": storageOnline, "total_bytes": total, "free_bytes": free, "minimum_free_bytes": cfg.MinFreeBytes}, "queue": map[string]any{"paused": cfg.DownloadPaused}, "downloaders": downloaders, "uptime_seconds": int64(time.Since(a.startedAt).Seconds())}
 }
-func diskStats(path string) (total, free int64) {
+func diskStats(path string, mountRequired bool) (total, free int64) {
 	if path == "" {
 		path = "."
 	}
-	_ = os.MkdirAll(path, 0755)
+	if !storagePathAvailable(path, mountRequired) {
+		return 0, 0
+	}
 	var stat unix.Statfs_t
 	if unix.Statfs(path, &stat) == nil {
 		return int64(stat.Blocks) * int64(stat.Bsize), int64(stat.Bavail) * int64(stat.Bsize)
@@ -321,14 +326,15 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	activeCount, _ := a.store.CountVideos("active")
 	waiting, _ := a.store.CountVideos("waiting")
 	queued, _ := a.store.CountVideos("queued")
-	waiting += queued
+	submitting, _ := a.store.CountVideos("submitting")
+	waiting += queued + submitting
 	completed, _ := a.store.CountVideos("completed")
 	discovered, _ := a.store.CountVideos("discovered")
 	traffic, library, _ := a.store.Stats()
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
-	diskTotal, diskFree := diskStats(cfg.DownloadDir)
-	healthCtx, healthCancel := context.WithTimeout(r.Context(), 5*time.Second)
+	diskTotal, diskFree := diskStats(cfg.DownloadDir, cfg.StorageMountRequired)
+	healthCtx, healthCancel := context.WithTimeout(r.Context(), 8*time.Second)
 	health := a.healthSnapshot(healthCtx, cfg)
 	healthCancel()
 	downloaders, _ := health["downloaders"].([]downloader.Health)
@@ -584,6 +590,9 @@ func (a *App) toggleDownloads(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusAccepted, map[string]any{"paused": input.Paused})
 }
 func (a *App) startQueueWorker() {
+	if a.maintenance.Load() {
+		return
+	}
 	a.bulkMu.Lock()
 	if a.bulkRunning {
 		a.bulkMu.Unlock()
@@ -598,6 +607,9 @@ func (a *App) startQueueWorker() {
 			a.bulkMu.Unlock()
 		}()
 		for {
+			if a.maintenance.Load() {
+				return
+			}
 			cfg, cfgErr := a.store.Settings()
 			if cfgErr != nil || cfg.DownloadPaused {
 				return
@@ -722,6 +734,8 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, err)
 		return
 	}
+	previousDownloadDir := filepath.Clean(cfg.DownloadDir)
+	previousBackupDir := filepath.Clean(cfg.BackupDir)
 	assignString(input, "http_proxy", &cfg.HTTPProxy)
 	assignString(input, "download_dir", &cfg.DownloadDir)
 	assignString(input, "aria_rpc_url", &cfg.AriaRPCURL)
@@ -737,6 +751,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "exclude_categories", &cfg.ExcludeCategories)
 	assignString(input, "exclude_tags", &cfg.ExcludeTags)
 	assignBool(input, "require_creator_match", &cfg.RequireCreatorMatch)
+	assignBool(input, "auto_transcode", &cfg.AutoTranscode)
 	assignInt(input, "max_concurrent", &cfg.MaxConcurrent)
 	assignInt(input, "connections_per_download", &cfg.ConnectionsPerDownload)
 	assignInt64(input, "download_limit_kbps", &cfg.DownloadLimitKBPS)
@@ -777,6 +792,37 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	if absolute, absErr := filepath.Abs(cfg.DownloadDir); absErr == nil {
 		cfg.DownloadDir = absolute
 	}
+	if filepath.Clean(cfg.DownloadDir) != previousDownloadDir {
+		// A newly selected media root must already exist. This avoids silently
+		// creating a local directory when the intended NAS mount is offline.
+		if info, statErr := os.Stat(cfg.DownloadDir); statErr != nil || !info.IsDir() {
+			fail(w, 400, errors.New("新下载目录必须已存在且可访问"))
+			return
+		}
+		cfg.StorageMountRequired = pathHasDistinctMount(cfg.DownloadDir) || requiresExternalMount(cfg.DownloadDir)
+		if !storagePathAvailable(cfg.DownloadDir, cfg.StorageMountRequired) {
+			fail(w, 400, errors.New("新下载目录的外部存储未挂载"))
+			return
+		}
+	}
+	if strings.TrimSpace(cfg.BackupDir) != "" {
+		if absolute, absErr := filepath.Abs(cfg.BackupDir); absErr == nil {
+			cfg.BackupDir = absolute
+		}
+		if filepath.Clean(cfg.BackupDir) != previousBackupDir {
+			if info, statErr := os.Stat(cfg.BackupDir); statErr != nil || !info.IsDir() {
+				fail(w, 400, errors.New("新备份目录必须已存在且可访问"))
+				return
+			}
+			cfg.BackupMountRequired = pathHasDistinctMount(cfg.BackupDir) || requiresExternalMount(cfg.BackupDir)
+			if !storagePathAvailable(cfg.BackupDir, cfg.BackupMountRequired) {
+				fail(w, 400, errors.New("新备份目录的外部存储未挂载"))
+				return
+			}
+		}
+	} else {
+		cfg.BackupMountRequired = false
+	}
 	if err = a.store.SaveSettings(cfg); err != nil {
 		fail(w, 500, err)
 		return
@@ -788,7 +834,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, settingsMap(cfg))
 }
 func settingsMap(c store.Settings) map[string]any {
-	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
+	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "auto_transcode": c.AutoTranscode, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
 }
 func assignString(m map[string]any, k string, v *string) {
 	if x, ok := m[k].(string); ok {
@@ -832,6 +878,9 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, 400, err)
 		return
+	}
+	if enricher, ok := adapter.(adapters.SubscriptionEnricher); ok {
+		sub = enricher.EnrichSubscription(r.Context(), sub, cfg.HTTPProxy)
 	}
 	items, err := adapter.ListVideos(r.Context(), sub, cfg.HTTPProxy)
 	if err != nil {
@@ -930,6 +979,31 @@ func (a *App) subscriptionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		respond(w, 200, map[string]any{"enabled": enabled})
 	case http.MethodDelete:
+		// Prevent an in-flight submission from racing the subscription cascade.
+		a.queueMu.Lock()
+		defer a.queueMu.Unlock()
+		items, listErr := a.store.SubscriptionVideos(slug)
+		if listErr != nil {
+			fail(w, 500, listErr)
+			return
+		}
+		cfg, _ := a.store.Settings()
+		for _, item := range items {
+			if item.Status != "submitting" && item.Status != "waiting" && item.Status != "active" && item.Status != "paused" {
+				continue
+			}
+			externalID := externalTaskID(item)
+			if externalID == "" {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			removeErr := a.engineFor(item, cfg).Remove(ctx, externalID)
+			cancel()
+			if removeErr != nil && classifyDownloadError(removeErr).Code != "detached_task" && !strings.Contains(strings.ToLower(removeErr.Error()), "not found") {
+				fail(w, http.StatusServiceUnavailable, fmt.Errorf("停止下载任务 %s 失败: %w", item.ID, removeErr))
+				return
+			}
+		}
 		if err := a.store.DeleteSubscription(slug); err != nil {
 			fail(w, 500, err)
 			return
@@ -938,6 +1012,9 @@ func (a *App) subscriptionAction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (a *App) triggerCheck(slug string) {
+	if a.maintenance.Load() {
+		return
+	}
 	a.mu.Lock()
 	if a.checking[slug] {
 		a.mu.Unlock()
@@ -948,6 +1025,9 @@ func (a *App) triggerCheck(slug string) {
 	go func() { defer func() { a.mu.Lock(); delete(a.checking, slug); a.mu.Unlock() }(); a.check(slug) }()
 }
 func (a *App) check(slug string) {
+	if a.maintenance.Load() {
+		return
+	}
 	sub, err := a.store.Subscription(slug)
 	if err != nil || !sub.Enabled {
 		return
@@ -957,6 +1037,13 @@ func (a *App) check(slug string) {
 	if err != nil {
 		_ = a.store.UpdateSubscriptionCheck(slug, err.Error())
 		return
+	}
+	if enricher, ok := adapter.(adapters.SubscriptionEnricher); ok {
+		enriched := enricher.EnrichSubscription(context.Background(), sub, cfg.HTTPProxy)
+		if enriched.Name != sub.Name || enriched.AvatarURL != sub.AvatarURL {
+			_ = a.store.UpdateSubscriptionMetadata(sub.Slug, enriched.Name, enriched.AvatarURL, enriched.ExternalLinks)
+			sub = enriched
+		}
 	}
 	items, err := adapter.ListVideos(context.Background(), sub, cfg.HTTPProxy)
 	if err != nil {
@@ -968,13 +1055,17 @@ func (a *App) check(slug string) {
 		created, e := a.store.UpsertDiscovered(item)
 		if e == nil {
 			existing, _ := a.store.Video(item.ID)
-			if created || existing.DurationSeconds == 0 {
+			needsHanimeMetadata := sub.Platform == "hanime1" && existing.Description == ""
+			if created || existing.DurationSeconds == 0 || needsHanimeMetadata {
 				if detailed, e := adapter.FetchDetails(context.Background(), item, cfg.HTTPProxy); e == nil {
 					detailed.SubscriptionSlug = slug
 					_ = a.store.UpdateDetails(detailed)
 					if strings.TrimRight(detailed.CreatorURL, "/") == strings.TrimRight(sub.URL, "/") {
 						_ = a.store.UpdateSubscriptionMetadata(slug, detailed.CreatorName, detailed.CreatorAvatar, detailed.ExternalLinksJSON)
 					}
+				}
+				if needsHanimeMetadata {
+					time.Sleep(250 * time.Millisecond)
 				}
 			}
 			if created {
@@ -1004,8 +1095,14 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) queue(id string) error {
+	if a.maintenance.Load() {
+		return errors.New("服务正在执行数据库维护")
+	}
 	a.queueMu.Lock()
 	defer a.queueMu.Unlock()
+	if a.maintenance.Load() {
+		return errors.New("服务正在执行数据库维护")
+	}
 	v, err := a.store.Video(id)
 	if err != nil {
 		return err
@@ -1017,11 +1114,18 @@ func (a *App) queue(id string) error {
 	if cfg.DownloadPaused {
 		return errors.New("下载队列已暂停")
 	}
-	_, free := diskStats(cfg.DownloadDir)
+	total, free := diskStats(cfg.DownloadDir, cfg.StorageMountRequired)
+	if total == 0 {
+		return errors.New("媒体目录不可用或挂载已断开")
+	}
 	if cfg.MinFreeBytes > 0 && free < cfg.MinFreeBytes {
 		return errors.New("磁盘可用空间低于保留值")
 	}
-	if v.DurationSeconds == 0 || v.CreatorURL == "" {
+	sub, err := a.store.Subscription(v.SubscriptionSlug)
+	if err != nil {
+		return err
+	}
+	if v.DurationSeconds == 0 || (v.CreatorURL == "" && !trustedSubscriptionListing(v.SourceRelationJSON, sub)) {
 		adapter, _ := a.adapters.ByID(v.Platform)
 		if detail, e := adapter.FetchDetails(context.Background(), v, cfg.HTTPProxy); e == nil {
 			v = detail
@@ -1029,10 +1133,6 @@ func (a *App) queue(id string) error {
 		}
 	}
 	if err = a.duplicateBeforeDownload(v, cfg); err != nil {
-		return err
-	}
-	sub, err := a.store.Subscription(v.SubscriptionSlug)
-	if err != nil {
 		return err
 	}
 	if reason := exclusionReason(v, sub, cfg); reason != "" {
@@ -1076,23 +1176,67 @@ func (a *App) queue(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	engine := a.selectedEngine(cfg)
-	healthCtx, healthCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 7*time.Second)
 	health := engine.Health(healthCtx)
 	healthCancel()
 	if !health.Online {
 		return fmt.Errorf("downloader unavailable: %s", engine.ID())
 	}
-	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, Connections: cfg.ConnectionsPerDownload})
-	if err != nil {
-		if errors.Is(err, downloader.ErrCapacityReached) {
-			_ = a.store.UpdateTask(id, "queued", "", v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
-			return err
+	plannedID := downloadSubmissionID(engine.ID(), v.ID)
+	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	preflight, preflightErr := engine.Tell(preflightCtx, plannedID)
+	preflightCancel()
+	if preflightErr == nil && (preflight.State == "error" || preflight.State == "removed") {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if cleaner, ok := engine.(downloader.ResultCleaner); ok {
+			_ = cleaner.CleanResult(cleanupCtx, plannedID)
+		} else {
+			_ = engine.Remove(cleanupCtx, plannedID)
 		}
-		_ = a.store.UpdateTask(id, "failed", "", "", "", err.Error(), 0, 0)
+		cleanupCancel()
+		preflightErr = errors.New("terminal downloader result cleaned")
+	}
+	if err = a.store.BeginSubmission(id, engine.ID(), plannedID, layout.FullPath); err != nil {
 		return err
 	}
-	return a.store.BindDownloader(id, engine.ID(), externalID, "waiting", layout.FullPath)
+	if preflightErr == nil {
+		return a.store.BindDownloader(id, engine.ID(), plannedID, "waiting", layout.FullPath)
+	}
+	externalID, err := engine.Add(ctx, downloader.Request{URL: resolved.URL, Directory: layout.SeasonDir, FileName: layout.FileName, Referer: v.PageURL, UserAgent: userAgent, Proxy: cfg.HTTPProxy, ExternalID: plannedID, Connections: cfg.ConnectionsPerDownload})
+	if err != nil {
+		// A timed-out RPC can still have accepted the deterministic ID. Recover
+		// that task instead of submitting a second writer for the same path.
+		recoverCtx, recoverCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		recovered, recoverErr := engine.Tell(recoverCtx, plannedID)
+		recoverCancel()
+		if recoverErr == nil && recovered.State != "error" && recovered.State != "removed" {
+			return a.store.BindDownloader(id, engine.ID(), plannedID, "waiting", layout.FullPath)
+		}
+		if errors.Is(err, downloader.ErrCapacityReached) {
+			_ = a.store.UpdateDownloaderTask(id, "queued", "", "", v.FilePath, v.PlexPath, "", v.BytesDownloaded, v.TotalBytes)
+			return err
+		}
+		_ = a.store.UpdateDownloaderTask(id, "failed", "", "", "", "", err.Error(), 0, 0)
+		return err
+	}
+	if err = a.store.BindDownloader(id, engine.ID(), externalID, "waiting", layout.FullPath); err != nil {
+		removeCtx, removeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = engine.Remove(removeCtx, externalID)
+		removeCancel()
+		_ = a.store.UpdateDownloaderTask(id, "queued", "", "", v.FilePath, v.PlexPath, "下载器绑定失败，任务已撤销并重新排队", v.BytesDownloaded, v.TotalBytes)
+		return err
+	}
+	return nil
 }
+
+func downloadSubmissionID(engineID, videoID string) string {
+	sum := sha256.Sum256([]byte(engineID + "\x00" + videoID))
+	if engineID == "aria2" {
+		return fmt.Sprintf("%x", sum[:8])
+	}
+	return "hwatch-" + fmt.Sprintf("%x", sum[:12])
+}
+
 func exclusionReason(v store.Video, sub store.Subscription, cfg store.Settings) string {
 	if trustedSubscriptionListing(v.SourceRelationJSON, sub) {
 		return contentExclusionReason(v, cfg)
@@ -1128,7 +1272,7 @@ func trustedSubscriptionListing(raw string, sub store.Subscription) bool {
 		Platform         string `json:"platform"`
 		SubscriptionSlug string `json:"subscription_slug"`
 	}
-	return json.Unmarshal([]byte(raw), &relation) == nil && relation.Type == "creator_listing" && relation.Platform == sub.Platform && relation.SubscriptionSlug == sub.Slug
+	return json.Unmarshal([]byte(raw), &relation) == nil && (relation.Type == "creator_listing" || relation.Type == "playlist_listing") && relation.Platform == sub.Platform && relation.SubscriptionSlug == sub.Slug
 }
 func exclusionRules(raw string) []string {
 	return strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool { return r == ',' || r == '\n' || r == ';' || r == '，' })
@@ -1270,9 +1414,14 @@ func (a *App) monitor(ctx context.Context) {
 	}
 }
 func (a *App) pollTasks(ctx context.Context) {
+	if a.maintenance.Load() {
+		return
+	}
 	cfg, _ := a.store.Settings()
 	for _, state := range []string{"waiting", "active", "paused"} {
-		items, _ := a.store.Videos(500, 0, state, "")
+		// Poll the complete persisted set. A fixed first page silently starved
+		// older tasks when an imported aria2 session contained more than 500.
+		items, _ := a.store.Videos(100000, 0, state, "")
 		for _, v := range items {
 			client := a.engineFor(v, cfg)
 			externalID := externalTaskID(v)
@@ -1335,6 +1484,11 @@ func (a *App) pollTasks(ctx context.Context) {
 				_ = plex.Generate(layout, sub, translated, cfg.HTTPProxy)
 				a.probeMedia(v.ID, path)
 				a.hashCompletedMedia(v.ID, path)
+				if cleaner, ok := client.(downloader.ResultCleaner); ok {
+					cleanCtx, cleanCancel := context.WithTimeout(ctx, 5*time.Second)
+					_ = cleaner.CleanResult(cleanCtx, externalID)
+					cleanCancel()
+				}
 			}
 		}
 	}
@@ -1362,6 +1516,9 @@ func (a *App) scheduler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if a.maintenance.Load() {
+				continue
+			}
 			a.reconcileRecovery()
 			a.hashNextCompletedMedia()
 			notifyCtx, notifyCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -1542,13 +1699,88 @@ func (a *App) thumbnailPlaceholder(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#17191f"/><text x="50%" y="50%" fill="#9199a7" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="15">缩略图暂不可用</text></svg>`)
 }
+
+func (a *App) subscriptionAvatar(w http.ResponseWriter, r *http.Request) {
+	sub, err := a.store.Subscription(r.PathValue("slug"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	cfg, _ := a.store.Settings()
+	cacheDir := filepath.Join(cfg.DownloadDir, ".hwatch-avatars")
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(sub.Slug)))
+	cachePath := filepath.Join(cacheDir, digest+".img")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if _, statErr := os.Stat(cachePath); statErr == nil {
+		http.ServeFile(w, r, cachePath)
+		return
+	}
+	if sub.AvatarURL == "" {
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	transport := &http.Transport{}
+	if cfg.HTTPProxy != "" {
+		if p, parseErr := url.Parse(cfg.HTTPProxy); parseErr == nil {
+			transport.Proxy = http.ProxyURL(p)
+		}
+	}
+	client := &http.Client{Transport: transport, Timeout: 20 * time.Second}
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, sub.AvatarURL, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36")
+	req.Header.Set("Referer", sub.URL)
+	res, fetchErr := client.Do(req)
+	if fetchErr != nil {
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	defer res.Body.Close()
+	kind := res.Header.Get("Content-Type")
+	if res.StatusCode < 200 || res.StatusCode >= 300 || !strings.HasPrefix(kind, "image/") {
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	if err = os.MkdirAll(cacheDir, 0755); err != nil {
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	tmp, err := os.CreateTemp(cacheDir, ".avatar-*")
+	if err != nil {
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	tmpPath := tmp.Name()
+	_, copyErr := io.Copy(tmp, io.LimitReader(res.Body, 8<<20))
+	closeErr := tmp.Close()
+	if copyErr != nil || closeErr != nil || os.Rename(tmpPath, cachePath) != nil {
+		_ = os.Remove(tmpPath)
+		a.avatarPlaceholder(w, sub.Name)
+		return
+	}
+	w.Header().Set("Content-Type", kind)
+	http.ServeFile(w, r, cachePath)
+}
+
+func (a *App) avatarPlaceholder(w http.ResponseWriter, name string) {
+	initial := "H"
+	if value := []rune(strings.TrimSpace(name)); len(value) > 0 {
+		initial = html.EscapeString(string(value[0]))
+	}
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" fill="#e5b951"/><text x="64" y="68" fill="#241f14" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="52" font-weight="700">%s</text></svg>`, initial)
+}
 func staticHandler(dist string) http.Handler {
 	files := http.FileServer(http.Dir(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			target := filepath.Join(dist, filepath.Clean(r.URL.Path))
 			if info, err := os.Stat(target); err == nil && !info.IsDir() {
-				if kind := mime.TypeByExtension(filepath.Ext(target)); kind != "" {
+				kind := mime.TypeByExtension(filepath.Ext(target))
+				if filepath.Ext(target) == ".webmanifest" {
+					kind = "application/manifest+json; charset=utf-8"
+				}
+				if kind != "" {
 					w.Header().Set("Content-Type", kind)
 				}
 				files.ServeHTTP(w, r)
@@ -1573,6 +1805,10 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/notifications/read-all", a.notifications)
 	mux.HandleFunc("GET /api/duplicates", a.duplicates)
 	mux.HandleFunc("POST /api/duplicates/{id}/{action}", a.duplicates)
+	mux.HandleFunc("POST /api/duplicates/batch", a.duplicateBatch)
+	mux.HandleFunc("POST /api/exclusions/preview", a.exclusionPreview)
+	mux.HandleFunc("GET /api/audit", a.auditLogs)
+	mux.HandleFunc("GET /api/tasks/{id}/history", a.taskHistory)
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)
@@ -1599,6 +1835,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/import/html", a.importHTML)
 	mux.HandleFunc("GET /media/{id}", a.media)
 	mux.HandleFunc("GET /thumb/{id}", a.thumbnail)
+	mux.HandleFunc("GET /avatar/{slug}", a.subscriptionAvatar)
 	mux.HandleFunc("GET /api/events", a.events)
 	mux.Handle("/", staticHandler(dist))
 	return requestLog(a.requireAuth(mux))
@@ -1609,7 +1846,7 @@ func openAPISpec(w http.ResponseWriter, r *http.Request) {
 }
 func openAPIDocs(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.WriteString(w, `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>HWatch API</title><script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script></head><body><script>Scalar.createApiReference({url:'/openapi.yaml',theme:'kepler',authentication:{preferredSecurityScheme:'cookieAuth'}})</script></body></html>`)
+	_, _ = io.WriteString(w, `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HWatch API</title><style>body{max-width:960px;margin:40px auto;padding:0 20px;background:#101116;color:#e8e9ed;font:15px/1.6 system-ui}a{color:#e5b951}pre{overflow:auto;padding:18px;border:1px solid #30333c;border-radius:12px;background:#181a21;white-space:pre-wrap}</style></head><body><h1>HWatch API V1</h1><p>规范文件：<a href="/openapi.yaml">openapi.yaml</a>。本页只加载本机资源，不依赖第三方 CDN。</p><pre id="spec">正在加载…</pre><script>fetch('/openapi.yaml').then(r=>r.text()).then(t=>document.getElementById('spec').textContent=t).catch(()=>document.getElementById('spec').textContent='无法加载规范文件')</script></body></html>`)
 }
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1635,7 +1872,14 @@ func main() {
 	}
 	if mediaRoot := os.Getenv("R34WATCH_MEDIA_ROOT"); mediaRoot != "" {
 		cfg, _ = s.Settings()
-		cfg.DownloadDir = mediaRoot
+		previousRoot := filepath.Clean(cfg.DownloadDir)
+		cfg.DownloadDir = filepath.Clean(mediaRoot)
+		if absolute, absErr := filepath.Abs(cfg.DownloadDir); absErr == nil {
+			cfg.DownloadDir = absolute
+		}
+		if filepath.Clean(cfg.DownloadDir) != previousRoot {
+			cfg.StorageMountRequired = pathHasDistinctMount(cfg.DownloadDir) || requiresExternalMount(cfg.DownloadDir)
+		}
 		if rpc := os.Getenv("R34WATCH_ARIA_RPC"); rpc != "" {
 			cfg.AriaRPCURL = rpc
 		}
@@ -1643,6 +1887,19 @@ func main() {
 			cfg.AriaSecret = secret
 		}
 		_ = s.SaveSettings(cfg)
+	}
+	if _, settingErr := s.Setting("storage_mount_required"); settingErr != nil {
+		cfg.StorageMountRequired = pathHasDistinctMount(cfg.DownloadDir)
+		_ = s.SetSetting("storage_mount_required", strconv.FormatBool(cfg.StorageMountRequired))
+	}
+	if cfg.BackupDir != "" {
+		if _, settingErr := s.Setting("backup_mount_required"); settingErr != nil {
+			cfg.BackupMountRequired = pathHasDistinctMount(cfg.BackupDir)
+			_ = s.SetSetting("backup_mount_required", strconv.FormatBool(cfg.BackupMountRequired))
+		}
+	}
+	if err = ensureStorageDirectory(cfg.DownloadDir, 0755, cfg.StorageMountRequired); err != nil {
+		log.Printf("media storage unavailable: %v", err)
 	}
 	app := New(s)
 	go app.backfillCoverFingerprints()
@@ -1653,6 +1910,7 @@ func main() {
 	app.reconcileRecovery()
 	app.reconcile()
 	_, _ = s.RequeueTransientFailures()
+	_, _ = s.RequeueSubmitting()
 	_, _ = s.RequeueDetachedWget()
 	startupCfg, _ := s.Settings()
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 3*time.Second)

@@ -51,6 +51,20 @@ interface SettingsApi {
     fun health(): Call<Health>
 
     /**
+     * GET api/audit
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param limit  (optional, default to 48)
+     * @param offset  (optional, default to 0)
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/audit")
+    fun listAuditLogs(@Query("limit") limit: kotlin.Int? = 48, @Query("offset") offset: kotlin.Int? = 0): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
      * GET api/backups
      * 
      * 
@@ -87,6 +101,20 @@ interface SettingsApi {
      */
     @POST("api/notifications/read-all")
     fun markNotificationsRead(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/exclusions/preview
+     * 
+     * 使用尚未保存的规则草稿预览命中项，不改变视频状态。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param xCSRFToken 
+     * @param requestBody 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/exclusions/preview")
+    fun previewExclusions(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body requestBody: kotlin.collections.Map<kotlin.String, kotlin.Any>): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/recovery/latest

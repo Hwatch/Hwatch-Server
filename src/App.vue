@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
+import { requestJSON } from "./api-client";
 type Link = { Name?: string; URL?: string; Image?: string };
 type Creator = {
   platform: string;
@@ -20,6 +21,7 @@ type Sub = {
   name: string;
   url: string;
   avatar_url: string;
+  avatar_proxy_url: string;
   external_links: Link[];
   enabled: boolean;
   last_checked_at: string;
@@ -38,11 +40,14 @@ type Video = {
   video_id: string;
   subscription_slug: string;
   title: string;
+  description: string;
   page_url: string;
   published_at: string;
   discovered_at: string;
   thumbnail_url: string;
   views: number;
+  likes: number;
+  like_rate: number;
   duration_seconds: number;
   creator_name: string;
   uploader_name: string;
@@ -109,11 +114,16 @@ type Duplicate = {
   match_title: string;
   match_thumbnail: string;
   match_type: string;
+  classification: string;
+  backend: string;
+  algorithm_version: string;
+  metrics_json: string;
   confidence: number;
   duration_delta: number;
   status: string;
   created_at: string;
   reviewed_at: string;
+  estimated_bytes: number;
 };
 type Dashboard = {
   subscriptions: Sub[];
@@ -225,14 +235,44 @@ const data = ref<Dashboard>(empty),
   selectedCreator = ref<Creator>(),
   searchingCreators = ref(false),
   downloadExisting = ref(false);
+const viewRoutes: Record<string, string> = {
+  home: "/",
+  subscriptions: "/subscriptions",
+  downloads: "/downloads",
+  undownloaded: "/undownloaded",
+  library: "/library",
+  translations: "/translations",
+  duplicates: "/duplicates",
+  nodes: "/nodes",
+  notifications: "/notifications",
+  settings: "/settings",
+};
+const viewTitles: Record<string, string> = {
+  home: "概览",
+  subscriptions: "订阅管理",
+  downloads: "下载中心",
+  undownloaded: "未下载",
+  library: "影视库",
+  translations: "翻译管理",
+  duplicates: "重复审查",
+  notifications: "通知",
+  settings: "设置",
+};
+const viewFromPath = () => {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return Object.entries(viewRoutes).find(([, route]) => route === path)?.[0] || "home";
+};
 const demoMode = ref(
   Math.min(
     2,
     Math.max(0, Number(localStorage.getItem("r34watch-demo-mode") || 0)),
   ),
 );
+const storedSidebarState = localStorage.getItem("hwatch-sidebar-collapsed");
 const sidebarCollapsed = ref(
-  localStorage.getItem("hwatch-sidebar-collapsed") === "1",
+  storedSidebarState === null
+    ? window.matchMedia("(max-width: 680px)").matches
+    : storedSidebarState === "1",
 );
 const sidebarItems = ref({
   language: localStorage.getItem("hwatch-sidebar-language") !== "0",
@@ -240,6 +280,58 @@ const sidebarItems = ref({
   demo: localStorage.getItem("hwatch-sidebar-demo") !== "0",
   aria: localStorage.getItem("hwatch-sidebar-aria") !== "0",
 });
+const navGroups = [
+  { id: "overview", label: "", items: [{ id: "home", label: "概览" }] },
+  {
+    id: "content",
+    label: "内容获取",
+    items: [
+      { id: "subscriptions", label: "订阅管理" },
+      { id: "downloads", label: "下载中心" },
+      { id: "undownloaded", label: "未下载" },
+    ],
+  },
+  {
+    id: "media",
+    label: "媒体库",
+    items: [
+      { id: "library", label: "影视库" },
+      { id: "duplicates", label: "重复审查" },
+    ],
+  },
+  {
+    id: "system",
+    label: "系统",
+    items: [
+      { id: "translations", label: "翻译管理" },
+      { id: "notifications", label: "通知" },
+    ],
+  },
+];
+function loadOpenGroups(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem("hwatch-nav-groups");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { overview: true, content: true, media: true, system: true };
+}
+const openGroups = ref<Record<string, boolean>>(loadOpenGroups());
+function persistOpenGroups() {
+  try {
+    localStorage.setItem("hwatch-nav-groups", JSON.stringify(openGroups.value));
+  } catch {}
+}
+function toggleGroup(id: string) {
+  openGroups.value = { ...openGroups.value, [id]: openGroups.value[id] === false };
+  persistOpenGroups();
+}
+function revealGroupFor(viewID: string) {
+  const group = navGroups.find((g) => g.items.some((i) => i.id === viewID));
+  if (group && group.label && openGroups.value[group.id] === false) {
+    openGroups.value = { ...openGroups.value, [group.id]: true };
+    persistOpenGroups();
+  }
+}
 const showOriginal = ref(
   localStorage.getItem("r34watch-show-original") === "1",
 );
@@ -272,6 +364,9 @@ const backups = ref<Backup[]>([]),
   backupSensitive = ref(false);
 const notifications = ref<Notification[]>([]);
 const duplicates = ref<Duplicate[]>([]);
+const selectedDuplicates = ref<number[]>([]);
+const exclusionPreview = ref<any[]>([]);
+const exclusionTotal = ref(0);
 const facets = ref<{ creators: Facet[]; tags: Facet[]; codecs: Facet[] }>({
     creators: [],
     tags: [],
@@ -288,7 +383,27 @@ const facets = ref<{ creators: Facet[]; tags: Facet[]; codecs: Facet[] }>({
   sortBy = ref("downloaded_at"),
   sortOrder = ref("desc");
 const pages = computed(() => Math.max(1, Math.ceil(total.value / 48))),
-  downloadTasks = computed(() => videos.value);
+  downloadTasks = computed(() => videos.value),
+  unfinishedDownloadTasks = computed(() =>
+    downloadTasks.value.filter((video) => video.status !== "completed"),
+  ),
+  completedDownloadTasks = computed(() =>
+    downloadTasks.value.filter((video) => video.status === "completed"),
+  ),
+  subscriptionGroups = computed(() => {
+    const groups = new Map<string, { key: string; name: string; sources: Sub[]; avatar?: Sub }>();
+    for (const sub of data.value.subscriptions) {
+      const key = sub.name.trim().toLocaleLowerCase();
+      const group = groups.get(key) || { key, name: sub.name, sources: [] };
+      group.sources.push(sub);
+      if (!group.avatar && sub.avatar_url) group.avatar = sub;
+      groups.set(key, group);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  });
+const showCompletedTasks = ref(false);
+const subscriptionTypeLabel = (type = "") =>
+  type === "playlist" ? "番剧订阅" : "作者订阅";
 const size = (n = 0) =>
   n >= 1099511627776
     ? (n / 1099511627776).toFixed(2) + " TB"
@@ -330,23 +445,10 @@ const pct = (v: Video) =>
     ? Math.min(100, Math.round((v.bytes_downloaded / v.total_bytes) * 100))
     : 0;
 async function api(path: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers);
-  if (init?.body) headers.set("Content-Type", "application/json");
-  if (auth.value.csrf_token) headers.set("X-CSRF-Token", auth.value.csrf_token);
-  const r = await fetch(path, { ...init, headers });
-  const text = await r.text();
-  let body: any = {};
-  try {
-    body = JSON.parse(text);
-  } catch {
-    body = { error: text };
-  }
-  if (r.status === 401 && !path.startsWith("/api/auth/")) {
+  return requestJSON<any>(path, init, auth.value.csrf_token, () => {
     auth.value = { configured: true, authenticated: false };
     events?.close();
-  }
-  if (!r.ok) throw Error(body.error || "请求失败");
-  return body;
+  });
 }
 async function loadAuth() {
   try {
@@ -380,6 +482,7 @@ async function submitAuth() {
     authPassword.value = "";
     authPasswordConfirm.value = "";
     await startApplication();
+    await changeView(viewFromPath(), false);
   } catch (e) {
     authError.value = String(e).replace(/^Error:\s*/, "");
   } finally {
@@ -419,6 +522,9 @@ async function markNotificationsRead() {
 async function loadDuplicates() {
   const result = await api("/api/duplicates");
   duplicates.value = result.items;
+  selectedDuplicates.value = selectedDuplicates.value.filter((id) =>
+    duplicates.value.some((item) => item.id === id && item.status === "pending"),
+  );
 }
 async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
   await act(async () => {
@@ -431,7 +537,59 @@ async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
     await refreshDashboard();
   });
 }
+const classificationLabel = (value: string) =>
+  ({
+    "whole-video": "完整视频重复",
+    "trimmed-video": "疑似裁切版本",
+    "possible-match": "可能重复",
+    different: "内容不同",
+  } as Record<string, string>)[value] || value;
+const duplicateReason = (item: Duplicate) => {
+  const external: Record<string, string> = {
+    external_exact: "外部分析：文件内容一致",
+    external_reencoded: "外部分析：同一内容的重新编码版本",
+    external_contained: "外部分析：该视频已完整包含于另一视频",
+    external_partial_overlap: "外部分析：两个视频存在部分重叠",
+    external_compilation_contains: "外部分析：合集包含匹配视频",
+  };
+  if (external[item.match_type]) return external[item.match_type];
+  if (item.match_type === "media_duplicate") return `视频内容去重 · ${classificationLabel(item.classification)}`;
+  if (item.match_type === "sha256") return "文件 SHA-256 完全一致";
+  if (item.match_type === "page_url") return "详情页地址一致";
+  return `封面相似 ${Math.round(item.confidence * 100)}% · 时长差 ${item.duration_delta} 秒`;
+};
+const duplicateMetrics = (item: Duplicate) => {
+  try {
+    return JSON.parse(item.metrics_json || "{}");
+  } catch {
+    return {};
+  }
+};
+async function reviewDuplicateBatch(action: "confirm" | "dismiss") {
+  if (!selectedDuplicates.value.length) return;
+  await act(async () => {
+    const result = await api("/api/duplicates/batch", {
+      method: "POST",
+      body: JSON.stringify({ ids: selectedDuplicates.value, action }),
+    });
+    notice.value = `已处理 ${result.reviewed} 项，预计涉及 ${size(result.estimated_bytes)}`;
+    selectedDuplicates.value = [];
+    await loadDuplicates();
+    await refreshDashboard();
+  });
+}
+async function previewExclusions() {
+  await act(async () => {
+    const result = await api("/api/exclusions/preview", { method: "POST", body: JSON.stringify(settings.value) });
+    exclusionPreview.value = result.items;
+    exclusionTotal.value = result.total;
+    notice.value = `当前规则会排除 ${result.total} 项`;
+  });
+}
 async function loadVideos() {
+	const requestID = ++videoRequestID;
+	videoAbort?.abort();
+	videoAbort = new AbortController();
   const p = new URLSearchParams({
     limit: "48",
     offset: String(page.value * 48),
@@ -451,11 +609,18 @@ async function loadVideos() {
     if (codecFilter.value) p.set("codec", codecFilter.value);
     if (minHeight.value) p.set("min_height", String(minHeight.value));
   }
-  const result = await api(
-    (view.value === "downloads" ? "/api/tasks?" : "/api/videos?") + p,
-  );
-  videos.value = result.items;
-  total.value = result.total;
+	try {
+		const result = await api(
+			(view.value === "downloads" ? "/api/tasks?" : "/api/videos?") + p,
+			{ signal: videoAbort.signal },
+		);
+		if (requestID !== videoRequestID) return;
+		videos.value = result.items;
+		total.value = result.total;
+	} catch (error) {
+		if (error instanceof DOMException && error.name === "AbortError") return;
+		throw error;
+	}
 }
 async function loadFacets() {
   if (!facets.value.tags.length) facets.value = await api("/api/videos/facets");
@@ -490,15 +655,25 @@ async function restoreBackup(name: string) {
     notice.value = "正在恢复数据库并重启服务…";
   });
 }
-async function changeView(next: string) {
+async function changeView(next: string, updateHistory = true) {
+  if (!viewRoutes[next]) next = "home";
   view.value = next;
+  revealGroupFor(next);
+  document.title = (viewTitles[next] || "HWatch") + " · HWatch";
+  if (updateHistory && window.location.pathname !== viewRoutes[next])
+    window.history.pushState({ view: next }, "", viewRoutes[next]);
+  if (window.matchMedia("(max-width: 680px)").matches)
+    setSidebarCollapsed(true);
   page.value = 0;
   query.value = "";
   if (next === "library") {
     status.value = "completed";
     await loadFacets();
   } else if (next === "undownloaded") status.value = "discovered";
-  else if (next === "downloads") status.value = "";
+  else if (next === "downloads") {
+    status.value = "";
+    showCompletedTasks.value = false;
+  }
   if (["library", "undownloaded", "downloads"].includes(next))
     await loadVideos();
   if (next === "settings") await loadSettings();
@@ -581,11 +756,29 @@ async function toggle(sub: Sub) {
   await refreshDashboard();
 }
 async function removeSub(sub: Sub) {
-  if (!confirm("删除订阅 " + sub.name + " 及其数据库记录？")) return;
+  if (
+    !confirm(
+      "删除 " +
+        sub.platform +
+        " 的 “" +
+        sub.name +
+        "” 订阅及其数据库记录？进行中的下载会停止；已下载文件仍保留在磁盘，但不会继续显示在影视库。此操作无法撤销。",
+    )
+  )
+    return;
   await api("/api/subscriptions/" + sub.slug, { method: "DELETE" });
   await refreshDashboard();
 }
 async function videoAction(v: Video, action: string) {
+  if (
+    action === "delete" &&
+    !confirm(
+      v.status === "completed"
+        ? "确认删除“" + displayTitle(v) + "”的媒体文件、NFO、海报和下载记录？此操作无法撤销。"
+        : "确认删除“" + displayTitle(v) + "”的下载任务与临时文件？此操作无法撤销。",
+    )
+  )
+    return;
   await act(async () => {
     await api("/api/videos/" + v.video_id + "/" + action, { method: "POST" });
     notice.value = "操作已提交";
@@ -682,6 +875,10 @@ async function refreshNFO() {
 function privateID(v: Video) {
   return "媒体项目 " + v.video_id.split(":").pop()!.slice(-4).toUpperCase();
 }
+function displayDuplicateTitle(title: string, id: string) {
+  if (demoMode.value !== 2) return title;
+  return "媒体项目 " + id.split(":").pop()!.slice(-4).toUpperCase();
+}
 function displayTitle(v: Video) {
   if (demoMode.value === 2) return privateID(v);
   return !showOriginal.value && v.translated_title
@@ -696,6 +893,8 @@ function displaySubtitle(v: Video, fallback = "本地媒体") {
         ? "下载中 · " + v.connections + " 个连接"
         : v.status === "queued" || v.status === "waiting"
           ? "等待下载 · 已加入队列"
+          : v.status === "submitting"
+            ? "正在提交 · 已持久化任务"
           : fallback
     : fallback;
 }
@@ -717,10 +916,13 @@ function toggleDemo() {
   localStorage.setItem("r34watch-demo-mode", String(demoMode.value));
 }
 function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value;
+  setSidebarCollapsed(!sidebarCollapsed.value);
+}
+function setSidebarCollapsed(collapsed: boolean) {
+  sidebarCollapsed.value = collapsed;
   localStorage.setItem(
     "hwatch-sidebar-collapsed",
-    sidebarCollapsed.value ? "1" : "0",
+    collapsed ? "1" : "0",
   );
 }
 function updateSidebarItem(
@@ -758,6 +960,20 @@ let refreshTimer: number | undefined;
 let events: EventSource | undefined;
 let creatorTimer: number | undefined;
 let creatorSearchID = 0;
+let videoLoadTimer: number | undefined;
+let videoAbort: AbortController | undefined;
+let videoRequestID = 0;
+const handlePopState = () => {
+  if (auth.value.authenticated) void changeView(viewFromPath(), false);
+};
+const handleEscape = (event: KeyboardEvent) => {
+  if (event.key !== "Escape") return;
+  if (selected.value) selected.value = undefined;
+  else if (!sidebarCollapsed.value) setSidebarCollapsed(true);
+};
+const handleVisibility = () => {
+  if (!document.hidden && auth.value.authenticated) void refreshDashboard();
+};
 async function startApplication() {
   await refreshDashboard();
   events?.close();
@@ -768,16 +984,29 @@ async function startApplication() {
     } catch {}
   };
   if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = window.setInterval(refreshDashboard, 15000);
+  refreshTimer = window.setInterval(() => {
+    if (!document.hidden) void refreshDashboard();
+  }, 60000);
 }
 onMounted(async () => {
+  window.addEventListener("popstate", handlePopState);
+  window.addEventListener("keydown", handleEscape);
+  document.addEventListener("visibilitychange", handleVisibility);
   await loadAuth();
-  if (auth.value.authenticated) await startApplication();
+  if (auth.value.authenticated) {
+    await startApplication();
+    await changeView(viewFromPath(), false);
+  }
 });
 onBeforeUnmount(() => {
+  window.removeEventListener("popstate", handlePopState);
+  window.removeEventListener("keydown", handleEscape);
+  document.removeEventListener("visibilitychange", handleVisibility);
   events?.close();
   if (refreshTimer) clearInterval(refreshTimer);
   if (creatorTimer) clearTimeout(creatorTimer);
+  if (videoLoadTimer) clearTimeout(videoLoadTimer);
+  videoAbort?.abort();
 });
 watch(creatorQuery, () => {
   if (creatorTimer) clearTimeout(creatorTimer);
@@ -810,8 +1039,10 @@ watch(
   () => {
     page.value = 0;
     localStorage.setItem("r34watch-language", translationLanguage.value);
-    if (["library", "undownloaded", "downloads"].includes(view.value))
-      loadVideos();
+    if (["library", "undownloaded", "downloads"].includes(view.value)) {
+      if (videoLoadTimer) clearTimeout(videoLoadTimer);
+      videoLoadTimer = window.setTimeout(() => void loadVideos(), 300);
+    }
     if (view.value === "home") refreshDashboard();
   },
 );
@@ -883,38 +1114,49 @@ watch(
     >
       <NavIcon name="menu" />
     </button>
+    <button
+      v-if="!sidebarCollapsed"
+      class="sidebar-backdrop"
+      aria-label="关闭侧栏"
+      @click="setSidebarCollapsed(true)"
+    ></button>
     <aside>
       <div class="brand"><span>H</span><b>HWatch</b></div>
       <nav>
-        <button
-          v-for="item in [
-            { id: 'home', label: '概览' },
-            { id: 'subscriptions', label: '订阅管理' },
-            { id: 'downloads', label: '下载中心' },
-            { id: 'undownloaded', label: '未下载' },
-            { id: 'library', label: '影视库' },
-            { id: 'translations', label: '翻译管理' },
-            { id: 'duplicates', label: '重复审查' },
-            { id: 'notifications', label: '通知' },
-          ]"
-          :key="item.id"
-          :class="{ active: view === item.id }"
-          @click="changeView(item.id)"
-        >
-          <NavIcon :name="item.id" /><span class="nav-text">{{
-            item.label
-          }}</span
-          ><i
-            v-if="
-              item.id === 'downloads' &&
-              data.counts.active + data.counts.waiting
-            "
-            >{{ data.counts.active + data.counts.waiting }}</i
+        <template v-for="group in navGroups" :key="group.id">
+          <button
+            v-if="group.label"
+            type="button"
+            class="nav-group"
+            :aria-expanded="openGroups[group.id] !== false"
+            @click="toggleGroup(group.id)"
           >
-          <i v-if="item.id === 'notifications' && data.unread_notifications">{{
-            data.unread_notifications
-          }}</i>
-        </button>
+            <span>{{ group.label }}</span
+            ><span class="nav-group-caret" :class="{ open: openGroups[group.id] !== false }">⌄</span>
+          </button>
+          <template v-if="openGroups[group.id] !== false">
+            <button
+              v-for="item in group.items"
+              :key="item.id"
+              :class="{ active: view === item.id }"
+              @click="changeView(item.id)"
+            >
+              <NavIcon :name="item.id" /><span class="nav-text">{{
+                item.label
+              }}</span
+              ><i
+                v-if="
+                  item.id === 'downloads' &&
+                  data.counts.active + data.counts.waiting
+                "
+                >{{ data.counts.active + data.counts.waiting }}</i
+              >
+              <i v-if="item.id === 'notifications' && data.unread_notifications">{{
+                data.unread_notifications
+              }}</i>
+            </button>
+          </template>
+        </template>
       </nav>
       <div class="bottom">
         <label v-if="sidebarItems.language" class="sidebar-language"
@@ -952,6 +1194,12 @@ watch(
         ><small v-if="sidebarItems.aria" :class="{ online: data.aria2_online }"
           >● aria2 {{ data.aria2_online ? "在线" : "离线" }}</small
         >
+        <div class="sidebar-account">
+          <span><small>当前账户</small><b>{{ auth.username }}</b></span>
+          <button class="sidebar-logout" aria-label="退出登录" title="退出登录" @click="logout">
+            <NavIcon name="logout" /><span>退出登录</span>
+          </button>
+        </div>
       </div>
     </aside>
     <main>
@@ -959,25 +1207,7 @@ watch(
         <div>
           <p class="eyebrow">{{ view.toUpperCase() }}</p>
           <h1>
-            {{
-              view === "home"
-                ? "概览"
-                : view === "subscriptions"
-                  ? "订阅管理"
-                  : view === "downloads"
-                    ? "下载中心"
-                    : view === "undownloaded"
-                      ? "未下载视频"
-                      : view === "library"
-                        ? "影视库"
-                        : view === "translations"
-                          ? "翻译管理"
-                          : view === "notifications"
-                            ? "通知中心"
-                            : view === "duplicates"
-                              ? "重复内容审查"
-                              : "系统设置"
-            }}
+            {{ viewTitles[view] || "HWatch" }}
           </h1>
         </div>
         <button
@@ -1011,7 +1241,7 @@ watch(
           检查更新
         </button>
       </header>
-      <p v-if="notice" class="notice" @click="notice = ''">{{ notice }}</p>
+      <button v-if="notice" class="notice" role="status" @click="notice = ''">{{ notice }}</button>
       <div v-if="data.health_warnings.length" class="health-alert">
         <b>系统运行提醒</b
         ><span
@@ -1037,7 +1267,7 @@ watch(
           </article>
           <article>
             <small>累计流量</small><b>{{ size(data.traffic_bytes) }}</b
-            ><span>aria2 接收流量</span>
+            ><span>下载器接收流量</span>
           </article>
           <article>
             <small>影视库</small><b>{{ size(data.library_bytes) }}</b
@@ -1062,9 +1292,13 @@ watch(
           <article
             v-for="v in data.videos"
             :key="v.video_id"
+            role="button"
+            tabindex="0"
             v-on:click="selected = v"
+            @keydown.enter="selected = v"
+            @keydown.space.prevent="selected = v"
           >
-            <img :src="'/thumb/' + v.video_id" loading="lazy" />
+            <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" />
             <div class="meta">
               <b>{{ displayTitle(v) }}</b
               ><small>{{
@@ -1078,9 +1312,13 @@ watch(
           <article
             v-for="v in data.recently_played"
             :key="v.video_id"
+            role="button"
+            tabindex="0"
             v-on:click="selected = v"
+            @keydown.enter="selected = v"
+            @keydown.space.prevent="selected = v"
           >
-            <img :src="'/thumb/' + v.video_id" loading="lazy" />
+            <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" />
             <div class="meta">
               <b>{{ displayTitle(v) }}</b
               ><small>{{
@@ -1095,7 +1333,27 @@ watch(
       </section>
       <section v-else-if="view === 'subscriptions'">
         <div class="panel creator-search">
-          <h2>搜索并订阅作者</h2>
+          <h2>通过链接订阅</h2>
+          <div class="inline subscription-url">
+            <input
+              v-model="modelURL"
+              type="url"
+              autocomplete="off"
+              placeholder="粘贴作者页或播放清单链接"
+            /><button
+              class="primary"
+              :disabled="busy || !modelURL.trim()"
+              @click="subscribe"
+            >
+              订阅
+            </button>
+          </div>
+          <label class="download-existing"
+            ><input v-model="downloadExisting" type="checkbox" />
+            下载全部现有视频</label
+          >
+          <small>支持 Rule34Video 作者页，以及 Hanime1 用户上传页和播放清单。</small>
+          <h2 class="search-heading">搜索 Rule34Video 作者</h2>
           <div class="inline">
             <input
               v-model="creatorQuery"
@@ -1124,6 +1382,7 @@ watch(
               <img
                 v-if="creator.avatar_url"
                 :src="creator.avatar_url"
+                :alt="creator.name"
                 loading="lazy"
               /><span v-else class="avatar">{{
                 creator.name.slice(0, 1).toUpperCase()
@@ -1143,9 +1402,6 @@ watch(
           <div v-if="selectedCreator" class="selected-creator">
             <span
               ><small>已选择</small><b>{{ selectedCreator.name }}</b></span
-            ><label class="download-existing"
-              ><input v-model="downloadExisting" type="checkbox" />
-              下载该作者全部现有视频</label
             ><button class="primary" :disabled="busy" v-on:click="subscribe">
               订阅所选作者
             </button>
@@ -1156,83 +1412,106 @@ watch(
               : "仅建立现有内容基线，之后发现的新视频会自动下载。"
           }}</small>
         </div>
-        <div class="rows">
-          <article v-for="sub in data.subscriptions" :key="sub.slug">
-            <img v-if="sub.avatar_url" :src="sub.avatar_url" />
+        <div class="rows subscription-groups">
+          <article v-for="group in subscriptionGroups" :key="group.key">
+            <img
+              v-if="group.avatar"
+              :src="group.avatar.avatar_proxy_url"
+              :alt="group.name"
+              loading="lazy"
+            />
             <div v-else class="avatar">
-              {{ sub.name.slice(0, 1).toUpperCase() }}
+              {{ group.name.slice(0, 1).toUpperCase() }}
             </div>
-            <div>
-              <b>{{ sub.name }}</b
-              ><small>{{ sub.url }}</small>
-              <p :class="{ error: sub.last_error }">
-                {{
-                  sub.last_error ||
-                  "上次检查 " +
-                    (sub.last_checked_at
-                      ? localTime(sub.last_checked_at)
-                      : "尚未")
-                }}
-              </p>
-              <div class="sub-progress">
-                <progress
-                  :value="sub.progress.completed"
-                  :max="sub.progress.total || 1"
-                ></progress
-                ><small
-                  >已完成 {{ sub.progress.completed }} /
-                  {{ sub.progress.total }} · 下载中 {{ sub.progress.active }} ·
-                  等待 {{ sub.progress.waiting
-                  }}<span v-if="sub.progress.failed">
-                    · 失败 {{ sub.progress.failed }}</span
-                  ></small
+            <div class="subscription-group-body">
+              <div class="subscription-group-title">
+                <b>{{ group.name }}</b
+                ><small v-if="group.sources.length > 1"
+                  >{{ group.sources.length }} 个平台来源</small
                 >
               </div>
-            </div>
-            <div class="actions">
-              <button @click="check(sub.slug)">检查</button
-              ><button @click="toggle(sub)">
-                {{ sub.enabled ? "暂停" : "启用" }}</button
-              ><button class="danger" @click="removeSub(sub)">删除</button>
+              <div
+                v-for="sub in group.sources"
+                :key="sub.slug"
+                class="subscription-source"
+              >
+                <div class="subscription-source-info">
+                  <span
+                    class="subscription-kind"
+                    :class="sub.subscription_type === 'playlist' ? 'series' : 'creator'"
+                    >{{ subscriptionTypeLabel(sub.subscription_type) }}</span
+                  ><span class="platform-badge">{{ sub.platform }}</span
+                  ><a :href="sub.url" target="_blank" rel="noreferrer">查看来源</a>
+                  <p :class="{ error: sub.last_error }">
+                    {{
+                      sub.last_error ||
+                      "上次检查 " +
+                        (sub.last_checked_at ? localTime(sub.last_checked_at) : "尚未")
+                    }}
+                  </p>
+                  <div class="sub-progress">
+                    <progress
+                      :value="sub.progress.completed"
+                      :max="sub.progress.total || 1"
+                    ></progress
+                    ><small
+                      >已完成 {{ sub.progress.completed }} / {{ sub.progress.total }} ·
+                      下载中 {{ sub.progress.active }} · 等待 {{ sub.progress.waiting
+                      }}<span v-if="sub.progress.failed"> · 失败 {{ sub.progress.failed }}</span></small
+                    >
+                  </div>
+                </div>
+                <div class="actions">
+                  <button @click="check(sub.slug)">检查</button
+                  ><button @click="toggle(sub)">{{ sub.enabled ? "暂停" : "启用" }}</button
+                  ><button class="danger" @click="removeSub(sub)">删除</button>
+                </div>
+              </div>
             </div>
           </article>
           <div v-if="!data.subscriptions.length" class="empty">还没有订阅</div>
         </div>
       </section>
       <section v-else-if="view === 'duplicates'">
+        <div class="toolbar">
+          <span>已选 {{ selectedDuplicates.length }} 项 · 预计可释放 {{ size(duplicates.filter((x) => selectedDuplicates.includes(x.id)).reduce((sum, x) => sum + (x.estimated_bytes || 0), 0)) }}</span>
+          <button :disabled="!selectedDuplicates.length" @click="reviewDuplicateBatch('dismiss')">批量忽略</button>
+          <button class="primary" :disabled="!selectedDuplicates.length" @click="reviewDuplicateBatch('confirm')">批量确认</button>
+        </div>
         <div class="duplicate-grid">
           <article
             v-for="item in duplicates"
             :key="item.id"
             class="duplicate-card"
           >
+            <label v-if="item.status === 'pending'" class="duplicate-select"><input v-model="selectedDuplicates" type="checkbox" :value="item.id" /> 选择</label>
             <div class="duplicate-pair">
               <div>
-                <img :src="'/thumb/' + item.video_id" /><b>{{
-                  item.video_title
+                <img :src="'/thumb/' + item.video_id" alt="重复候选封面" /><b>{{
+                  displayDuplicateTitle(item.video_title, item.video_id)
                 }}</b>
               </div>
               <span>≈</span>
               <div>
-                <img :src="'/thumb/' + item.match_video_id" /><b>{{
-                  item.match_title
+                <img :src="'/thumb/' + item.match_video_id" alt="匹配媒体封面" /><b>{{
+                  displayDuplicateTitle(item.match_title, item.match_video_id)
                 }}</b>
               </div>
             </div>
             <small
-              >{{
-                item.match_type === "sha256"
-                  ? "文件 SHA-256 完全一致"
-                  : item.match_type === "page_url"
-                    ? "详情页地址一致"
-                    : "封面相似 " +
-                      Math.round(item.confidence * 100) +
-                      "% · 时长差 " +
-                      item.duration_delta +
-                      " 秒"
-              }}
+              >{{ duplicateReason(item) }}
               · {{ item.status }}</small
             >
+            <details v-if="item.match_type === 'media_duplicate'" class="duplicate-detail">
+              <summary>技术详情</summary>
+              <small>算法 {{ item.algorithm_version || '未知' }} · 后端 {{ item.backend || '未知' }}</small>
+              <small v-if="duplicateMetrics(item).sample_count != null">
+                采样 {{ duplicateMetrics(item).matched_samples ?? '?' }} / {{ duplicateMetrics(item).sample_count }}
+                <template v-if="duplicateMetrics(item).median_hamming_distance != null"> · 中位汉明距离 {{ duplicateMetrics(item).median_hamming_distance }}</template>
+              </small>
+              <small v-if="duplicateMetrics(item).duration_ratio != null">时长比 {{ duplicateMetrics(item).duration_ratio }}</small>
+            </details>
+            <small v-if="item.estimated_bytes">预计可释放 {{ size(item.estimated_bytes) }}</small>
             <div v-if="item.status === 'pending'" class="actions">
               <button @click="reviewDuplicate(item, 'dismiss')">
                 不是重复，继续下载</button
@@ -1301,9 +1580,10 @@ watch(
           </div>
         </div>
         <div class="toolbar">
-          <select v-model="status" @change="loadVideos">
+          <select v-model="status">
             <option value="">全部状态</option>
             <option value="queued">正在建立任务</option>
+            <option value="submitting">正在提交下载器</option>
             <option value="waiting">等待中</option>
             <option value="active">下载中</option>
             <option value="paused">已暂停</option>
@@ -1313,8 +1593,8 @@ watch(
           ><button @click="loadVideos">刷新</button>
         </div>
         <div class="queue">
-          <article v-for="v in downloadTasks" :key="v.video_id">
-            <img :src="'/thumb/' + v.video_id" loading="lazy" />
+          <article v-for="v in unfinishedDownloadTasks" :key="v.video_id">
+            <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" />
             <div>
               <div class="download-title">
                 <b>{{ displayTitle(v) }}</b
@@ -1352,7 +1632,36 @@ watch(
               </button>
             </div>
           </article>
-          <div v-if="!downloadTasks.length" class="empty">下载队列为空</div>
+          <div
+            v-if="!unfinishedDownloadTasks.length && !completedDownloadTasks.length"
+            class="empty"
+          >
+            下载队列为空
+          </div>
+        </div>
+        <button
+          v-if="completedDownloadTasks.length"
+          class="completed-tasks-toggle"
+          :aria-expanded="showCompletedTasks"
+          @click="showCompletedTasks = !showCompletedTasks"
+        >
+          <span><b>已完成任务</b><small>{{ completedDownloadTasks.length }} 项</small></span>
+          <span>{{ showCompletedTasks ? "收起" : "展开" }} {{ showCompletedTasks ? "⌃" : "⌄" }}</span>
+        </button>
+        <div v-if="showCompletedTasks" class="queue completed-task-list">
+          <article v-for="v in completedDownloadTasks" :key="v.video_id">
+            <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" />
+            <div>
+              <div class="download-title">
+                <b>{{ displayTitle(v) }}</b><span>100%</span>
+              </div>
+              <small>{{ v.total_bytes ? size(v.total_bytes) : "已完成" }}</small>
+              <progress :value="1" :max="1" />
+            </div>
+            <div class="actions">
+              <button class="danger" @click="videoAction(v, 'delete')">删除</button>
+            </div>
+          </article>
         </div>
       </section>
       <section v-else-if="view === 'library' || view === 'undownloaded'">
@@ -1469,7 +1778,7 @@ watch(
         <div class="library">
           <article v-for="v in videos" :key="v.video_id">
             <button class="poster" @click="selected = v">
-              <img :src="'/thumb/' + v.video_id" loading="lazy" /><span>{{
+              <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" /><span>{{
                 duration(v.duration_seconds)
               }}</span>
             </button>
@@ -1487,8 +1796,10 @@ watch(
                 {{ mediaSummary(v) || v.views.toLocaleString() + " 次观看" }}
               </p>
             </div>
-            <button v-if="view === 'library'" @click="selected = v">播放</button
-            ><button v-else @click="videoAction(v, 'download')">下载</button>
+            <div class="library-actions">
+              <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
+              <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
+            </div>
           </article>
           <div v-if="!videos.length" class="empty">
             {{ view === "library" ? "影视库暂无已下载视频" : "没有未下载视频" }}
@@ -1552,6 +1863,9 @@ watch(
           :backups="backups"
           :backup-directory="backupDirectory"
           :backup-sensitive="backupSensitive"
+          :exclusion-preview="exclusionPreview"
+          :exclusion-total="exclusionTotal"
+          @preview-exclusions="previewExclusions"
           v-on:toggle-demo="toggleDemo"
           v-on:update-sidebar-item="updateSidebarItem"
           v-on:save="saveSettings"
@@ -1562,20 +1876,48 @@ watch(
         />
       </section>
     </main>
+    <nav class="mobile-tabbar" aria-label="主要导航">
+      <button
+        v-for="item in [
+          { id: 'home', label: '概览' },
+          { id: 'subscriptions', label: '订阅' },
+          { id: 'downloads', label: '下载' },
+          { id: 'library', label: '影视库' },
+          { id: 'more', label: '更多' },
+        ]"
+        :key="item.id"
+        :class="{
+          active:
+            view === item.id ||
+            (item.id === 'more' &&
+              !['home', 'subscriptions', 'downloads', 'library'].includes(view)),
+        }"
+        @click="item.id === 'more' ? setSidebarCollapsed(false) : changeView(item.id)"
+      >
+        <NavIcon :name="item.id" /><span>{{ item.label }}</span
+        ><i
+          v-if="item.id === 'downloads' && data.counts.active + data.counts.waiting"
+          >{{ data.counts.active + data.counts.waiting }}</i
+        >
+      </button>
+    </nav>
   </div>
   <div v-if="selected" class="modal" @click.self="selected = undefined">
-    <div class="player">
+    <div class="player" role="dialog" aria-modal="true" :aria-label="displayTitle(selected)">
       <button class="close" @click="selected = undefined">关闭</button>
       <h2>{{ displayTitle(selected) }}</h2>
       <video
         v-if="selected.status === 'completed'"
         :src="'/media/' + selected.video_id"
         controls
-        autoplay
-      /><img v-else :src="'/thumb/' + selected.video_id" />
+        playsinline
+        preload="metadata"
+      /><img v-else :src="'/thumb/' + selected.video_id" :alt="displayTitle(selected)" />
       <div class="detail">
         <span>时长 {{ duration(selected.duration_seconds) }}</span
         ><span>播放 {{ selected.views.toLocaleString() }}</span
+        ><span v-if="selected.likes">点赞 {{ selected.likes.toLocaleString() }}</span
+        ><span v-if="selected.like_rate">好评 {{ selected.like_rate.toFixed(0) }}%</span
         ><span>S{{ selected.plex_season }}E{{ selected.plex_episode }}</span
         ><span v-if="selected.video_codec">视频 {{ selected.video_codec }}</span
         ><span v-if="selected.width"
@@ -1588,13 +1930,11 @@ watch(
         ><span v-if="selected.audio_codec">音频 {{ selected.audio_codec }}</span
         ><span v-if="selected.container">容器 {{ selected.container }}</span>
       </div>
+      <p v-if="selected.description" class="video-description">{{ selected.description }}</p>
       <div class="chips">
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
     </div>
   </div>
-  <button v-if="auth.authenticated" class="logout-button" @click="logout">
-    退出 {{ auth.username }}
-  </button>
 </template>

@@ -25,7 +25,7 @@ class RestoreBackupRequestTest : ShouldSpec() {
         // uncomment below to create an instance of RestoreBackupRequest
         //val modelInstance = RestoreBackupRequest()
 
-        // to test the property `confirm`
+        // to test the property `confirm` - 必须为 true
         should("test confirm") {
             // uncomment below to test the property
             //modelInstance.confirm shouldBe ("TODO")
