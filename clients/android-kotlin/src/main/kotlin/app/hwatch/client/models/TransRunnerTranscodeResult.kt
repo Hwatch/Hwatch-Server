@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName
  * @param runnerJobId 
  * @param sourceSha256 提交源文件的 SHA-256；与当前不一致时返回 409 source_changed。
  * @param profile 
+ * @param applyMode 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。
  */
 
 
@@ -46,10 +47,22 @@ data class TransRunnerTranscodeResult (
     val sourceSha256: kotlin.String? = null,
 
     @SerializedName("profile")
-    val profile: kotlin.String? = null
+    val profile: kotlin.String? = null,
+
+    /* 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。 */
+    @SerializedName("apply_mode")
+    val applyMode: TransRunnerTranscodeResult.ApplyMode? = null
 
 ) {
 
+    /**
+     * 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。
+     *
+     * Values: replace_source
+     */
+    enum class ApplyMode(val value: kotlin.String) {
+        @SerializedName(value = "replace_source") replace_source("replace_source");
+    }
 
 }
 

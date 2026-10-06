@@ -122,6 +122,8 @@ This endpoint does not need any parameter.
 
 
 
+媒体分页列表。管理员会话可用；持有 read_media scope 的 Service Token（integrationBearer）也可只读调用以枚举媒体，此时响应中的 file_path/plex_path 会被清空。
+
 ### Example
 ```kotlin
 // Import classes:
@@ -130,6 +132,7 @@ This endpoint does not need any parameter.
 //import app.hwatch.client.models.*
 
 val apiClient = ApiClient()
+apiClient.setBearerToken("TOKEN")
 val webService = apiClient.createWebservice(LibraryApi::class.java)
 val limit : kotlin.Int = 56 // kotlin.Int | 
 val offset : kotlin.Int = 56 // kotlin.Int | 
@@ -174,6 +177,8 @@ val result : VideoPage = webService.listVideos(limit, offset, status, q, scope, 
 ### Authorization
 
 
+Configure integrationBearer:
+    ApiClient().setBearerToken("TOKEN")
 
 ### HTTP request headers
 

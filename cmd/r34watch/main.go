@@ -363,7 +363,16 @@ func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	translations, _ := a.store.Translations(language)
-	respond(w, 200, map[string]any{"items": translatedVideoMaps(items, language, translations), "total": total, "limit": limit, "offset": offset})
+	mapped := translatedVideoMaps(items, language, translations)
+	if _, ok := integrationTokenFromContext(r); ok {
+		// A Service Token must not receive absolute media paths; use
+		// /api/transrunner/v1/media/{video_id} for the relative path instead.
+		for _, item := range mapped {
+			item["file_path"] = ""
+			item["plex_path"] = ""
+		}
+	}
+	respond(w, 200, map[string]any{"items": mapped, "total": total, "limit": limit, "offset": offset})
 }
 func csvValues(raw string) []string {
 	out := []string{}
@@ -752,15 +761,6 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	assignString(input, "exclude_tags", &cfg.ExcludeTags)
 	assignBool(input, "require_creator_match", &cfg.RequireCreatorMatch)
 	assignBool(input, "auto_transcode", &cfg.AutoTranscode)
-	assignString(input, "transrunner_url", &cfg.TransRunnerURL)
-	assignString(input, "transrunner_default_profile", &cfg.TransRunnerDefaultProfile)
-	assignBool(input, "enable_transrunner", &cfg.EnableTransRunner)
-	if value, ok := input["transrunner_api_token"].(string); ok && strings.TrimSpace(value) != "" {
-		cfg.TransRunnerAPIToken = strings.TrimSpace(value)
-	}
-	if clear, ok := input["transrunner_api_token_clear"].(bool); ok && clear {
-		cfg.TransRunnerAPIToken = ""
-	}
 	assignInt(input, "max_concurrent", &cfg.MaxConcurrent)
 	assignInt(input, "connections_per_download", &cfg.ConnectionsPerDownload)
 	assignInt64(input, "download_limit_kbps", &cfg.DownloadLimitKBPS)
@@ -789,13 +789,6 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	if cfg.DownloaderMode != "aria2" && cfg.DownloaderMode != "wget" && cfg.DownloaderMode != "auto" {
 		fail(w, 400, errors.New("下载器模式无效"))
 		return
-	}
-	if strings.TrimSpace(cfg.TransRunnerURL) != "" {
-		u, e := url.Parse(cfg.TransRunnerURL)
-		if e != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			fail(w, 400, errors.New("TransRunner 地址格式无效"))
-			return
-		}
 	}
 	if cfg.BackupRetention < 1 || cfg.BackupRetention > 365 {
 		fail(w, 400, errors.New("数据库备份保留数量必须在 1 到 365 之间"))
@@ -850,7 +843,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, settingsMap(cfg))
 }
 func settingsMap(c store.Settings) map[string]any {
-	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "auto_transcode": c.AutoTranscode, "enable_transrunner": c.EnableTransRunner, "transrunner_url": c.TransRunnerURL, "transrunner_default_profile": c.TransRunnerDefaultProfile, "transrunner_token_configured": c.TransRunnerAPIToken != "", "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
+	return map[string]any{"http_proxy": c.HTTPProxy, "download_dir": c.DownloadDir, "aria_rpc_url": c.AriaRPCURL, "aria_secret": c.AriaSecret, "downloader_mode": c.DownloaderMode, "check_time": c.CheckTime, "timezone": c.Timezone, "plex_language": c.PlexLanguage, "max_concurrent": c.MaxConcurrent, "connections_per_download": c.ConnectionsPerDownload, "download_limit_kbps": c.DownloadLimitKBPS, "min_free_bytes": c.MinFreeBytes, "require_creator_match": c.RequireCreatorMatch, "auto_transcode": c.AutoTranscode, "exclude_title_keywords": c.ExcludeTitleKeywords, "exclude_uploaders": c.ExcludeUploaders, "exclude_categories": c.ExcludeCategories, "exclude_tags": c.ExcludeTags, "max_duration_seconds": c.MaxDurationSeconds, "backup_dir": c.BackupDir, "backup_time": c.BackupTime, "backup_retention": c.BackupRetention, "backup_last_success": c.BackupLastSuccess, "backup_last_error": c.BackupLastError}
 }
 func assignString(m map[string]any, k string, v *string) {
 	if x, ok := m[k].(string); ok {
@@ -1147,9 +1140,6 @@ func (a *App) queue(id string) error {
 			v = detail
 			_ = a.store.UpdateDetails(v)
 		}
-	}
-	if err = a.duplicateBeforeDownload(v, cfg); err != nil {
-		return err
 	}
 	if reason := exclusionReason(v, sub, cfg); reason != "" {
 		_ = a.store.UpdateTask(id, "excluded", "", "", "", reason, 0, 0)
@@ -1828,9 +1818,6 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/integrations/transrunner/token", a.integrationTokenGet)
 	mux.HandleFunc("POST /api/integrations/transrunner/token", a.integrationTokenCreate)
 	mux.HandleFunc("DELETE /api/integrations/transrunner/token", a.integrationTokenDelete)
-	mux.HandleFunc("POST /api/integrations/transrunner/test", a.integrationTransRunnerTest)
-	mux.HandleFunc("POST /api/integrations/transrunner/submit/transcode", a.integrationTransRunnerSubmitTranscode)
-	mux.HandleFunc("POST /api/integrations/transrunner/submit/dedupe", a.integrationTransRunnerSubmitDedupe)
 	mux.HandleFunc("GET /api/transrunner/v1/media/{video_id}", a.requireIntegrationScope("read_media", a.trGetMedia))
 	mux.HandleFunc("GET /api/transrunner/v1/media/{video_id}/dedupe-candidates", a.requireIntegrationScope("read_dedupe_candidates", a.trDedupeCandidates))
 	mux.HandleFunc("POST /api/transrunner/v1/duplicate-results", a.requireIntegrationScope("write_duplicate_results", a.trDuplicateResults))

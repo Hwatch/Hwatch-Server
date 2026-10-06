@@ -2,22 +2,24 @@
 
 HWatch and TransRunner have separate authorities:
 
-- **HWatch = media library authority** — subscriptions, downloads, Plex/NFO,
-  metadata, duplicate review.
-- **TransRunner = computation authority** — it owns its own task queue,
-  scheduling, progress and runner state.
+- **HWatch = media library authority** — content acquisition, downloads,
+  subscriptions, metadata, Plex/NFO, final file placement and safe replacement,
+  duplicate/transcode result persistence, OpenAPI.
+- **TransRunner = compute authority** — runs on the Mac: batch library scan,
+  H.264 → HEVC, VDF duplicate detection, FFmpeg/VideoToolbox, its own job queue,
+  progress, cancel and retry.
 
-HWatch does **not** manage TransRunner jobs, runner nodes, progress, heartbeat,
-leases or capabilities. There is no compute scheduler in HWatch. This document
-describes only the callback surface HWatch exposes for TransRunner to read
-media/library data and write results back.
+HWatch does **not** start or control TransRunner jobs and does **not** poll
+progress or mirror runner state. There is no compute scheduler and no
+pre-download dedupe in HWatch. TransRunner reads HWatch data and pushes results
+back through the scoped API below.
 
 ## Service token
 
-Create a scoped token in **设置 → TransRunner 集成** (or via the admin API). The
-plaintext token is shown exactly once; only its SHA-256 hash is stored.
+Create a scoped token in **设置 → TransRunner 集成** (or the admin API). The
+plaintext is shown exactly once; only the SHA-256 hash is stored.
 
-The default scope set is fixed to:
+Fixed scope set:
 
 ```
 read_media
@@ -26,34 +28,30 @@ write_duplicate_results
 write_transcode_results
 ```
 
-There is intentionally no scope for deleting/moving media, managing users or
-subscriptions, changing settings, or backup/restore.
-
 Admin API (session cookie + CSRF):
 
 ```
 GET    /api/integrations/transrunner/token   # status only, never the token
-POST   /api/integrations/transrunner/token   # {"rotate": true} to replace an existing token
+POST   /api/integrations/transrunner/token   # {"rotate": true} to replace
 DELETE /api/integrations/transrunner/token   # revoke
 ```
 
-Authenticate service calls with:
+Authenticate service calls with `Authorization: Bearer <service-token>`.
+Missing/invalid/revoked → `401`; valid token without the required scope → `403`.
+The OpenAPI describes every endpoint, but the Service Token is limited by scope:
+it can never delete media, change settings, manage users/subscriptions, restore
+backups or perform admin operations.
 
-```
-Authorization: Bearer <service-token>
-```
+## Reading the library
 
-Missing/invalid/revoked token → `401`. Valid token without the required scope →
-`403`. `last_used_at` is updated at most once per minute.
+### `GET /api/videos` — scope `read_media`
 
-## Endpoints
-
-Base prefix: `/api/transrunner/v1`. All responses never include absolute paths,
-proxy settings, download URLs, cookies or secrets.
+Standard paginated media list (`limit`/`offset`/`status`/`codec`/`sort`… see
+OpenAPI). A Service Token may call it read-only to enumerate the library; in that
+case `file_path` and `plex_path` are emptied. Use the media endpoint below for the
+relative path and full metadata.
 
 ### `GET /api/transrunner/v1/media/{video_id}` — scope `read_media`
-
-Returns the metadata TransRunner needs to locate and inspect the media.
 
 ```json
 {
@@ -73,50 +71,37 @@ Returns the metadata TransRunner needs to locate and inspect the media.
 }
 ```
 
-`media_relative_path` is relative to HWatch's media root; TransRunner maps it
-using its own media root. If the DB record exists but storage is unavailable,
-HWatch returns `503 media_unavailable` (not `404`).
+`media_relative_path` is relative to HWatch's media root; TransRunner maps it with
+its own media root. If the record exists but storage is unavailable, HWatch
+returns `503 media_unavailable` (not `404`).
 
 ### `GET /api/transrunner/v1/media/{video_id}/dedupe-candidates` — scope `read_dedupe_candidates`
 
 HWatch filters candidates server-side; TransRunner never scans the library.
 
-Query: `?limit=` (default 20, max 100).
-
-Candidate rule: completed media, not self, media file present, duration within
-`max(2s, duration × 1%)`, not an exact SHA-256 duplicate, and not already
-confirmed/dismissed.
+Query: `?limit=` (default 20, max 100). Candidate rule: completed media, not
+self, media file present, duration within `max(2s, duration × 1%)`, not an exact
+SHA-256 duplicate, not already confirmed/dismissed.
 
 ```json
-{
-  "video_id": "target-id",
-  "algorithm_version": "media-fingerprint-v1",
-  "candidates": [
-    { "video_id": "...", "media_relative_path": "...", "duration": 1028, "sha256": "...", "file_size": 123 }
-  ]
-}
+{ "video_id": "target-id", "algorithm_version": "media-fingerprint-v1",
+  "candidates": [ { "video_id": "...", "media_relative_path": "...", "duration": 1028, "sha256": "...", "file_size": 123 } ] }
 ```
+
+## Writing results
 
 ### `POST /api/transrunner/v1/duplicate-results` — scope `write_duplicate_results`
 
 ```json
-{
-  "video_id": "A",
-  "algorithm_version": "media-fingerprint-v1",
-  "matches": [
-    { "video_id": "B", "classification": "whole-video", "backend": "phash", "confidence": 0.97, "metrics": {"matched_samples": 31, "sample_count": 32} }
-  ]
-}
+{ "video_id": "A", "algorithm_version": "vdf-4.1.1",
+  "matches": [ { "video_id": "B", "classification": "whole-video", "backend": "vdf", "confidence": 0.97, "metrics": {"vdf_similarity": 99.99} } ] }
 ```
 
 `classification` ∈ `whole-video`, `trimmed-video`, `possible-match`, `different`.
-The first three create a reviewable duplicate candidate; `different` creates
-none. Unknown classification/unknown match → `422`; unknown source → `404`.
-
-The server validates both videos exist and canonicalises the pair
-(`min/max(video_id)`) so A→B and B→A never create two rows. This endpoint only
-inserts/updates `duplicate_candidates`; it never deletes, renames or replaces
-media, and never auto-confirms.
+The first three create a reviewable duplicate candidate; `different` creates none.
+Unknown classification/unknown match → `422`; unknown source → `404`. Pairs are
+canonicalised (`min/max(video_id)`). This endpoint only writes
+`duplicate_candidates`; it never deletes, renames or replaces media.
 
 ### `POST /api/transrunner/v1/transcode-results` — scope `write_transcode_results`
 
@@ -126,85 +111,37 @@ media, and never auto-confirms.
   "runner_job_id": "job_xxx",
   "source_sha256": "...",
   "output_relative_path": ".transrunner/job_xxx/output.mp4",
-  "profile": "hevc-1080p"
+  "profile": "hevc-preserve",
+  "apply_mode": "replace_source"
 }
 ```
 
-- `output_relative_path` must resolve inside the staging root `.transrunner/`
-  under the media root; traversal, absolute paths and symlink escapes are
-  rejected (`422 invalid_path`).
-- HWatch runs `ffprobe` itself on the staged output; probe failure →
-  `422 probe_failed`.
+- `output_relative_path` must resolve inside `.transrunner/` under the media root;
+  traversal, absolute paths and symlink escapes are rejected (`422 invalid_path`).
+- HWatch runs `ffprobe` itself; probe failure → `422 probe_failed`.
 - If `source_sha256` is provided and differs from the current source hash →
-  `409 source_changed`.
-- On success the result is recorded as `pending` and the endpoint returns
-  `202 {"status":"validated"}`.
+  `409 source_changed` (never replaced).
+- **Without `apply_mode`** (backward compatible): the result is recorded as
+  `pending` and the source is not touched; response `202 {"status":"validated"}`.
+- **With `apply_mode: "replace_source"`**: after extra `hevc-preserve` validation
+  HWatch atomically replaces the source and updates DB metadata from its own
+  ffprobe result; response `200 {"status":"applied"}`.
 
-This version **does not** replace the source, delete the original, or refresh
-Plex. Commit/replace is a later phase.
+`hevc-preserve` validation (HWatch-probed, never trusts the callback):
 
-## HWatch → TransRunner (submission)
+- output is HEVC; same width/height; frame-rate within tolerance; duration within
+  `max(2s, 1%)`; bit depth not reduced; color primaries/transfer preserved when
+  both declare them.
 
-HWatch can submit a **transcode** job to TransRunner's own task system.
+Replacement is transactional: source → `.hwatch-pre-transcode` backup, staged
+output → original path (rename, with an EXDEV-safe same-directory copy fallback),
+then DB metadata + file hash refresh; on failure the original source is restored.
+`transcode_results.status` becomes `applied` or `failed`.
 
-Settings (`GET/PUT /api/settings`):
+## What HWatch does not do
 
-- `enable_transrunner` — enable submission.
-- `transrunner_url` — TransRunner base URL.
-- `transrunner_api_token` — write-only secret; **never** returned by `GET /api/settings`
-  (only `transrunner_token_configured` is exposed). An empty value preserves the
-  existing token; clear it with `transrunner_api_token_clear: true`.
-- `transrunner_default_profile` — profile ID used when the request omits one.
-
-Admin endpoints (session cookie + CSRF):
-
-```
-POST /api/integrations/transrunner/test
-POST /api/integrations/transrunner/submit/transcode   {"video_id":"...","profile":"...","force":false}
-```
-
-`test` calls TransRunner `/health` then the authenticated `/api/v1/capabilities`
-and returns `{ok, version, platform, capabilities}`. Result is audited as
-`transrunner_tested`; submission is audited as `transrunner_job_submitted`.
-
-Submission sends to TransRunner `POST /api/v1/jobs`:
-
-```json
-{ "input": { "type": "hwatch", "video_id": "rule34video:123", "media_relative_path": "Rule34Video/A/file.mp4" },
-  "profile": "hevc-1080p" }
-```
-
-HWatch sends only `video_id` and `media_relative_path` (never an absolute path,
-ffmpeg arguments, callback URL or callback token — TransRunner already holds the
-HWatch URL, HWatch Service Token and media root). The returned `runner_job_id` is
-stored in `transrunner_submissions`; a repeat submission of the same
-video/operation/profile returns `409 already_submitted` unless `force: true`.
-
-HWatch does **not** poll TransRunner, mirror progress/leases, or run a local
-runner state machine. The result comes back through the TransRunner → HWatch
-callback API above.
-
-### `POST /api/integrations/transrunner/submit/dedupe`
-
-Submits a content-duplicate job with `kind = "media_duplicate"` and the same
-`input.type = "hwatch"` payload (no profile, no candidates, no algorithm flags):
-
-```json
-{ "kind": "media_duplicate",
-  "input": { "type": "hwatch", "video_id": "rule34video:123", "media_relative_path": "Rule34Video/A/file.mp4" } }
-```
-
-TransRunner then fetches candidates itself from
-`GET /api/transrunner/v1/media/{video_id}/dedupe-candidates` and posts its
-results to `/api/transrunner/v1/duplicate-results`. HWatch records the
-submission under `operation = "media_duplicate"` and returns
-`202 {runner_job_id}`; a repeat returns `409 already_submitted` unless
-`force: true`.
-
-### TransRunner contract status
-
-TransRunner now provides `input.type = "hwatch"`, `kind = "transcode"` and
-`kind = "media_duplicate"`, so no further contract additions are required for
-HWatch → TransRunner submission. HWatch never performs automatic or
-library-wide dedupe scheduling: submission happens only on explicit API/UI
-request.
+- No HWatch → TransRunner job submission (submit/test endpoints removed).
+- No task progress polling, lease, heartbeat or claim.
+- No pre-download dedupe: the download flow is discover → queued → download →
+  media import, without waiting on TransRunner/VDF.
+- Content dedupe is driven entirely by TransRunner's own batch processing.

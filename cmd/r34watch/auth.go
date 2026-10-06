@@ -209,6 +209,10 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 		}
 		session, err := a.currentSession(r)
 		if err != nil {
+			if token, ok := a.integrationReadableRequest(r); ok {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), integrationTokenKey{}, token)))
+				return
+			}
 			fail(w, http.StatusUnauthorized, errors.New("请先登录"))
 			return
 		}

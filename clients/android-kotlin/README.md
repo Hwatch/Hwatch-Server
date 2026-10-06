@@ -88,9 +88,6 @@ All URIs are relative to *http://localhost*
 | *TransRunnerApi* | [**createTransRunnerToken**](docs/TransRunnerApi.md#createtransrunnertoken) | **POST** api/integrations/transrunner/token |  |
 | *TransRunnerApi* | [**getTransRunnerToken**](docs/TransRunnerApi.md#gettransrunnertoken) | **GET** api/integrations/transrunner/token |  |
 | *TransRunnerApi* | [**revokeTransRunnerToken**](docs/TransRunnerApi.md#revoketransrunnertoken) | **DELETE** api/integrations/transrunner/token |  |
-| *TransRunnerApi* | [**submitDedupeToTransRunner**](docs/TransRunnerApi.md#submitdedupetotransrunner) | **POST** api/integrations/transrunner/submit/dedupe |  |
-| *TransRunnerApi* | [**submitTranscodeToTransRunner**](docs/TransRunnerApi.md#submittranscodetotransrunner) | **POST** api/integrations/transrunner/submit/transcode |  |
-| *TransRunnerApi* | [**testTransRunnerConnection**](docs/TransRunnerApi.md#testtransrunnerconnection) | **POST** api/integrations/transrunner/test |  |
 | *TransRunnerApi* | [**transRunnerDedupeCandidates**](docs/TransRunnerApi.md#transrunnerdedupecandidates) | **GET** api/transrunner/v1/media/{video_id}/dedupe-candidates |  |
 | *TransRunnerApi* | [**transRunnerDuplicateResults**](docs/TransRunnerApi.md#transrunnerduplicateresults) | **POST** api/transrunner/v1/duplicate-results |  |
 | *TransRunnerApi* | [**transRunnerMedia**](docs/TransRunnerApi.md#transrunnermedia) | **GET** api/transrunner/v1/media/{video_id} |  |
@@ -116,8 +113,6 @@ All URIs are relative to *http://localhost*
  - [app.hwatch.client.models.RefreshNFORequest](docs/RefreshNFORequest.md)
  - [app.hwatch.client.models.RestoreBackupRequest](docs/RestoreBackupRequest.md)
  - [app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest](docs/ReviewDuplicateCandidatesBatchRequest.md)
- - [app.hwatch.client.models.SubmitDedupeToTransRunnerRequest](docs/SubmitDedupeToTransRunnerRequest.md)
- - [app.hwatch.client.models.SubmitTranscodeToTransRunnerRequest](docs/SubmitTranscodeToTransRunnerRequest.md)
  - [app.hwatch.client.models.ToggleDownloadsRequest](docs/ToggleDownloadsRequest.md)
  - [app.hwatch.client.models.TransRunnerDedupeCandidate](docs/TransRunnerDedupeCandidate.md)
  - [app.hwatch.client.models.TransRunnerDedupeCandidates](docs/TransRunnerDedupeCandidates.md)

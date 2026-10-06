@@ -8,8 +8,6 @@ import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.CreateTransRunnerTokenRequest
 import app.hwatch.client.models.Error
-import app.hwatch.client.models.SubmitDedupeToTransRunnerRequest
-import app.hwatch.client.models.SubmitTranscodeToTransRunnerRequest
 import app.hwatch.client.models.TransRunnerDedupeCandidates
 import app.hwatch.client.models.TransRunnerDuplicateResult
 import app.hwatch.client.models.TransRunnerMedia
@@ -55,53 +53,6 @@ interface TransRunnerApi {
      */
     @DELETE("api/integrations/transrunner/token")
     fun revokeTransRunnerToken(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
-
-    /**
-     * POST api/integrations/transrunner/submit/dedupe
-     * 
-     * 提交内容去重任务到 TransRunner（kind&#x3D;media_duplicate，input.type&#x3D;hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。
-     * Responses:
-     *  - 202: 成功
-     *  - 409: 请求失败
-     *  - 502: 请求失败
-     *
-     * @param xCSRFToken 
-     * @param submitDedupeToTransRunnerRequest 
-     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
-     */
-    @POST("api/integrations/transrunner/submit/dedupe")
-    fun submitDedupeToTransRunner(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body submitDedupeToTransRunnerRequest: SubmitDedupeToTransRunnerRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
-
-    /**
-     * POST api/integrations/transrunner/submit/transcode
-     * 
-     * 通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。
-     * Responses:
-     *  - 202: 成功
-     *  - 409: 请求失败
-     *  - 502: 请求失败
-     *
-     * @param xCSRFToken 
-     * @param submitTranscodeToTransRunnerRequest 
-     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
-     */
-    @POST("api/integrations/transrunner/submit/transcode")
-    fun submitTranscodeToTransRunner(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body submitTranscodeToTransRunnerRequest: SubmitTranscodeToTransRunnerRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
-
-    /**
-     * POST api/integrations/transrunner/test
-     * 
-     * 调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。
-     * Responses:
-     *  - 200: 成功
-     *  - 409: 请求失败
-     *  - 502: 请求失败
-     *
-     * @param xCSRFToken 
-     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
-     */
-    @POST("api/integrations/transrunner/test")
-    fun testTransRunnerConnection(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/transrunner/v1/media/{video_id}/dedupe-candidates
@@ -157,8 +108,9 @@ interface TransRunnerApi {
     /**
      * POST api/transrunner/v1/transcode-results
      * 
-     * 需要 write_transcode_results。接收暂存产物并由 HWatch 用 ffprobe 验证，只记录 pending 结果，不替换源文件。
+     * 需要 write_transcode_results。接收暂存产物并由 HWatch 自己 ffprobe 验证。默认只记录 pending 结果，不替换源文件；仅当 apply_mode&#x3D;replace_source 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、source_sha256 一致）时才由 HWatch 原子替换源文件并刷新元数据。
      * Responses:
+     *  - 200: 成功
      *  - 202: 成功
      *  - 401: 请求失败
      *  - 403: 请求失败

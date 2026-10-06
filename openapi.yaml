@@ -82,6 +82,8 @@ paths:
     get:
       tags: [Library]
       operationId: listVideos
+      description: 媒体分页列表。管理员会话可用；持有 read_media scope 的 Service Token（integrationBearer）也可只读调用以枚举媒体，此时响应中的 file_path/plex_path 会被清空。
+      security: [{cookieAuth: []}, {integrationBearer: []}]
       parameters:
         - {$ref: '#/components/parameters/Limit'}
         - {$ref: '#/components/parameters/Offset'}
@@ -155,29 +157,6 @@ paths:
     get: {tags: [TransRunner], operationId: getTransRunnerToken, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     post: {tags: [TransRunner], operationId: createTransRunnerToken, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {content: {application/json: {schema: {type: object, properties: {rotate: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
     delete: {tags: [TransRunner], operationId: revokeTransRunnerToken, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
-  /api/integrations/transrunner/test:
-    post:
-      tags: [TransRunner]
-      operationId: testTransRunnerConnection
-      description: 调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。
-      parameters: [{$ref: '#/components/parameters/CSRF'}]
-      responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}
-  /api/integrations/transrunner/submit/transcode:
-    post:
-      tags: [TransRunner]
-      operationId: submitTranscodeToTransRunner
-      description: 通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。
-      parameters: [{$ref: '#/components/parameters/CSRF'}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [video_id], properties: {video_id: {type: string}, profile: {type: string}, force: {type: boolean, default: false}}}}}}
-      responses: {'202': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}
-  /api/integrations/transrunner/submit/dedupe:
-    post:
-      tags: [TransRunner]
-      operationId: submitDedupeToTransRunner
-      description: 提交内容去重任务到 TransRunner（kind=media_duplicate，input.type=hwatch）。TransRunner 自行调用 HWatch 的 dedupe-candidates 获取候选；HWatch 不发送候选、绝对路径或算法参数，也不轮询进度。
-      parameters: [{$ref: '#/components/parameters/CSRF'}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [video_id], properties: {video_id: {type: string}, force: {type: boolean, default: false}}}}}}
-      responses: {'202': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}
   /api/transrunner/v1/media/{video_id}:
     get:
       tags: [TransRunner]
@@ -207,9 +186,9 @@ paths:
       tags: [TransRunner]
       security: [{integrationBearer: []}]
       operationId: transRunnerTranscodeResults
-      description: 需要 write_transcode_results。接收暂存产物并由 HWatch 用 ffprobe 验证，只记录 pending 结果，不替换源文件。
+      description: 需要 write_transcode_results。接收暂存产物并由 HWatch 自己 ffprobe 验证。默认只记录 pending 结果，不替换源文件；仅当 apply_mode=replace_source 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、source_sha256 一致）时才由 HWatch 原子替换源文件并刷新元数据。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerTranscodeResult'}}}}
-      responses: {'202': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '202': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
   /media/{id}:
     get: {tags: [Library], operationId: streamMedia, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {description: 支持 Range 的媒体流}}}
   /thumb/{id}:
@@ -300,6 +279,7 @@ components:
         source_sha256: {type: string, description: 提交源文件的 SHA-256；与当前不一致时返回 409 source_changed。}
         output_relative_path: {type: string, description: 必须位于暂存目录 .transrunner/ 内。}
         profile: {type: string, example: hevc-1080p}
+        apply_mode: {type: string, enum: [replace_source], description: 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。}
     RecoveryStatus:
       type: object
       required: [available]

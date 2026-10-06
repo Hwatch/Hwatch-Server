@@ -81,7 +81,7 @@ interface LibraryApi {
     /**
      * GET api/videos
      * 
-     * 
+     * 媒体分页列表。管理员会话可用；持有 read_media scope 的 Service Token（integrationBearer）也可只读调用以枚举媒体，此时响应中的 file_path/plex_path 会被清空。
      * Responses:
      *  - 200: 视频分页
      *  - 400: 请求失败
