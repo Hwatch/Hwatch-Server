@@ -614,6 +614,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/transrunner/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。 */
+        post: operations["testTransRunnerConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/transrunner/submit/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。 */
+        post: operations["submitTranscodeToTransRunner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/transrunner/v1/media/{video_id}": {
         parameters: {
             query?: never;
@@ -1691,6 +1725,47 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+        };
+    };
+    testTransRunnerConnection: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    submitTranscodeToTransRunner: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    video_id: string;
+                    profile?: string;
+                    /** @default false */
+                    force?: boolean;
+                };
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
         };
     };
     transRunnerMedia: {

@@ -99,3 +99,31 @@ func (s *Store) AddTranscodeResult(r TranscodeResult) (int64, error) {
 	}
 	return res.LastInsertId()
 }
+
+// TransRunnerSubmission records that a media operation was sent to TransRunner.
+// It is intentionally not a task table: no progress, lease or runner state.
+type TransRunnerSubmission struct {
+	ID          int64  `json:"id"`
+	VideoID     string `json:"video_id"`
+	Operation   string `json:"operation"`
+	Profile     string `json:"profile"`
+	RunnerJobID string `json:"runner_job_id"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (s *Store) AddTransRunnerSubmission(videoID, operation, profile, runnerJobID string) (int64, error) {
+	res, err := s.DB.Exec("INSERT INTO transrunner_submissions(video_id,operation,profile,runner_job_id,created_at) VALUES(?,?,?,?,?)", videoID, operation, profile, runnerJobID, Now())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// LatestTransRunnerSubmission returns the most recent submission for a media
+// operation (or no rows).
+func (s *Store) LatestTransRunnerSubmission(videoID, operation, profile string) (TransRunnerSubmission, error) {
+	var t TransRunnerSubmission
+	err := s.DB.QueryRow("SELECT id,video_id,operation,profile,runner_job_id,created_at FROM transrunner_submissions WHERE video_id=? AND operation=? AND profile=? ORDER BY id DESC LIMIT 1", videoID, operation, profile).
+		Scan(&t.ID, &t.VideoID, &t.Operation, &t.Profile, &t.RunnerJobID, &t.CreatedAt)
+	return t, err
+}

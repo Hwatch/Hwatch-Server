@@ -7,6 +7,8 @@ All URIs are relative to *http://localhost*
 | [**createTransRunnerToken**](TransRunnerApi.md#createTransRunnerToken) | **POST** api/integrations/transrunner/token |  |
 | [**getTransRunnerToken**](TransRunnerApi.md#getTransRunnerToken) | **GET** api/integrations/transrunner/token |  |
 | [**revokeTransRunnerToken**](TransRunnerApi.md#revokeTransRunnerToken) | **DELETE** api/integrations/transrunner/token |  |
+| [**submitTranscodeToTransRunner**](TransRunnerApi.md#submitTranscodeToTransRunner) | **POST** api/integrations/transrunner/submit/transcode |  |
+| [**testTransRunnerConnection**](TransRunnerApi.md#testTransRunnerConnection) | **POST** api/integrations/transrunner/test |  |
 | [**transRunnerDedupeCandidates**](TransRunnerApi.md#transRunnerDedupeCandidates) | **GET** api/transrunner/v1/media/{video_id}/dedupe-candidates |  |
 | [**transRunnerDuplicateResults**](TransRunnerApi.md#transRunnerDuplicateResults) | **POST** api/transrunner/v1/duplicate-results |  |
 | [**transRunnerMedia**](TransRunnerApi.md#transRunnerMedia) | **GET** api/transrunner/v1/media/{video_id} |  |
@@ -97,6 +99,82 @@ val webService = apiClient.createWebservice(TransRunnerApi::class.java)
 val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
 
 val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.revokeTransRunnerToken(xCSRFToken)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(TransRunnerApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val submitTranscodeToTransRunnerRequest : SubmitTranscodeToTransRunnerRequest =  // SubmitTranscodeToTransRunnerRequest | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.submitTranscodeToTransRunner(xCSRFToken, submitTranscodeToTransRunnerRequest)
+```
+
+### Parameters
+| **xCSRFToken** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **submitTranscodeToTransRunnerRequest** | [**SubmitTranscodeToTransRunnerRequest**](SubmitTranscodeToTransRunnerRequest.md)|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+
+
+调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(TransRunnerApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.testTransRunnerConnection(xCSRFToken)
 ```
 
 ### Parameters

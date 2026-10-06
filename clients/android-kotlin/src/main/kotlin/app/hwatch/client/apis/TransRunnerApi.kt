@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 
 import app.hwatch.client.models.CreateTransRunnerTokenRequest
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.SubmitTranscodeToTransRunnerRequest
 import app.hwatch.client.models.TransRunnerDedupeCandidates
 import app.hwatch.client.models.TransRunnerDuplicateResult
 import app.hwatch.client.models.TransRunnerMedia
@@ -53,6 +54,37 @@ interface TransRunnerApi {
      */
     @DELETE("api/integrations/transrunner/token")
     fun revokeTransRunnerToken(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/integrations/transrunner/submit/transcode
+     * 
+     * 通过 TransRunner 的 /api/v1/jobs 提交转码任务，使用 HWatch 相对路径输入（绝不发送绝对路径）。HWatch 不镜像 TransRunner 的队列、进度或状态。
+     * Responses:
+     *  - 202: 成功
+     *  - 409: 请求失败
+     *  - 502: 请求失败
+     *
+     * @param xCSRFToken 
+     * @param submitTranscodeToTransRunnerRequest 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/integrations/transrunner/submit/transcode")
+    fun submitTranscodeToTransRunner(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body submitTranscodeToTransRunnerRequest: SubmitTranscodeToTransRunnerRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/integrations/transrunner/test
+     * 
+     * 调用 TransRunner 的 /health 与 /api/v1/capabilities 验证地址与 Token；不暴露 Token。
+     * Responses:
+     *  - 200: 成功
+     *  - 409: 请求失败
+     *  - 502: 请求失败
+     *
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/integrations/transrunner/test")
+    fun testTransRunnerConnection(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/transrunner/v1/media/{video_id}/dedupe-candidates
