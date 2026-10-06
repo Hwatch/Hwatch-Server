@@ -127,7 +127,6 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_nodes_seen ON compute_nodes(last_seen_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS compute_jobs (id TEXT PRIMARY KEY,job_type TEXT NOT NULL,subtype TEXT NOT NULL DEFAULT '',video_id TEXT NOT NULL,status TEXT NOT NULL,node_id TEXT NOT NULL DEFAULT '',idempotency_key TEXT NOT NULL UNIQUE,algorithm_version TEXT NOT NULL,media_relative_path TEXT NOT NULL,input_json TEXT NOT NULL DEFAULT '{}',result_json TEXT NOT NULL DEFAULT '{}',progress REAL NOT NULL DEFAULT 0,error_code TEXT NOT NULL DEFAULT '',error_message TEXT NOT NULL DEFAULT '',lease_until TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT NOT NULL DEFAULT '',FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_queue ON compute_jobs(status,job_type,created_at);" +
-	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_subtype ON compute_jobs(subtype,status,job_type);" +
 	"CREATE INDEX IF NOT EXISTS idx_compute_jobs_video ON compute_jobs(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
@@ -188,6 +187,10 @@ func Open(path string) (*Store, error) {
 	_, _ = db.Exec("UPDATE videos SET downloader_id='aria2',external_task_id=aria_gid WHERE aria_gid<>'' AND downloader_id=''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(platform,subscription_type,source_id) WHERE source_id<>''")
 	_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_source ON videos(platform,source_id) WHERE source_id<>''")
+	// Indexes over columns introduced by additive migrations must be created
+	// after those migrations, otherwise opening an existing database fails
+	// before the columns exist.
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_compute_jobs_subtype ON compute_jobs(subtype,status,job_type)")
 	defaults := map[string]string{"http_proxy": "", "download_dir": "media", "aria_rpc_url": "http://127.0.0.1:6800/jsonrpc", "aria_secret": "", "downloader_mode": "aria2", "check_time": "04:00", "timezone": "Asia/Shanghai", "plex_language": "zh-CN", "max_concurrent": "2", "connections_per_download": "4", "download_limit_kbps": "0", "min_free_bytes": "5368709120", "require_creator_match": "true", "download_paused": "false", "exclude_title_keywords": "compilation,collection,合集,集锦", "exclude_uploaders": "", "exclude_categories": "", "exclude_tags": "", "max_duration_seconds": "0", "backup_dir": "", "backup_time": "03:30", "backup_retention": "7", "backup_last_success": "", "backup_last_error": "", "auto_transcode": "false", "enable_media_duplicate": "false", "media_duplicate_max_candidates": "20", "media_duplicate_duration_percent": "1"}
 	for key, value := range defaults {
 		_, _ = db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", key, value)
