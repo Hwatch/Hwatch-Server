@@ -654,11 +654,20 @@ func (s *Store) RequeueDetachedWget() (int64, error) {
 	}
 	return result.RowsAffected()
 }
+
+// downloadTaskStatuses are the video states that represent a real download
+// task. Media lifecycle states such as discovered/excluded/removed are not
+// download tasks and must never appear in the download center.
+const downloadTaskStatuses = "'queued','submitting','waiting','active','paused','failed','completed'"
+
 func (s *Store) TaskVideos(limit, offset int, status string) ([]Video, error) {
 	if status != "" {
+		if !strings.Contains(downloadTaskStatuses, "'"+status+"'") {
+			return []Video{}, nil
+		}
 		return s.Videos(limit, offset, status, "")
 	}
-	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status<>'discovered' ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'submitting' THEN 2 WHEN 'queued' THEN 3 WHEN 'paused' THEN 4 WHEN 'failed' THEN 5 ELSE 6 END,updated_at DESC LIMIT ? OFFSET ?", limit, offset)
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status IN ("+downloadTaskStatuses+") ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'submitting' THEN 2 WHEN 'queued' THEN 3 WHEN 'paused' THEN 4 WHEN 'failed' THEN 5 ELSE 6 END,updated_at DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -710,10 +719,13 @@ func (s *Store) RecordPlayback(videoID string) error {
 }
 func (s *Store) CountTasks(status string) (int64, error) {
 	if status != "" {
+		if !strings.Contains(downloadTaskStatuses, "'"+status+"'") {
+			return 0, nil
+		}
 		return s.CountVideos(status)
 	}
 	var n int64
-	return n, s.DB.QueryRow("SELECT count(*) FROM videos WHERE status<>'discovered'").Scan(&n)
+	return n, s.DB.QueryRow("SELECT count(*) FROM videos WHERE status IN (" + downloadTaskStatuses + ")").Scan(&n)
 }
 func (s *Store) SubscriptionProgress(slug string) (SubscriptionProgress, error) {
 	var p SubscriptionProgress
