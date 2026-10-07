@@ -330,6 +330,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	waiting += queued + submitting
 	completed, _ := a.store.CountVideos("completed")
 	discovered, _ := a.store.CountVideos("discovered")
+	downloadedVideos, _ := a.store.CountDownloadedVideos()
 	traffic, library, _ := a.store.Stats()
 	downloadSpeed, connections, _ := a.store.TransferStats()
 	cfg, _ := a.store.Settings()
@@ -345,7 +346,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	unreadNotifications, _ := a.store.UnreadNotifications()
-	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaOnline, "downloader_mode": cfg.DownloaderMode, "downloaders": downloaders, "health_status": health["status"], "health_warnings": health["warnings"], "unread_notifications": unreadNotifications, "timezone": cfg.Timezone})
+	respond(w, 200, map[string]any{"subscriptions": a.subscriptionMaps(subs), "videos": translatedVideoMaps(videos, language, translations), "recently_played": translatedVideoMaps(recentlyPlayed, language, translations), "counts": map[string]any{"videos": totalCount, "active": activeCount, "waiting": waiting, "completed": completed, "discovered": discovered}, "downloaded_videos": downloadedVideos, "traffic_bytes": traffic, "library_bytes": library, "current_download_speed": downloadSpeed, "current_connections": connections, "downloads_paused": cfg.DownloadPaused, "disk_total": diskTotal, "disk_free": diskFree, "aria2_online": ariaOnline, "downloader_mode": cfg.DownloaderMode, "downloaders": downloaders, "health_status": health["status"], "health_warnings": health["warnings"], "unread_notifications": unreadNotifications, "timezone": cfg.Timezone})
 }
 func (a *App) listVideos(w http.ResponseWriter, r *http.Request) {
 	limit := intParam(r, "limit", 48, 1, 200)
