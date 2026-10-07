@@ -57,9 +57,12 @@ All URIs are relative to *http://localhost*
 | *DownloadsApi* | [**toggleDownloads**](docs/DownloadsApi.md#toggledownloads) | **POST** api/downloads/toggle |  |
 | *DownloadsApi* | [**videoAction**](docs/DownloadsApi.md#videoaction) | **POST** api/videos/{id}/{action} |  |
 | *LibraryApi* | [**dashboard**](docs/LibraryApi.md#dashboard) | **GET** api/dashboard |  |
+| *LibraryApi* | [**deleteVideo**](docs/LibraryApi.md#deletevideo) | **POST** api/videos/{id}/delete |  |
 | *LibraryApi* | [**importHTML**](docs/LibraryApi.md#importhtml) | **POST** api/import/html |  |
 | *LibraryApi* | [**listDuplicateCandidates**](docs/LibraryApi.md#listduplicatecandidates) | **GET** api/duplicates |  |
+| *LibraryApi* | [**listMediaExclusions**](docs/LibraryApi.md#listmediaexclusions) | **GET** api/media-exclusions |  |
 | *LibraryApi* | [**listVideos**](docs/LibraryApi.md#listvideos) | **GET** api/videos |  |
+| *LibraryApi* | [**removeMediaExclusion**](docs/LibraryApi.md#removemediaexclusion) | **DELETE** api/media-exclusions/{video_id} |  |
 | *LibraryApi* | [**reviewDuplicateCandidate**](docs/LibraryApi.md#reviewduplicatecandidate) | **POST** api/duplicates/{id}/{action} |  |
 | *LibraryApi* | [**reviewDuplicateCandidatesBatch**](docs/LibraryApi.md#reviewduplicatecandidatesbatch) | **POST** api/duplicates/batch |  |
 | *LibraryApi* | [**streamMedia**](docs/LibraryApi.md#streammedia) | **GET** media/{id} |  |
@@ -103,6 +106,7 @@ All URIs are relative to *http://localhost*
  - [app.hwatch.client.models.CreateSubscriptionRequest](docs/CreateSubscriptionRequest.md)
  - [app.hwatch.client.models.CreateTransRunnerTokenRequest](docs/CreateTransRunnerTokenRequest.md)
  - [app.hwatch.client.models.Credentials](docs/Credentials.md)
+ - [app.hwatch.client.models.DeleteVideoRequest](docs/DeleteVideoRequest.md)
  - [app.hwatch.client.models.Error](docs/Error.md)
  - [app.hwatch.client.models.Health](docs/Health.md)
  - [app.hwatch.client.models.HealthWarning](docs/HealthWarning.md)

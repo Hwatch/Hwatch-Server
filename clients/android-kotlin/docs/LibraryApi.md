@@ -5,9 +5,12 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 | ------------- | ------------- | ------------- |
 | [**dashboard**](LibraryApi.md#dashboard) | **GET** api/dashboard |  |
+| [**deleteVideo**](LibraryApi.md#deleteVideo) | **POST** api/videos/{id}/delete |  |
 | [**importHTML**](LibraryApi.md#importHTML) | **POST** api/import/html |  |
 | [**listDuplicateCandidates**](LibraryApi.md#listDuplicateCandidates) | **GET** api/duplicates |  |
+| [**listMediaExclusions**](LibraryApi.md#listMediaExclusions) | **GET** api/media-exclusions |  |
 | [**listVideos**](LibraryApi.md#listVideos) | **GET** api/videos |  |
+| [**removeMediaExclusion**](LibraryApi.md#removeMediaExclusion) | **DELETE** api/media-exclusions/{video_id} |  |
 | [**reviewDuplicateCandidate**](LibraryApi.md#reviewDuplicateCandidate) | **POST** api/duplicates/{id}/{action} |  |
 | [**reviewDuplicateCandidatesBatch**](LibraryApi.md#reviewDuplicateCandidatesBatch) | **POST** api/duplicates/batch |  |
 | [**streamMedia**](LibraryApi.md#streamMedia) | **GET** media/{id} |  |
@@ -48,6 +51,47 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.dash
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+删除单个视频的媒体文件。媒体路径始终由服务端根据 video_id 从数据库解析并校验位于媒体根目录内；绝不接受客户端路径。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val id : kotlin.String = id_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+val deleteVideoRequest : DeleteVideoRequest =  // DeleteVideoRequest | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteVideo(id, xCSRFToken, deleteVideoRequest)
+```
+
+### Parameters
+| **id** | **kotlin.String**|  | |
+| **xCSRFToken** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **deleteVideoRequest** | [**DeleteVideoRequest**](DeleteVideoRequest.md)|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 
@@ -122,6 +166,47 @@ This endpoint does not need any parameter.
 
 
 
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val limit : kotlin.Int = 56 // kotlin.Int | 
+val offset : kotlin.Int = 56 // kotlin.Int | 
+val q : kotlin.String = q_example // kotlin.String | 
+val source : kotlin.String = source_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.listMediaExclusions(limit, offset, q, source)
+```
+
+### Parameters
+| **limit** | **kotlin.Int**|  | [optional] [default to 48] |
+| **offset** | **kotlin.Int**|  | [optional] [default to 0] |
+| **q** | **kotlin.String**|  | [optional] |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **source** | **kotlin.String**|  | [optional] |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
 媒体分页列表。管理员会话可用；持有 read_media scope 的 Service Token（integrationBearer）也可只读调用以枚举媒体，此时响应中的 file_path/plex_path 会被清空。
 
 ### Example
@@ -179,6 +264,45 @@ val result : VideoPage = webService.listVideos(limit, offset, status, q, scope, 
 
 Configure integrationBearer:
     ApiClient().setBearerToken("TOKEN")
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+删除指定 video_id 的排除 tombstone（恢复允许下载）；不会自动创建下载任务。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val videoId : kotlin.String = videoId_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.removeMediaExclusion(videoId, xCSRFToken)
+```
+
+### Parameters
+| **videoId** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
 
 ### HTTP request headers
 

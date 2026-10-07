@@ -105,25 +105,14 @@ type Notification = {
   created_at: string;
   read_at: string;
 };
-type Duplicate = {
-  id: number;
+type Exclusion = {
   video_id: string;
-  video_title: string;
-  video_thumbnail: string;
-  match_video_id: string;
-  match_title: string;
-  match_thumbnail: string;
-  match_type: string;
-  classification: string;
-  backend: string;
-  algorithm_version: string;
-  metrics_json: string;
-  confidence: number;
-  duration_delta: number;
-  status: string;
+  source: string;
+  reason: string;
+  title_snapshot: string;
+  original_url_snapshot: string;
+  thumbnail_snapshot: string;
   created_at: string;
-  reviewed_at: string;
-  estimated_bytes: number;
 };
 type Dashboard = {
   subscriptions: Sub[];
@@ -241,9 +230,8 @@ const viewRoutes: Record<string, string> = {
   downloads: "/downloads",
   undownloaded: "/undownloaded",
   library: "/library",
+  excluded: "/excluded",
   translations: "/translations",
-  duplicates: "/duplicates",
-  nodes: "/nodes",
   notifications: "/notifications",
   settings: "/settings",
 };
@@ -253,13 +241,14 @@ const viewTitles: Record<string, string> = {
   downloads: "下载中心",
   undownloaded: "未下载",
   library: "影视库",
+  excluded: "已排除",
   translations: "翻译管理",
-  duplicates: "重复审查",
   notifications: "通知",
   settings: "设置",
 };
 const viewFromPath = () => {
-  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  const raw = window.location.pathname.replace(/\/+$/, "") || "/";
+  const path = raw === "/duplicates" ? "/library" : raw;
   return Object.entries(viewRoutes).find(([, route]) => route === path)?.[0] || "home";
 };
 const demoMode = ref(
@@ -296,7 +285,7 @@ const navGroups = [
     label: "媒体库",
     items: [
       { id: "library", label: "影视库" },
-      { id: "duplicates", label: "重复审查" },
+      { id: "excluded", label: "已排除" },
     ],
   },
   {
@@ -363,8 +352,11 @@ const backups = ref<Backup[]>([]),
   backupDirectory = ref(""),
   backupSensitive = ref(false);
 const notifications = ref<Notification[]>([]);
-const duplicates = ref<Duplicate[]>([]);
-const selectedDuplicates = ref<number[]>([]);
+const exclusions = ref<Exclusion[]>([]);
+const mediaExclusionTotal = ref(0);
+const deleteTarget = ref<Video | undefined>(undefined);
+const deleteMode = ref<"delete_and_exclude" | "delete_only">("delete_and_exclude");
+const deleting = ref(false);
 const exclusionPreview = ref<any[]>([]);
 const exclusionTotal = ref(0);
 const facets = ref<{ creators: Facet[]; tags: Facet[]; codecs: Facet[] }>({
@@ -519,64 +511,43 @@ async function markNotificationsRead() {
   data.value.unread_notifications = 0;
   await loadNotifications();
 }
-async function loadDuplicates() {
-  const result = await api("/api/duplicates");
-  duplicates.value = result.items;
-  selectedDuplicates.value = selectedDuplicates.value.filter((id) =>
-    duplicates.value.some((item) => item.id === id && item.status === "pending"),
-  );
+async function loadExclusions() {
+  const result = await api("/api/media-exclusions?limit=200");
+  exclusions.value = result.items || [];
+  mediaExclusionTotal.value = result.total || 0;
 }
-async function reviewDuplicate(item: Duplicate, action: "confirm" | "dismiss") {
+async function restoreExclusion(item: Exclusion) {
   await act(async () => {
-    await api("/api/duplicates/" + item.id + "/" + action, { method: "POST" });
-    notice.value =
-      action === "confirm"
-        ? "已确认重复，保留现有文件"
-        : "已忽略匹配并重新排队";
-    await loadDuplicates();
-    await refreshDashboard();
+    await api("/api/media-exclusions/" + encodeURIComponent(item.video_id), { method: "DELETE" });
+    exclusions.value = exclusions.value.filter((x) => x.video_id !== item.video_id);
+    mediaExclusionTotal.value = Math.max(0, mediaExclusionTotal.value - 1);
+    notice.value = "已恢复允许下载";
   });
 }
-const classificationLabel = (value: string) =>
-  ({
-    "whole-video": "完整视频重复",
-    "trimmed-video": "疑似裁切版本",
-    "possible-match": "可能重复",
-    different: "内容不同",
-  } as Record<string, string>)[value] || value;
-const duplicateReason = (item: Duplicate) => {
-  const external: Record<string, string> = {
-    external_exact: "外部分析：文件内容一致",
-    external_reencoded: "外部分析：同一内容的重新编码版本",
-    external_contained: "外部分析：该视频已完整包含于另一视频",
-    external_partial_overlap: "外部分析：两个视频存在部分重叠",
-    external_compilation_contains: "外部分析：合集包含匹配视频",
-  };
-  if (external[item.match_type]) return external[item.match_type];
-  if (item.match_type === "media_duplicate") return `视频内容去重 · ${classificationLabel(item.classification)}`;
-  if (item.match_type === "sha256") return "文件 SHA-256 完全一致";
-  if (item.match_type === "page_url") return "详情页地址一致";
-  return `封面相似 ${Math.round(item.confidence * 100)}% · 时长差 ${item.duration_delta} 秒`;
-};
-const duplicateMetrics = (item: Duplicate) => {
+function openDelete(video: Video) {
+  deleteTarget.value = video;
+  deleteMode.value = "delete_and_exclude";
+}
+async function confirmDelete() {
+  const target = deleteTarget.value;
+  if (!target || deleting.value) return;
+  deleting.value = true;
   try {
-    return JSON.parse(item.metrics_json || "{}");
-  } catch {
-    return {};
-  }
-};
-async function reviewDuplicateBatch(action: "confirm" | "dismiss") {
-  if (!selectedDuplicates.value.length) return;
-  await act(async () => {
-    const result = await api("/api/duplicates/batch", {
+    await api("/api/videos/" + encodeURIComponent(target.video_id) + "/delete", {
       method: "POST",
-      body: JSON.stringify({ ids: selectedDuplicates.value, action }),
+      body: JSON.stringify({ mode: deleteMode.value }),
     });
-    notice.value = `已处理 ${result.reviewed} 项，预计涉及 ${size(result.estimated_bytes)}`;
-    selectedDuplicates.value = [];
-    await loadDuplicates();
+    videos.value = videos.value.filter((v) => v.video_id !== target.video_id);
+    if (selected.value && selected.value.video_id === target.video_id) selected.value = undefined;
+    const mode = deleteMode.value;
+    deleteTarget.value = undefined;
+    notice.value = mode === "delete_and_exclude" ? "已删除并加入已排除" : "已删除媒体";
     await refreshDashboard();
-  });
+  } catch (e) {
+    notice.value = "删除失败：" + String(e);
+  } finally {
+    deleting.value = false;
+  }
 }
 async function previewExclusions() {
   await act(async () => {
@@ -678,7 +649,7 @@ async function changeView(next: string, updateHistory = true) {
     await loadVideos();
   if (next === "settings") await loadSettings();
   if (next === "notifications") await loadNotifications();
-  if (next === "duplicates") await loadDuplicates();
+  if (next === "excluded") await loadExclusions();
 }
 async function act(run: () => Promise<void>) {
   busy.value = true;
@@ -874,10 +845,6 @@ async function refreshNFO() {
 }
 function privateID(v: Video) {
   return "媒体项目 " + v.video_id.split(":").pop()!.slice(-4).toUpperCase();
-}
-function displayDuplicateTitle(title: string, id: string) {
-  if (demoMode.value !== 2) return title;
-  return "媒体项目 " + id.split(":").pop()!.slice(-4).toUpperCase();
 }
 function displayTitle(v: Video) {
   if (demoMode.value === 2) return privateID(v);
@@ -1231,7 +1198,7 @@ watch(
               'settings',
               'translations',
               'notifications',
-              'duplicates',
+              'excluded',
             ].includes(view)
           "
           class="primary"
@@ -1472,59 +1439,23 @@ watch(
           <div v-if="!data.subscriptions.length" class="empty">还没有订阅</div>
         </div>
       </section>
-      <section v-else-if="view === 'duplicates'">
-        <div class="toolbar">
-          <span>已选 {{ selectedDuplicates.length }} 项 · 预计可释放 {{ size(duplicates.filter((x) => selectedDuplicates.includes(x.id)).reduce((sum, x) => sum + (x.estimated_bytes || 0), 0)) }}</span>
-          <button :disabled="!selectedDuplicates.length" @click="reviewDuplicateBatch('dismiss')">批量忽略</button>
-          <button class="primary" :disabled="!selectedDuplicates.length" @click="reviewDuplicateBatch('confirm')">批量确认</button>
-        </div>
-        <div class="duplicate-grid">
-          <article
-            v-for="item in duplicates"
-            :key="item.id"
-            class="duplicate-card"
-          >
-            <label v-if="item.status === 'pending'" class="duplicate-select"><input v-model="selectedDuplicates" type="checkbox" :value="item.id" /> 选择</label>
-            <div class="duplicate-pair">
-              <div>
-                <img :src="'/thumb/' + item.video_id" alt="重复候选封面" /><b>{{
-                  displayDuplicateTitle(item.video_title, item.video_id)
-                }}</b>
-              </div>
-              <span>≈</span>
-              <div>
-                <img :src="'/thumb/' + item.match_video_id" alt="匹配媒体封面" /><b>{{
-                  displayDuplicateTitle(item.match_title, item.match_video_id)
-                }}</b>
-              </div>
+      <section v-else-if="view === 'excluded'">
+        <p class="muted">这些视频已被加入“已排除”，订阅或自动发现都不会重新下载。</p>
+        <div class="rows">
+          <article v-for="item in exclusions" :key="item.video_id">
+            <span class="avatar">{{ (item.title_snapshot || item.video_id).slice(0, 1).toUpperCase() }}</span>
+            <div>
+              <b>{{ item.title_snapshot || item.video_id }}</b>
+              <small>{{ item.source || '未知来源' }} · {{ item.video_id }} · {{ localTime(item.created_at) }}</small>
+              <small>{{ item.reason || '用户删除并排除' }}</small>
             </div>
-            <small
-              >{{ duplicateReason(item) }}
-              · {{ item.status }}</small
-            >
-            <details v-if="item.match_type === 'media_duplicate'" class="duplicate-detail">
-              <summary>技术详情</summary>
-              <small>算法 {{ item.algorithm_version || '未知' }} · 后端 {{ item.backend || '未知' }}</small>
-              <small v-if="duplicateMetrics(item).sample_count != null">
-                采样 {{ duplicateMetrics(item).matched_samples ?? '?' }} / {{ duplicateMetrics(item).sample_count }}
-                <template v-if="duplicateMetrics(item).median_hamming_distance != null"> · 中位汉明距离 {{ duplicateMetrics(item).median_hamming_distance }}</template>
-              </small>
-              <small v-if="duplicateMetrics(item).duration_ratio != null">时长比 {{ duplicateMetrics(item).duration_ratio }}</small>
-            </details>
-            <small v-if="item.estimated_bytes">预计可释放 {{ size(item.estimated_bytes) }}</small>
-            <div v-if="item.status === 'pending'" class="actions">
-              <button @click="reviewDuplicate(item, 'dismiss')">
-                不是重复，继续下载</button
-              ><button
-                class="primary"
-                @click="reviewDuplicate(item, 'confirm')"
-              >
-                确认重复
-              </button>
+            <div class="actions">
+              <button :disabled="busy" @click="restoreExclusion(item)">恢复允许下载</button>
             </div>
           </article>
-          <div v-if="!duplicates.length" class="empty">暂无重复候选</div>
+          <div v-if="!exclusions.length" class="empty">没有已排除的视频</div>
         </div>
+        <p v-if="mediaExclusionTotal" class="muted">共 {{ mediaExclusionTotal }} 项</p>
       </section>
       <section v-else-if="view === 'notifications'">
         <div class="toolbar">
@@ -1905,7 +1836,10 @@ watch(
   </div>
   <div v-if="selected" class="modal" @click.self="selected = undefined">
     <div class="player" role="dialog" aria-modal="true" :aria-label="displayTitle(selected)">
-      <button class="close" @click="selected = undefined">关闭</button>
+      <div class="player-top-actions">
+        <button class="danger" @click="openDelete(selected)">删除</button>
+        <button class="close" @click="selected = undefined">关闭</button>
+      </div>
       <h2>{{ displayTitle(selected) }}</h2>
       <video
         v-if="selected.status === 'completed'"
@@ -1936,6 +1870,18 @@ watch(
         <span v-for="tag in displayTags(selected)" :key="tag">{{ tag }}</span>
       </div>
       <a :href="selected.page_url" target="_blank">打开详情页</a>
+    </div>
+  </div>
+  <div v-if="deleteTarget" class="modal" @click.self="deleteTarget = undefined">
+    <div class="player" role="dialog" aria-modal="true" style="max-width:520px">
+      <h2>删除这个视频？</h2>
+      <p class="muted">{{ displayTitle(deleteTarget) }}</p>
+      <label class="setting-check"><input v-model="deleteMode" type="radio" value="delete_and_exclude"><span><b>删除并加入已排除</b><small>删除当前媒体文件，并阻止以后订阅或自动发现时再次下载。</small></span></label>
+      <label class="setting-check"><input v-model="deleteMode" type="radio" value="delete_only"><span><b>仅删除媒体</b><small>删除当前媒体文件；以后如果订阅再次发现，仍允许重新下载。</small></span></label>
+      <div class="actions" style="justify-content:flex-end;margin-top:14px">
+        <button :disabled="deleting" @click="deleteTarget = undefined">取消</button>
+        <button class="danger" :disabled="deleting" @click="confirmDelete">{{ deleting ? '正在删除…' : '确认删除' }}</button>
+      </div>
     </div>
   </div>
 </template>

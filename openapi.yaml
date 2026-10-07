@@ -112,6 +112,27 @@ paths:
     post: {tags: [Downloads], operationId: toggleDownloads, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [paused], properties: {paused: {type: boolean}}}}}}, responses: {'202': {$ref: '#/components/responses/JSON'}}}
   /api/videos/{id}/{action}:
     post: {tags: [Downloads], operationId: videoAction, parameters: [{$ref: '#/components/parameters/VideoID'}, {name: action, in: path, required: true, schema: {type: string, enum: [download, retry, pause, resume, delete]}}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+  /api/videos/{id}/delete:
+    post:
+      tags: [Library]
+      operationId: deleteVideo
+      description: 删除单个视频的媒体文件。媒体路径始终由服务端根据 video_id 从数据库解析并校验位于媒体根目录内；绝不接受客户端路径。
+      parameters: [{$ref: '#/components/parameters/VideoID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {mode: {type: string, enum: [delete_only, delete_and_exclude], default: delete_only}}}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/media-exclusions:
+    get:
+      tags: [Library]
+      operationId: listMediaExclusions
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}, {name: q, in: query, schema: {type: string}}, {name: source, in: query, schema: {type: string}}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
+  /api/media-exclusions/{video_id}:
+    delete:
+      tags: [Library]
+      operationId: removeMediaExclusion
+      description: 删除指定 video_id 的排除 tombstone（恢复允许下载）；不会自动创建下载任务。
+      parameters: [{name: video_id, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
   /api/subscriptions:
     get: {tags: [Subscriptions], operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri, description: 已注册适配器支持的订阅链接}, type: {type: string, enum: [creator, playlist], description: 可省略，由链接自动识别}, download_existing: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}}
