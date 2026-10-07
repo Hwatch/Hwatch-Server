@@ -277,6 +277,29 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 `delete` 是破坏性操作，Android 客户端必须二次确认。
 
+### `POST /api/videos/{video_id}/delete`
+
+单视频删除，媒体路径由服务端根据 `video_id` 从数据库解析并校验位于媒体根目录内（拒绝越界与 symlink 逃逸）。请求：
+
+```json
+{ "mode": "delete_and_exclude" }
+```
+
+- `delete_only`：删除媒体文件，不创建排除项；以后订阅再次发现仍可重新下载。
+- `delete_and_exclude`：删除媒体文件并写入 `media_exclusions` tombstone；以后订阅/自动发现都不会重新下载。
+
+成功返回 `200`：`{"status":"deleted","mode":"..."}`。文件先移动到同目录 `.hwatch-trash`，数据库写入失败时回滚，成功后再删除。删除只影响媒体文件与 HWatch 生成并绑定的同名 `.nfo`/`.jpg`/`.aria2`，不递归删除目录。
+
+### `GET /api/media-exclusions`
+
+分页列出“已排除”视频（`limit`、`offset`、`q`、`source`），返回 `{items,total,limit,offset}`。身份为 canonical `video_id`。
+
+### `DELETE /api/media-exclusions/{video_id}`
+
+移除排除 tombstone（恢复允许下载）。只删除 tombstone，不自动创建下载任务；下次订阅扫描/自动发现才会重新进入下载流程。
+
+删除与排除管理仅允许管理员会话 + CSRF；Service Token 即使具有 `read_media` 也不得删除媒体或管理排除项。前端“重复审查”页面已移除，但重复候选/指纹后端与 `/api/transrunner/v1/duplicate-results` 仍然保留，供 TransRunner 使用。
+
 ### `GET /api/events`
 
 Server-Sent Events 实时下载状态，响应类型 `text/event-stream`，约每秒一条：

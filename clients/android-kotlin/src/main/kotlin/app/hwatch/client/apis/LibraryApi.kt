@@ -6,6 +6,7 @@ import retrofit2.Call
 import okhttp3.RequestBody
 import com.google.gson.annotations.SerializedName
 
+import app.hwatch.client.models.DeleteVideoRequest
 import app.hwatch.client.models.Error
 import app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest
 import app.hwatch.client.models.VideoPage
@@ -23,6 +24,24 @@ interface LibraryApi {
      */
     @GET("api/dashboard")
     fun dashboard(@Query("language") language: kotlin.String? = "zh-CN"): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/videos/{id}/delete
+     * 
+     * 删除单个视频的媒体文件。媒体路径始终由服务端根据 video_id 从数据库解析并校验位于媒体根目录内；绝不接受客户端路径。
+     * Responses:
+     *  - 200: 成功
+     *  - 409: 请求失败
+     *  - 422: 请求失败
+     *  - 503: 请求失败
+     *
+     * @param id 
+     * @param xCSRFToken 
+     * @param deleteVideoRequest 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/videos/{id}/delete")
+    fun deleteVideo(@Path("id") id: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body deleteVideoRequest: DeleteVideoRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * POST api/import/html
@@ -49,6 +68,22 @@ interface LibraryApi {
      */
     @GET("api/duplicates")
     fun listDuplicateCandidates(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * GET api/media-exclusions
+     * 
+     * 
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param limit  (optional, default to 48)
+     * @param offset  (optional, default to 0)
+     * @param q  (optional)
+     * @param source  (optional)
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/media-exclusions")
+    fun listMediaExclusions(@Query("limit") limit: kotlin.Int? = 48, @Query("offset") offset: kotlin.Int? = 0, @Query("q") q: kotlin.String? = null, @Query("source") source: kotlin.String? = null): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
 
     /**
@@ -104,6 +139,20 @@ interface LibraryApi {
      */
     @GET("api/videos")
     fun listVideos(@Query("limit") limit: kotlin.Int? = 48, @Query("offset") offset: kotlin.Int? = 0, @Query("status") status: kotlin.String? = null, @Query("q") q: kotlin.String? = null, @Query("scope") scope: ScopeListVideos? = null, @Query("tags") tags: kotlin.String? = null, @Query("exclude_tags") excludeTags: kotlin.String? = null, @Query("tag_mode") tagMode: TagModeListVideos? = null, @Query("creator") creator: kotlin.String? = null, @Query("codec") codec: kotlin.String? = null, @Query("min_height") minHeight: kotlin.Int? = null, @Query("sort") sort: kotlin.String? = null, @Query("order") order: OrderListVideos? = null, @Query("language") language: kotlin.String? = "zh-CN"): Call<VideoPage>
+
+    /**
+     * DELETE api/media-exclusions/{video_id}
+     * 
+     * 删除指定 video_id 的排除 tombstone（恢复允许下载）；不会自动创建下载任务。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param videoId 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @DELETE("api/media-exclusions/{video_id}")
+    fun removeMediaExclusion(@Path("video_id") videoId: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
 
     /**

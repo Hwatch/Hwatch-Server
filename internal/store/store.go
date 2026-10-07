@@ -127,6 +127,8 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_transcode_results_video ON transcode_results(video_id,created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS transrunner_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,operation TEXT NOT NULL,profile TEXT NOT NULL DEFAULT '',runner_job_id TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE INDEX IF NOT EXISTS idx_transrunner_submissions_video ON transrunner_submissions(video_id,operation,profile,created_at DESC);" +
+	"CREATE TABLE IF NOT EXISTS media_exclusions (video_id TEXT PRIMARY KEY,source TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',title_snapshot TEXT NOT NULL DEFAULT '',original_url_snapshot TEXT NOT NULL DEFAULT '',thumbnail_snapshot TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);" +
+	"CREATE INDEX IF NOT EXISTS idx_media_exclusions_created ON media_exclusions(created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"

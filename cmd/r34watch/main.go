@@ -1062,25 +1062,30 @@ func (a *App) check(slug string) {
 	_ = a.store.UpdateSubscriptionCheck(slug, "")
 	for _, item := range items {
 		created, e := a.store.UpsertDiscovered(item)
-		if e == nil {
-			existing, _ := a.store.Video(item.ID)
-			needsHanimeMetadata := sub.Platform == "hanime1" && existing.Description == ""
-			if created || existing.DurationSeconds == 0 || needsHanimeMetadata {
-				if detailed, e := adapter.FetchDetails(context.Background(), item, cfg.HTTPProxy); e == nil {
-					detailed.SubscriptionSlug = slug
-					_ = a.store.UpdateDetails(detailed)
-					if strings.TrimRight(detailed.CreatorURL, "/") == strings.TrimRight(sub.URL, "/") {
-						_ = a.store.UpdateSubscriptionMetadata(slug, detailed.CreatorName, detailed.CreatorAvatar, detailed.ExternalLinksJSON)
-					}
-				}
-				if needsHanimeMetadata {
-					time.Sleep(250 * time.Millisecond)
+		if e != nil {
+			continue
+		}
+		existing, _ := a.store.Video(item.ID)
+		needsHanimeMetadata := sub.Platform == "hanime1" && existing.Description == ""
+		if created || existing.DurationSeconds == 0 || needsHanimeMetadata {
+			if detailed, e := adapter.FetchDetails(context.Background(), item, cfg.HTTPProxy); e == nil {
+				detailed.SubscriptionSlug = slug
+				_ = a.store.UpdateDetails(detailed)
+				if strings.TrimRight(detailed.CreatorURL, "/") == strings.TrimRight(sub.URL, "/") {
+					_ = a.store.UpdateSubscriptionMetadata(slug, detailed.CreatorName, detailed.CreatorAvatar, detailed.ExternalLinksJSON)
 				}
 			}
-			if created {
-				if a.store.QueueVideo(item.ID) == nil {
-					a.startQueueWorker()
-				}
+			if needsHanimeMetadata {
+				time.Sleep(250 * time.Millisecond)
+			}
+		}
+		if created || existing.Status == "removed" {
+			if a.store.IsMediaExcluded(item.ID) {
+				_ = a.store.UpdateTask(item.ID, "excluded", "", "", "", "该视频已加入已排除，跳过自动下载", 0, 0)
+				continue
+			}
+			if a.store.QueueVideo(item.ID) == nil {
+				a.startQueueWorker()
 			}
 		}
 	}
@@ -1115,6 +1120,10 @@ func (a *App) queue(id string) error {
 	v, err := a.store.Video(id)
 	if err != nil {
 		return err
+	}
+	if a.store.IsMediaExcluded(id) {
+		_ = a.store.UpdateTask(id, "excluded", "", "", "", "该视频已加入已排除，跳过下载", v.BytesDownloaded, v.TotalBytes)
+		return errors.New("excluded: 该视频已加入“已排除”，请先恢复允许下载")
 	}
 	if v.Status == "active" || v.Status == "waiting" || v.Status == "paused" {
 		return errors.New("任务已存在")
@@ -1318,6 +1327,10 @@ func (a *App) videoAction(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	switch action {
 	case "download", "retry":
+		if a.store.IsMediaExcluded(id) {
+			fail(w, http.StatusConflict, errVideoExcluded)
+			return
+		}
 		err = a.store.QueueVideo(id)
 		if err == nil {
 			a.startQueueWorker()
@@ -1845,6 +1858,9 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/check", a.checkHandler)
 	mux.HandleFunc("POST /api/check/{slug}", a.checkHandler)
 	mux.HandleFunc("POST /api/videos/{id}/{action}", a.videoAction)
+	mux.HandleFunc("POST /api/videos/{id}/delete", a.deleteVideo)
+	mux.HandleFunc("GET /api/media-exclusions", a.mediaExclusions)
+	mux.HandleFunc("DELETE /api/media-exclusions/{video_id}", a.removeMediaExclusion)
 	mux.HandleFunc("POST /api/import/html", a.importHTML)
 	mux.HandleFunc("GET /media/{id}", a.media)
 	mux.HandleFunc("GET /thumb/{id}", a.thumbnail)
