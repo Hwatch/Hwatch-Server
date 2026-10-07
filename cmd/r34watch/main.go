@@ -1888,6 +1888,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/check", a.checkHandler)
 	mux.HandleFunc("POST /api/check/{slug}", a.checkHandler)
 	mux.HandleFunc("POST /api/videos/{id}/{action}", a.videoAction)
+	mux.HandleFunc("POST /api/videos/{id}/refresh-thumbnail", a.refreshThumbnailHandler)
 	mux.HandleFunc("POST /api/videos/{id}/delete", a.deleteVideo)
 	mux.HandleFunc("GET /api/media-exclusions", a.mediaExclusions)
 	mux.HandleFunc("DELETE /api/media-exclusions/{video_id}", a.removeMediaExclusion)
@@ -1924,6 +1925,12 @@ func main() {
 	}
 	defer s.Close()
 	_ = s.CleanupAutomaticRaw()
+	if len(os.Args) > 1 && os.Args[1] == "maintenance" {
+		if err := runMaintenance(s, os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	cfg, _ := s.Settings()
 	if absolute, absErr := filepath.Abs(cfg.DownloadDir); absErr == nil && absolute != cfg.DownloadDir {
 		cfg.DownloadDir = absolute

@@ -591,6 +591,36 @@ func (s *Store) CountVideos(status string) (int64, error) {
 	}
 	return n, s.DB.QueryRow("SELECT count(*) FROM videos WHERE status=?", status).Scan(&n)
 }
+
+// formalMediaWhere is the single predicate for media that is formally part of
+// the on-disk library. It matches the /library source of truth (status
+// "completed"): it excludes discovered, queued/submitting/waiting/active,
+// failed, removed, excluded and orphan task rows. H.264 and TransRunner-HEVC
+// media both remain "completed", so both are included. Synthetic "test:"
+// fixtures are additionally excluded even if a stray one is marked completed.
+const formalMediaWhere = "status='completed' AND id NOT LIKE 'test:%'"
+
+// CountDownloadedVideos returns the number of formally downloaded media records
+// that are part of the local library. It is a pure SQL aggregate.
+func (s *Store) CountDownloadedVideos() (int64, error) {
+	var n int64
+	return n, s.DB.QueryRow("SELECT count(*) FROM videos WHERE " + formalMediaWhere).Scan(&n)
+}
+
+// DownloadedVideos lists formally downloaded media, optionally filtered by
+// platform, newest first, for maintenance passes.
+func (s *Store) DownloadedVideos(platform string, limit, offset int) ([]Video, error) {
+	where := " WHERE " + formalMediaWhere
+	args := []any{}
+	if platform != "" {
+		where += " AND platform=?"
+		args = append(args, platform)
+	}
+	args = append(args, limit, offset)
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos"+where+" ORDER BY downloaded_at DESC,updated_at DESC,id LIMIT ? OFFSET ?", args...)
+	return scanVideos(rows, err)
+}
+
 func (s *Store) QueueDiscovered(subscriptionSlug string) (int64, error) {
 	query := "UPDATE videos SET status='queued',error='',updated_at=? WHERE status='discovered'"
 	args := []any{Now()}
@@ -731,6 +761,10 @@ func (s *Store) SubscriptionProgress(slug string) (SubscriptionProgress, error) 
 	var p SubscriptionProgress
 	err := s.DB.QueryRow("SELECT count(*),COALESCE(SUM(status='completed'),0),COALESCE(SUM(status='active'),0),COALESCE(SUM(status IN ('waiting','queued','submitting')),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(bytes_downloaded),0),COALESCE(SUM(total_bytes),0) FROM videos WHERE subscription_slug=?", slug).Scan(&p.Total, &p.Completed, &p.Active, &p.Waiting, &p.Failed, &p.BytesDownloaded, &p.TotalBytes)
 	return p, err
+}
+func (s *Store) UpdateThumbnail(id, thumbnailURL string) error {
+	_, err := s.DB.Exec("UPDATE videos SET thumbnail_url=?,updated_at=? WHERE id=?", thumbnailURL, Now(), id)
+	return err
 }
 func (s *Store) UpdateDetails(v Video) error {
 	_, err := s.DB.Exec("UPDATE videos SET title=?,description=?,published_at=?,thumbnail_url=?,views=?,likes=?,like_rate=?,duration_seconds=?,creator_name=?,creator_url=?,creator_avatar=?,uploader_name=?,uploader_url=?,uploader_avatar=?,categories_json=?,tags_json=?,external_links_json=?,creators_json=?,source_relation_json=CASE WHEN ?='' OR ?='{}' THEN source_relation_json ELSE ? END,raw_html=?,updated_at=? WHERE id=?", v.Title, v.Description, v.PublishedAt, v.ThumbnailURL, v.Views, v.Likes, v.LikeRate, v.DurationSeconds, v.CreatorName, v.CreatorURL, v.CreatorAvatar, v.UploaderName, v.UploaderURL, v.UploaderAvatar, v.CategoriesJSON, v.TagsJSON, v.ExternalLinksJSON, v.CreatorsJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.SourceRelationJSON, v.RawHTML, Now(), v.ID)

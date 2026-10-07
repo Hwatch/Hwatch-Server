@@ -120,6 +120,13 @@ paths:
       parameters: [{$ref: '#/components/parameters/VideoID'}, {$ref: '#/components/parameters/CSRF'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {mode: {type: string, enum: [delete_only, delete_and_exclude], default: delete_only}}}}}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/videos/{id}/refresh-thumbnail:
+    post:
+      tags: [Library]
+      operationId: refreshVideoThumbnail
+      description: 重新抓取指定视频当前来源页面的封面，仅更新 thumbnail_url；不修改媒体文件、路径、编码、哈希、生命周期状态、排除或下载器状态。需要普通管理会话（CSRF），TransRunner Service Token 无权调用。返回 status（updated/unchanged/missing/failed）及 before/after。
+      parameters: [{$ref: '#/components/parameters/VideoID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '404': {$ref: '#/components/responses/Error'}}
   /api/media-exclusions:
     get:
       tags: [Library]
