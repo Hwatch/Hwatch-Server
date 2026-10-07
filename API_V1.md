@@ -290,6 +290,18 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 成功返回 `200`：`{"status":"deleted","mode":"..."}`。文件先移动到同目录 `.hwatch-trash`，数据库写入失败时回滚，成功后再删除。删除只影响媒体文件与 HWatch 生成并绑定的同名 `.nfo`/`.jpg`/`.aria2`，不递归删除目录。
 
+### `POST /api/videos/{video_id}/refresh-thumbnail`
+
+重新抓取指定视频当前来源页面的封面，仅更新 `thumbnail_url`（并失效本地缩略图缓存）。不修改媒体文件、`file_path`/`plex_path`、编码、分辨率、`media_fingerprints` 哈希、生命周期状态、排除项或下载器状态。
+
+成功返回 `200`：
+
+```json
+{ "status": "updated", "video_id": "rule34video:4146887", "before": "...", "after": "..." }
+```
+
+`status` 取值：`updated`（已更新）、`unchanged`（无更优封面，保留原值）、`missing`（来源无可用封面）、`failed`（来源解析失败，原值不变）。仅允许管理员会话 + CSRF；TransRunner Service Token 无权调用。
+
 ### `GET /api/media-exclusions`
 
 分页列出“已排除”视频（`limit`、`offset`、`q`、`source`），返回 `{items,total,limit,offset}`。身份为 canonical `video_id`。
