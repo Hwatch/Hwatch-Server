@@ -59,6 +59,9 @@ func (a Rule34Video) ListVideos(_ context.Context, sub store.Subscription, proxy
 func (a Rule34Video) FetchDetails(_ context.Context, video store.Video, proxy string) (store.Video, error) {
 	return a.collector.Detail(video, proxy)
 }
+func (a Rule34Video) ThumbnailCandidates(_ context.Context, video store.Video, proxy string) ([]string, error) {
+	return a.collector.ThumbnailCandidates(video, proxy)
+}
 func (a Rule34Video) ResolveDownload(_ context.Context, video store.Video, proxy string) (DownloadSource, error) {
 	u, quality, err := a.collector.Highest(video.PageURL, proxy)
 	return DownloadSource{URL: u, Quality: quality}, err

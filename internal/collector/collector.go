@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,9 @@ var (
 	uploadDateRE    = regexp.MustCompile("[\"']uploadDate[\"']\\s*:\\s*[\"']([^\"']+)")
 	ogImageRE       = regexp.MustCompile("(?i)<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)")
 	detailThumbRE   = regexp.MustCompile("(?i)(https?://[^\"'\\s]+/videos_screenshots/[^\"'\\s]+/(?:preview\\.jpg|[0-9]+x[0-9]+/[0-9]+\\.jpg))")
+	detailAssetRE   = regexp.MustCompile(`(?i)(https?://[^"'\s]+/videos_screenshots/\d+/(\d+)/([^"'\s]+?\.jpg))`)
+	dimensionRE     = regexp.MustCompile(`(?i)(\d{2,5})x(\d{2,5})`)
+	videoNumberRE   = regexp.MustCompile(`(\d+)`)
 	modelBlockRE    = regexp.MustCompile("(?s)data-suggest-type=[\"']model[\"'].*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
 	modelItemRE     = regexp.MustCompile("(?s)data-item-type=[\"']model[\"'][^>]*>.*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
 	uploaderBlockRE = regexp.MustCompile("(?s)<div class=[\"']label[\"']>Uploaded by</div>\\s*<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>")
@@ -175,6 +179,137 @@ func firstImage(block string) string {
 	}
 	return ""
 }
+
+// numericVideoID extracts the numeric source id from a video's SourceID, page
+// URL or database id so detail-page assets can be matched to the exact video.
+func numericVideoID(v store.Video) string {
+	for _, value := range []string{v.SourceID, v.PageURL, v.ID} {
+		if value == "" {
+			continue
+		}
+		if m := videoNumberRE.FindStringSubmatch(value); len(m) == 2 {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// assetScore ranks a detail-page asset file by the resolution it represents.
+// preview.jpg is the site's original poster and is preferred; explicit
+// preview_<N>p.mp4.jpg previews and WxH screenshots follow; timelines are tiny.
+func assetScore(file string) int {
+	low := strings.ToLower(file)
+	switch {
+	case strings.Contains(low, "timelines/"):
+		return 1
+	case strings.HasPrefix(low, "preview.jpg"):
+		return 1000000
+	case strings.Contains(low, ".mp4.jpg"):
+		if m := videoNumberRE.FindStringSubmatch(low); len(m) == 2 {
+			if n, err := strconv.Atoi(m[1]); err == nil {
+				return n * 100
+			}
+		}
+		return 500
+	default:
+		if m := dimensionRE.FindStringSubmatch(low); len(m) == 3 {
+			w, _ := strconv.Atoi(m[1])
+			h, _ := strconv.Atoi(m[2])
+			return w * h
+		}
+		return 10
+	}
+}
+
+// thumbnailScore ranks an already-stored URL so detail parsing never downgrades
+// a high-resolution cover to a smaller list thumbnail.
+func thumbnailScore(raw string) int {
+	low := strings.ToLower(raw)
+	switch {
+	case strings.HasPrefix(low, "data:"):
+		return -1
+	case strings.HasSuffix(low, "preview.jpg") || strings.Contains(low, "/preview.jpg"):
+		return 1000000
+	case strings.Contains(low, ".mp4.jpg"):
+		if m := videoNumberRE.FindStringSubmatch(low); len(m) == 2 {
+			if n, err := strconv.Atoi(m[1]); err == nil {
+				return n * 100
+			}
+		}
+		return 500
+	default:
+		if m := dimensionRE.FindStringSubmatch(low); len(m) == 3 {
+			w, _ := strconv.Atoi(m[1])
+			h, _ := strconv.Atoi(m[2])
+			return w * h
+		}
+		return 10
+	}
+}
+
+// scoredThumb is a candidate cover URL with a resolution-based rank.
+type scoredThumb struct {
+	url   string
+	score int
+}
+
+// scoredDetailThumbnails collects image URLs that belong to the current video
+// (by numeric id) from the detail page, ranked best-first. It deliberately
+// ignores related-video thumbnails, avatars, category/tag art and other assets.
+func scoredDetailThumbnails(page, videoID string) []scoredThumb {
+	seen := map[string]bool{}
+	items := []scoredThumb{}
+	add := func(raw string, score int) {
+		value := usableImage(raw)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		items = append(items, scoredThumb{url: value, score: score})
+	}
+	if m := ogImageRE.FindStringSubmatch(page); len(m) == 2 {
+		add(m[1], 2000000)
+	}
+	if videoID != "" {
+		for _, m := range detailAssetRE.FindAllStringSubmatch(page, -1) {
+			if m[2] != videoID {
+				continue
+			}
+			add(m[1], assetScore(m[3]))
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].score > items[j].score })
+	return items
+}
+
+// detailThumbnailCandidates returns this video's cover candidates, best-first.
+func detailThumbnailCandidates(page, videoID string) []string {
+	items := scoredDetailThumbnails(page, videoID)
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.url)
+	}
+	return out
+}
+
+// bestDetailThumbnail returns the highest-ranked cover and its score.
+func bestDetailThumbnail(page, videoID string) (string, int) {
+	items := scoredDetailThumbnails(page, videoID)
+	if len(items) == 0 {
+		return "", 0
+	}
+	return items[0].url, items[0].score
+}
+
+// ThumbnailCandidates fetches a detail page and returns this video's cover
+// candidates, best-first. Used by maintenance to compare real pixel sizes.
+func (Collector) ThumbnailCandidates(v store.Video, proxy string) ([]string, error) {
+	page, err := fetch(v.PageURL, proxy)
+	if err != nil {
+		return nil, err
+	}
+	return detailThumbnailCandidates(page, numericVideoID(v)), nil
+}
 func (Collector) List(modelURL, proxy string) ([]store.Video, error) {
 	seen := map[string]bool{}
 	out := []store.Video{}
@@ -257,12 +392,11 @@ func parseRaw(v store.Video, page string) store.Video {
 	if m := pageTitleRE.FindStringSubmatch(page); len(m) == 2 && clean(m[1]) != "" {
 		v.Title = clean(m[1])
 	}
-	if m := ogImageRE.FindStringSubmatch(page); len(m) == 2 {
-		if value := usableImage(m[1]); value != "" {
-			v.ThumbnailURL = value
+	if best, bestScore := bestDetailThumbnail(page, numericVideoID(v)); best != "" {
+		if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") || bestScore >= thumbnailScore(v.ThumbnailURL) {
+			v.ThumbnailURL = best
 		}
-	}
-	if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") {
+	} else if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") {
 		if m := detailThumbRE.FindStringSubmatch(page); len(m) == 2 {
 			v.ThumbnailURL = absolute(m[1])
 		}

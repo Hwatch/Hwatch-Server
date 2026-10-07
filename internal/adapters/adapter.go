@@ -41,6 +41,14 @@ type SubscriptionEnricher interface {
 	EnrichSubscription(context.Context, store.Subscription, string) store.Subscription
 }
 
+// ThumbnailCandidateProvider is optionally implemented by adapters that can
+// enumerate cover candidates for a video, best-first. Enumerating candidates is
+// expensive, so it is only used by the thumbnail maintenance pass, never by the
+// hot /thumb read path.
+type ThumbnailCandidateProvider interface {
+	ThumbnailCandidates(context.Context, store.Video, string) ([]string, error)
+}
+
 type Registry struct {
 	mu   sync.RWMutex
 	byID map[string]Adapter
