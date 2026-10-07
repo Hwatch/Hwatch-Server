@@ -491,6 +491,15 @@ async function logout() {
     data.value = empty;
   }
 }
+const coverFallback =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#17191f"/><text x="50%" y="50%" fill="#9199a7" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="15">封面不可用</text></svg>',
+  );
+function onCoverError(e: Event) {
+  const img = e.target as HTMLImageElement;
+  if (img.src !== coverFallback) img.src = coverFallback;
+}
 async function refreshDashboard() {
   try {
     data.value = await api(
@@ -1709,7 +1718,7 @@ watch(
         <div class="library">
           <article v-for="v in videos" :key="v.video_id">
             <button class="poster" @click="selected = v">
-              <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" /><span>{{
+              <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" @error="onCoverError" /><span>{{
                 duration(v.duration_seconds)
               }}</span>
             </button>

@@ -27,7 +27,7 @@ var (
 	videoRE         = regexp.MustCompile("href=[\"'](?:https?://rule34video\\.com)?(/video/(\\d+)/([^\"']+)/)[\"']")
 	videoCardRE     = regexp.MustCompile(`(?i)data-video-card-id=["'](\d+)["']`)
 	titleRE         = regexp.MustCompile("title=[\"']([^\"']+)[\"']")
-	imageOriginalRE = regexp.MustCompile("(?i)(?:data-original|data-webp|data-src)=[\"']([^\"']+)[\"']")
+	imageOriginalRE = regexp.MustCompile("(?i)(?:data-original|data-webp|data-src|data-rd-jpg|data-lazy|data-echo|data-thumb)=[\"']([^\"']+)[\"']")
 	imageRE         = regexp.MustCompile("(?i)src=[\"']([^\"']+)[\"']")
 	flashURLRE      = regexp.MustCompile("(?i)(?:video_(?:alt_)?url|video_url)\\s*:\\s*['\"]([^'\"]+)['\"]")
 	flashQualityRE  = regexp.MustCompile("(?i)(?:video_(?:alt_)?url_text|video_url_text)\\s*:\\s*['\"]([^'\"]+)['\"]")
@@ -37,6 +37,7 @@ var (
 	dateRE          = regexp.MustCompile("(?s)custom-calendar[\"'].*?<span>([^<]+)</span>")
 	uploadDateRE    = regexp.MustCompile("[\"']uploadDate[\"']\\s*:\\s*[\"']([^\"']+)")
 	ogImageRE       = regexp.MustCompile("(?i)<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)")
+	detailThumbRE   = regexp.MustCompile("(?i)(https?://[^\"'\\s]+/videos_screenshots/[^\"'\\s]+/(?:preview\\.jpg|[0-9]+x[0-9]+/[0-9]+\\.jpg))")
 	modelBlockRE    = regexp.MustCompile("(?s)data-suggest-type=[\"']model[\"'].*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
 	modelItemRE     = regexp.MustCompile("(?s)data-item-type=[\"']model[\"'][^>]*>.*?<a[^>]+href=[\"']([^\"']+/models/[^\"']+/)[\"'][^>]*>(.*?)</a>")
 	uploaderBlockRE = regexp.MustCompile("(?s)<div class=[\"']label[\"']>Uploaded by</div>\\s*<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>")
@@ -142,12 +143,31 @@ func absolute(raw string) string {
 func clean(raw string) string {
 	return strings.TrimSpace(html.UnescapeString(stripRE.ReplaceAllString(raw, " ")))
 }
+
+// usableImage normalizes a candidate image reference and rejects lazy-load
+// placeholders (data:/javascript: URIs) that are not real images.
+func usableImage(raw string) string {
+	value := absolute(raw)
+	low := strings.ToLower(value)
+	if strings.HasPrefix(low, "data:") || strings.HasPrefix(low, "javascript:") {
+		return ""
+	}
+	if !strings.HasPrefix(low, "http://") && !strings.HasPrefix(low, "https://") {
+		return ""
+	}
+	return value
+}
+
 func firstImage(block string) string {
 	if m := imageOriginalRE.FindStringSubmatch(block); len(m) == 2 {
-		return absolute(m[1])
+		if value := usableImage(m[1]); value != "" {
+			return value
+		}
 	}
 	if m := imageRE.FindStringSubmatch(block); len(m) == 2 {
-		return absolute(m[1])
+		if value := usableImage(m[1]); value != "" {
+			return value
+		}
 	}
 	return ""
 }
@@ -234,7 +254,14 @@ func parseRaw(v store.Video, page string) store.Video {
 		v.Title = clean(m[1])
 	}
 	if m := ogImageRE.FindStringSubmatch(page); len(m) == 2 {
-		v.ThumbnailURL = absolute(m[1])
+		if value := usableImage(m[1]); value != "" {
+			v.ThumbnailURL = value
+		}
+	}
+	if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") {
+		if m := detailThumbRE.FindStringSubmatch(page); len(m) == 2 {
+			v.ThumbnailURL = absolute(m[1])
+		}
 	}
 	if m := durationRE.FindStringSubmatch(page); len(m) == 2 {
 		v.DurationSeconds = parseDuration(clean(m[1]))

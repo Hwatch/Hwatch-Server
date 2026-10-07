@@ -88,6 +88,29 @@ func TestParseCount(t *testing.T) {
 	}
 }
 
+func TestFirstImageRejectsLazyPlaceholder(t *testing.T) {
+	if got := firstImage(`<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">`); got != "" {
+		t.Fatalf("placeholder must be rejected, got %q", got)
+	}
+}
+
+func TestFirstImageUsesLazyAttribute(t *testing.T) {
+	block := `<img class="thumb" src="data:image/gif;base64,AAA" data-rd-jpg="https://rule34video.com/contents/videos_screenshots/1/2/320x180/3.jpg">`
+	want := "https://rule34video.com/contents/videos_screenshots/1/2/320x180/3.jpg"
+	if got := firstImage(block); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestDetailThumbnailFallbackWithoutOpenGraph(t *testing.T) {
+	page := `<html><body><div class="img wrap_image"><img class="thumb" src="https://rule34video.com/contents/videos_screenshots/4629000/4629583/336x189/3.jpg"></div></body></html>`
+	v := parseRaw(store.Video{ID: "1", ThumbnailURL: "data:image/gif;base64,AAA"}, page)
+	want := "https://rule34video.com/contents/videos_screenshots/4629000/4629583/336x189/3.jpg"
+	if v.ThumbnailURL != want {
+		t.Fatalf("got %q want %q", v.ThumbnailURL, want)
+	}
+}
+
 func TestCreatorListingSnapshot(t *testing.T) {
 	raw, err := os.ReadFile("testdata/creator_listing.html")
 	if err != nil {
