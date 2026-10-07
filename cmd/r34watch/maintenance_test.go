@@ -262,6 +262,23 @@ func TestRunThumbnailRefreshIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRefreshThumbnailSkipsMeasurementWhenBestIsStored(t *testing.T) {
+	srv := imageServer(t)
+	defer srv.Close()
+	current := imgURL(srv, 640, 360)
+	fake := &fakeThumbAdapter{candidates: []string{current}}
+	a, s := newThumbRefreshApp(t, fake)
+	v := seedRefreshMedia(t, s, "rule34video:12", "completed", current)
+	res := a.refreshThumbnail(context.Background(), v, "force", testSettings(t, s), thumbnailHTTPClient(""))
+	if res.Status != thumbUnchanged || res.BeforeKnown || res.AfterKnown {
+		t.Fatalf("expected unmeasured fast-path unchanged, got %+v", res)
+	}
+	after, _ := s.Video(v.ID)
+	if after.ThumbnailURL != current {
+		t.Fatalf("thumbnail changed: %q", after.ThumbnailURL)
+	}
+}
+
 func TestRefreshThumbnailAPIRegressionAuthAndUpdate(t *testing.T) {
 	srv := imageServer(t)
 	defer srv.Close()

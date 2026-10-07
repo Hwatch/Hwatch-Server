@@ -221,6 +221,12 @@ func (a *App) refreshThumbnail(ctx context.Context, v store.Video, mode string, 
 		result.Status = thumbMissing
 		return result
 	}
+	// Fast path: the best-ranked candidate is already stored, so there is
+	// nothing to upgrade and measuring images would be pure overhead. This
+	// keeps idempotent re-runs cheap.
+	if isUsableThumbnail(v.ThumbnailURL) && candidates[0] == v.ThumbnailURL {
+		return result
+	}
 
 	// Pick the candidate with the largest measured pixel area. When candidates
 	// can't be measured we keep the adapter's best-first ordering.
