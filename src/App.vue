@@ -509,9 +509,22 @@ const coverFallback =
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#17191f"/><text x="50%" y="50%" fill="#9199a7" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="15">封面不可用</text></svg>',
   );
-function onCoverError(e: Event) {
+function onCoverError(e: Event, id?: string) {
   const img = e.target as HTMLImageElement;
-  if (img.src !== coverFallback) img.src = coverFallback;
+  if (id) coverStates.value[id] = "error";
+  if (img && img.src !== coverFallback) img.src = coverFallback;
+}
+type CoverState = "loading" | "loaded" | "error";
+const coverStates = ref<Record<string, CoverState>>({});
+function coverState(id: string): CoverState {
+  return coverStates.value[id] || "loading";
+}
+function markCoverLoaded(id: string) {
+  if (coverStates.value[id] !== "loaded") coverStates.value[id] = "loaded";
+}
+function registerCoverImg(id: string, el: unknown) {
+  const img = el as HTMLImageElement | null;
+  if (img && img.complete && img.naturalWidth > 0) markCoverLoaded(id);
 }
 async function refreshDashboard() {
   try {
@@ -1735,8 +1748,22 @@ watch(
         </div>
         <div class="library">
           <article v-for="v in videos" :key="v.video_id">
-            <button class="poster" @click="selected = v">
-              <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" @error="onCoverError" /><span>{{
+            <button
+              class="poster"
+              :class="'poster--' + coverState(v.video_id)"
+              @click="selected = v"
+            >
+              <span class="poster-skeleton" aria-hidden="true"></span>
+              <img
+                :ref="(el) => registerCoverImg(v.video_id, el)"
+                :class="{ loaded: coverState(v.video_id) === 'loaded' }"
+                :src="'/thumb/' + v.video_id"
+                :alt="displayTitle(v)"
+                loading="lazy"
+                decoding="async"
+                @load="markCoverLoaded(v.video_id)"
+                @error="onCoverError($event, v.video_id)"
+              /><span class="poster-duration">{{
                 duration(v.duration_seconds)
               }}</span>
             </button>
