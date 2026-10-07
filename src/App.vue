@@ -1727,9 +1727,9 @@ watch(
                 {{ mediaSummary(v) || v.views.toLocaleString() + " 次观看" }}
               </p>
             </div>
-            <div class="library-actions">
-              <button v-if="view === 'library'" class="primary" @click="selected = v">播放</button>
-              <button v-else class="primary" @click="videoAction(v, 'download')">下载</button>
+            <div class="library-card-actions">
+              <button v-if="view === 'library'" class="library-card__play" @click="selected = v">播放</button>
+              <button v-else class="library-card__play" @click="videoAction(v, 'download')">下载</button>
             </div>
           </article>
           <div v-if="!videos.length" class="empty">
@@ -1876,8 +1876,16 @@ watch(
     <div class="player" role="dialog" aria-modal="true" style="max-width:520px">
       <h2>删除这个视频？</h2>
       <p class="muted">{{ displayTitle(deleteTarget) }}</p>
-      <label class="setting-check"><input v-model="deleteMode" type="radio" value="delete_and_exclude"><span><b>删除并加入已排除</b><small>删除当前媒体文件，并阻止以后订阅或自动发现时再次下载。</small></span></label>
-      <label class="setting-check"><input v-model="deleteMode" type="radio" value="delete_only"><span><b>仅删除媒体</b><small>删除当前媒体文件；以后如果订阅再次发现，仍允许重新下载。</small></span></label>
+      <div class="delete-options">
+        <label class="delete-option" :class="{ selected: deleteMode === 'delete_and_exclude' }">
+          <input class="delete-option__radio" type="radio" name="delete-mode" value="delete_and_exclude" v-model="deleteMode">
+          <span class="delete-option__content"><b>删除并加入已排除</b><small>删除当前媒体文件，并阻止以后订阅或自动发现时再次下载。</small></span>
+        </label>
+        <label class="delete-option" :class="{ selected: deleteMode === 'delete_only' }">
+          <input class="delete-option__radio" type="radio" name="delete-mode" value="delete_only" v-model="deleteMode">
+          <span class="delete-option__content"><b>仅删除媒体</b><small>删除当前媒体文件；以后如果订阅再次发现，仍允许重新下载。</small></span>
+        </label>
+      </div>
       <div class="actions" style="justify-content:flex-end;margin-top:14px">
         <button :disabled="deleting" @click="deleteTarget = undefined">取消</button>
         <button class="danger" :disabled="deleting" @click="confirmDelete">{{ deleting ? '正在删除…' : '确认删除' }}</button>
