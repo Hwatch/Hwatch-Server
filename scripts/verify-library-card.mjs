@@ -23,6 +23,19 @@ check(!privacy.includes("button:only-child"), "must not force only-child button 
 // Cover ratio, title clamp, single-line metadata.
 check(/\.poster[^{]*\{[^}]*aspect-ratio:\s*16\s*\/\s*9/.test(style), "cover must use aspect-ratio 16/9");
 
+// The image must not participate in layout: absolute, cover, so vertical
+// posters cannot stretch the card.
+check(/\.poster\s*>\s*img[^{]*\{[^}]*position:\s*absolute/.test(style), "poster image must be absolutely positioned");
+check(/\.poster\s*>\s*img[^{]*\{[^}]*width:\s*100%/.test(style), "poster image must be width 100%");
+check(/\.poster\s*>\s*img[^{]*\{[^}]*height:\s*100%/.test(style), "poster image must be height 100%");
+check(/\.poster\s*>\s*img[^{]*\{[^}]*object-fit:\s*cover/.test(style), "poster image must use object-fit cover");
+
+// Loading skeleton + fade-in and reduced-motion fallback.
+check(/\.poster-skeleton/.test(style), "missing poster skeleton");
+check(/poster-shimmer/.test(style), "missing skeleton shimmer keyframes");
+check(/\.poster>img[^{]*\{[^}]*transition:\s*opacity/.test(style), "cover must fade in");
+check(/prefers-reduced-motion/.test(style), "must respect prefers-reduced-motion");
+
 // Full-width but compact action (not a giant CTA).
 const base = privacy.match(/\.library-card__play\s*\{([^}]*)\}/);
 check(!!base, "missing .library-card__play rule");
@@ -36,7 +49,7 @@ check(/\.meta b\{[^}]*min-height/.test(style), "title area needs a min-height fo
 check(/\.meta small\{[^}]*white-space:\s*nowrap/.test(style), "metadata subtitle must be single line");
 
 // Cover load errors must fall back to a placeholder, never a broken image.
-check(app.includes("@error=\"onCoverError\""), "library cover must handle load errors");
+check(/@error="onCoverError\(\$event/.test(app), "library cover must handle load errors with the video id");
 check(app.includes("function onCoverError"), "missing cover error fallback");
 
 if (failures.length) {
