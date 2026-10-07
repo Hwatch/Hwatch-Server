@@ -35,6 +35,10 @@ check(/\.meta b\{[^}]*line-clamp:\s*2/.test(style), "title must clamp to 2 lines
 check(/\.meta b\{[^}]*min-height/.test(style), "title area needs a min-height for alignment");
 check(/\.meta small\{[^}]*white-space:\s*nowrap/.test(style), "metadata subtitle must be single line");
 
+// Cover load errors must fall back to a placeholder, never a broken image.
+check(app.includes("@error=\"onCoverError\""), "library cover must handle load errors");
+check(app.includes("function onCoverError"), "missing cover error fallback");
+
 if (failures.length) {
   console.error("library card check failed:");
   for (const f of failures) console.error(" - " + f);

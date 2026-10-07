@@ -1620,12 +1620,20 @@ func (a *App) events(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) thumbnail(w http.ResponseWriter, r *http.Request) {
 	v, err := a.store.Video(r.PathValue("id"))
-	if err != nil || v.ThumbnailURL == "" {
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	cfg, _ := a.store.Settings()
+	if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") {
+		v = a.repairThumbnail(r.Context(), v, cfg)
+	}
 	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if v.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(v.ThumbnailURL), "data:") {
+		log.Printf("thumbnail %s: no usable cover data", v.ID)
+		a.thumbnailPlaceholder(w)
+		return
+	}
 	if mediaPath := firstExistingThumbnail(v); mediaPath != "" {
 		http.ServeFile(w, r, mediaPath)
 		return
@@ -1700,6 +1708,28 @@ func (a *App) thumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 	http.ServeFile(w, r, cachePath)
 }
+
+// repairThumbnail resolves a real cover for a video whose stored URL is missing
+// or a lazy-load placeholder, by fetching the platform detail page once.
+func (a *App) repairThumbnail(ctx context.Context, v store.Video, cfg store.Settings) store.Video {
+	adapter, err := a.adapters.ByID(v.Platform)
+	if err != nil {
+		return v
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	detailed, err := adapter.FetchDetails(fetchCtx, v, cfg.HTTPProxy)
+	if err != nil {
+		return v
+	}
+	if detailed.ThumbnailURL == "" || strings.HasPrefix(strings.ToLower(detailed.ThumbnailURL), "data:") {
+		return v
+	}
+	detailed.SubscriptionSlug = v.SubscriptionSlug
+	_ = a.store.UpdateDetails(detailed)
+	return detailed
+}
+
 func firstExistingThumbnail(v store.Video) string {
 	for _, mediaPath := range []string{v.PlexPath, v.FilePath} {
 		if mediaPath == "" {
