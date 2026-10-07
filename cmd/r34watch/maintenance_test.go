@@ -4,9 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -14,10 +19,37 @@ import (
 	"r34watch/internal/store"
 )
 
+// imageServer serves real JPEG images at /img/<w>x<h>.jpg so tests exercise true
+// pixel-dimension measurement instead of URL hints.
+func imageServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/img/"), ".jpg")
+		parts := strings.SplitN(name, "x", 2)
+		if len(parts) != 2 {
+			http.NotFound(w, r)
+			return
+		}
+		wpx, _ := strconv.Atoi(parts[0])
+		hpx, _ := strconv.Atoi(parts[1])
+		if wpx <= 0 || hpx <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_ = jpeg.Encode(w, image.NewRGBA(image.Rect(0, 0, wpx, hpx)), nil)
+	}))
+}
+
+func imgURL(s *httptest.Server, w, h int) string {
+	return fmt.Sprintf("%s/img/%dx%d.jpg", s.URL, w, h)
+}
+
 type fakeThumbAdapter struct {
-	thumb string
-	err   error
-	calls atomic.Int64
+	thumb      string
+	candidates []string
+	err        error
+	calls      atomic.Int64
 }
 
 func (f *fakeThumbAdapter) ID() string   { return "rule34video" }
@@ -40,6 +72,9 @@ func (f *fakeThumbAdapter) FetchDetails(_ context.Context, v store.Video, _ stri
 		return store.Video{}, f.err
 	}
 	return store.Video{ID: v.ID, ThumbnailURL: f.thumb}, nil
+}
+func (f *fakeThumbAdapter) ThumbnailCandidates(context.Context, store.Video, string) ([]string, error) {
+	return f.candidates, nil
 }
 func (f *fakeThumbAdapter) ResolveDownload(context.Context, store.Video, string) (adapters.DownloadSource, error) {
 	return adapters.DownloadSource{}, nil
@@ -97,12 +132,14 @@ func TestChooseThumbnailRules(t *testing.T) {
 }
 
 func TestRefreshThumbnailMissingPlaceholderUpdated(t *testing.T) {
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/1/2/1280x720/1.jpg"}
+	srv := imageServer(t)
+	defer srv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
 	v := seedRefreshMedia(t, s, "rule34video:1", "completed", "")
 	res := a.refreshThumbnail(context.Background(), v, "missing", testSettings(t, s), thumbnailHTTPClient(""))
-	if res.Status != thumbUpdated {
-		t.Fatalf("status=%s", res.Status)
+	if res.Status != thumbUpdated || !strings.Contains(res.After, "640x360") {
+		t.Fatalf("status=%s after=%s", res.Status, res.After)
 	}
 	after, _ := s.Video(v.ID)
 	if after.ThumbnailURL != fake.thumb {
@@ -114,32 +151,66 @@ func TestRefreshThumbnailMissingPlaceholderUpdated(t *testing.T) {
 }
 
 func TestRefreshThumbnailDataPlaceholderUpdated(t *testing.T) {
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/3/4/1280x720/2.jpg"}
+	srv := imageServer(t)
+	defer srv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
 	v := seedRefreshMedia(t, s, "rule34video:2", "completed", "data:image/gif;base64,AAA")
-	res := a.refreshThumbnail(context.Background(), v, "missing", testSettings(t, s), thumbnailHTTPClient(""))
-	if res.Status != thumbUpdated {
+	if res := a.refreshThumbnail(context.Background(), v, "missing", testSettings(t, s), thumbnailHTTPClient("")); res.Status != thumbUpdated {
 		t.Fatalf("status=%s", res.Status)
 	}
 }
 
-func TestRefreshThumbnailForceRefetchesValidCover(t *testing.T) {
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/5/6/1280x720/1.jpg"}
+func TestRefreshThumbnailForceUpgradesLowRes(t *testing.T) {
+	srv := imageServer(t)
+	defer srv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
-	old := "https://rule34video.com/contents/videos_screenshots/5/6/320x180/1.jpg"
-	v := seedRefreshMedia(t, s, "rule34video:3", "completed", old)
+	v := seedRefreshMedia(t, s, "rule34video:3", "completed", imgURL(srv, 320, 180))
 	res := a.refreshThumbnail(context.Background(), v, "force", testSettings(t, s), thumbnailHTTPClient(""))
-	if res.Status != thumbUpdated || fake.calls.Load() != 1 {
-		t.Fatalf("status=%s calls=%d", res.Status, fake.calls.Load())
+	if res.Status != thumbUpdated || res.BeforeArea != 320*180 || res.AfterArea != 640*360 {
+		t.Fatalf("res=%+v calls=%d", res, fake.calls.Load())
+	}
+}
+
+func TestRefreshThumbnailForceDoesNotDowngrade(t *testing.T) {
+	srv := imageServer(t)
+	defer srv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 320, 180)}
+	a, s := newThumbRefreshApp(t, fake)
+	v := seedRefreshMedia(t, s, "rule34video:4", "completed", imgURL(srv, 640, 360))
+	res := a.refreshThumbnail(context.Background(), v, "force", testSettings(t, s), thumbnailHTTPClient(""))
+	if res.Status != thumbUnchanged {
+		t.Fatalf("downgrade must be blocked, status=%s", res.Status)
+	}
+	after, _ := s.Video(v.ID)
+	if after.ThumbnailURL != v.ThumbnailURL {
+		t.Fatalf("cover changed on downgrade: %q", after.ThumbnailURL)
+	}
+}
+
+func TestRefreshThumbnailProviderPicksLargestMeasured(t *testing.T) {
+	srv := imageServer(t)
+	defer srv.Close()
+	small := imgURL(srv, 640, 360)
+	large := imgURL(srv, 960, 540)
+	fake := &fakeThumbAdapter{candidates: []string{small, large, "data:image/gif;base64,AAA"}}
+	a, s := newThumbRefreshApp(t, fake)
+	v := seedRefreshMedia(t, s, "rule34video:5", "completed", imgURL(srv, 320, 180))
+	res := a.refreshThumbnail(context.Background(), v, "force", testSettings(t, s), thumbnailHTTPClient(""))
+	if res.Status != thumbUpdated || res.After != large || !res.AfterKnown || res.AfterArea != 960*540 {
+		t.Fatalf("res=%+v want %s", res, large)
+	}
+	if fake.calls.Load() != 0 {
+		t.Fatalf("FetchDetails should not be called when candidates exist, calls=%d", fake.calls.Load())
 	}
 }
 
 func TestRefreshThumbnailFetchFailureKeepsValue(t *testing.T) {
 	fake := &fakeThumbAdapter{err: errors.New("boom")}
 	a, s := newThumbRefreshApp(t, fake)
-	v := seedRefreshMedia(t, s, "rule34video:4", "completed", "data:image/gif;base64,AAA")
-	res := a.refreshThumbnail(context.Background(), v, "missing", testSettings(t, s), thumbnailHTTPClient(""))
-	if res.Status != thumbFailed {
+	v := seedRefreshMedia(t, s, "rule34video:6", "completed", "data:image/gif;base64,AAA")
+	if res := a.refreshThumbnail(context.Background(), v, "missing", testSettings(t, s), thumbnailHTTPClient("")); res.Status != thumbFailed {
 		t.Fatalf("status=%s", res.Status)
 	}
 	after, _ := s.Video(v.ID)
@@ -159,28 +230,27 @@ func TestRefreshThumbnailMissingModeSkipsLiveCover(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/7/8/1280x720/1.jpg"}
+	imgSrv := imageServer(t)
+	defer imgSrv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(imgSrv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
-	good := seedRefreshMedia(t, s, "rule34video:5", "completed", srv.URL+"/ok.jpg")
+	good := seedRefreshMedia(t, s, "rule34video:7", "completed", srv.URL+"/ok.jpg")
 	if res := a.refreshThumbnail(context.Background(), good, "missing", testSettings(t, s), thumbnailHTTPClient("")); res.Status != thumbUnchanged || fake.calls.Load() != 0 {
 		t.Fatalf("valid cover must be skipped, status=%s calls=%d", res.Status, fake.calls.Load())
 	}
-	bad := seedRefreshMedia(t, s, "rule34video:6", "completed", srv.URL+"/page.html")
+	bad := seedRefreshMedia(t, s, "rule34video:8", "completed", srv.URL+"/page.html")
 	if res := a.refreshThumbnail(context.Background(), bad, "missing", testSettings(t, s), thumbnailHTTPClient("")); res.Status != thumbUpdated {
 		t.Fatalf("non-image cover must be refreshed, status=%s", res.Status)
 	}
 }
 
 func TestRunThumbnailRefreshIsIdempotent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "image/jpeg")
-		w.WriteHeader(http.StatusOK)
-	}))
+	srv := imageServer(t)
 	defer srv.Close()
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/9/9/1280x720/1.jpg"}
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
-	seedRefreshMedia(t, s, "rule34video:7", "completed", "")
-	seedRefreshMedia(t, s, "rule34video:8", "completed", srv.URL+"/ok.jpg")
+	seedRefreshMedia(t, s, "rule34video:9", "completed", "")
+	seedRefreshMedia(t, s, "rule34video:10", "completed", imgURL(srv, 640, 360))
 	cfg, _ := s.Settings()
 	cfg.DownloadDir = t.TempDir()
 	_ = s.SaveSettings(cfg)
@@ -193,9 +263,11 @@ func TestRunThumbnailRefreshIsIdempotent(t *testing.T) {
 }
 
 func TestRefreshThumbnailAPIRegressionAuthAndUpdate(t *testing.T) {
-	fake := &fakeThumbAdapter{thumb: "https://rule34video.com/contents/videos_screenshots/1/1/1280x720/1.jpg"}
+	srv := imageServer(t)
+	defer srv.Close()
+	fake := &fakeThumbAdapter{thumb: imgURL(srv, 640, 360)}
 	a, s := newThumbRefreshApp(t, fake)
-	v := seedRefreshMedia(t, s, "rule34video:9", "completed", "")
+	v := seedRefreshMedia(t, s, "rule34video:11", "completed", "")
 	cookie, csrf := newAdminSession(t, s)
 	server := httptest.NewServer(a.router(t.TempDir()))
 	defer server.Close()
@@ -217,7 +289,6 @@ func TestRefreshThumbnailAPIRegressionAuthAndUpdate(t *testing.T) {
 		t.Fatalf("body=%+v", body)
 	}
 
-	// Service token must not be able to call this management endpoint.
 	srv2 := httptest.NewServer(a.router(t.TempDir()))
 	defer srv2.Close()
 	token := createTRToken(t, s, []string{"read_media"})

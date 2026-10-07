@@ -112,6 +112,43 @@ func TestDetailThumbnailFallbackWithoutOpenGraph(t *testing.T) {
 	}
 }
 
+func TestDetailCandidatesPreferPreviewAndFilterRelated(t *testing.T) {
+	page := `<img src="https://rule34video.com/contents/videos_screenshots/9999000/9999999/320x180/1.jpg">` +
+		`<img src="https://rule34video.com/contents/videos_screenshots/3504000/3504948/320x180/3.jpg">` +
+		`<img src="https://rule34video.com/contents/videos_screenshots/3504000/3504948/preview.jpg">` +
+		`<img src="https://rule34video.com/contents/videos_screenshots/3504000/3504948/preview_360.mp4.jpg">`
+	candidates := detailThumbnailCandidates(page, "3504948")
+	if len(candidates) == 0 || !strings.HasSuffix(candidates[0], "/3504948/preview.jpg") {
+		t.Fatalf("preview.jpg must rank first, got %v", candidates)
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, "9999999") {
+			t.Fatalf("related-video asset leaked: %v", candidates)
+		}
+	}
+}
+
+func TestParseRawUpgradesListThumbnailToDetailPreview(t *testing.T) {
+	list := "https://rule34video.com/contents/videos_screenshots/3504000/3504948/320x180/3.jpg"
+	page := `<img src="` + list + `"><img src="https://rule34video.com/contents/videos_screenshots/3504000/3504948/preview.jpg">`
+	v := parseRaw(store.Video{ID: "3504948", ThumbnailURL: list}, page)
+	if !strings.HasSuffix(v.ThumbnailURL, "/3504948/preview.jpg") {
+		t.Fatalf("list thumbnail was not upgraded: %q", v.ThumbnailURL)
+	}
+	kept := parseRaw(store.Video{ID: "3504948", ThumbnailURL: v.ThumbnailURL}, page)
+	if kept.ThumbnailURL != v.ThumbnailURL {
+		t.Fatalf("existing preview.jpg must not change: %q", kept.ThumbnailURL)
+	}
+}
+
+func TestParseRawOpenGraphWins(t *testing.T) {
+	page := `<meta property="og:image" content="https://cdn.example/cover.png"><img src="https://rule34video.com/contents/videos_screenshots/1/2/preview.jpg">`
+	v := parseRaw(store.Video{ID: "2", ThumbnailURL: "https://rule34video.com/contents/videos_screenshots/1/2/320x180/1.jpg"}, page)
+	if v.ThumbnailURL != "https://cdn.example/cover.png" {
+		t.Fatalf("og:image should win, got %q", v.ThumbnailURL)
+	}
+}
+
 func TestCreatorListingSnapshot(t *testing.T) {
 	raw, err := os.ReadFile("testdata/creator_listing.html")
 	if err != nil {

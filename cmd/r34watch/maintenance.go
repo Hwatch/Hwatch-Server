@@ -6,18 +6,25 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"r34watch/internal/adapters"
 	"r34watch/internal/store"
 )
 
@@ -31,9 +38,13 @@ const (
 )
 
 type thumbnailRefresh struct {
-	Status string
-	Before string
-	After  string
+	Status      string
+	Before      string
+	After       string
+	BeforeArea  int
+	AfterArea   int
+	BeforeKnown bool
+	AfterKnown  bool
 }
 
 var thumbnailDimRE = regexp.MustCompile(`(?i)(\d{1,5})x(\d{1,5})`)
@@ -138,6 +149,39 @@ func (a *App) invalidateThumbnailCache(id string, cfg store.Settings) {
 	}
 }
 
+// measureThumbnail fetches just enough of an image to decode its real pixel
+// dimensions. It only reads the image header via image.DecodeConfig, so it does
+// not download the whole file. Returns (0,false) for placeholders, non-images or
+// network failures.
+func measureThumbnail(ctx context.Context, client *http.Client, raw string) (int, bool) {
+	if !isUsableThumbnail(raw) {
+		return 0, false
+	}
+	mctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(mctx, http.MethodGet, raw, nil)
+	if err != nil {
+		return 0, false
+	}
+	req.Header.Set("User-Agent", userAgent)
+	res, err := client.Do(req)
+	if err != nil {
+		return 0, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return 0, false
+	}
+	if ct := strings.ToLower(res.Header.Get("Content-Type")); ct != "" && !strings.HasPrefix(ct, "image/") {
+		return 0, false
+	}
+	cfg, _, err := image.DecodeConfig(io.LimitReader(res.Body, 4<<20))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return 0, false
+	}
+	return cfg.Width * cfg.Height, true
+}
+
 // refreshThumbnail resolves the current cover for one video and updates only
 // thumbnail_url. It never touches the media file, path, codec, hash, lifecycle
 // status, exclusions or downloader state.
@@ -151,27 +195,70 @@ func (a *App) refreshThumbnail(ctx context.Context, v store.Video, mode string, 
 		result.Status = thumbFailed
 		return result
 	}
-	fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	detailed, err := adapter.FetchDetails(fetchCtx, v, cfg.HTTPProxy)
-	if err != nil {
-		result.Status = thumbFailed
+
+	candidates := []string{}
+	if provider, ok := adapter.(adapters.ThumbnailCandidateProvider); ok {
+		fetchCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		list, listErr := provider.ThumbnailCandidates(fetchCtx, v, cfg.HTTPProxy)
+		cancel()
+		if listErr == nil {
+			candidates = list
+		}
+	}
+	if len(candidates) == 0 {
+		fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		detailed, detailErr := adapter.FetchDetails(fetchCtx, v, cfg.HTTPProxy)
+		cancel()
+		if detailErr != nil {
+			result.Status = thumbFailed
+			return result
+		}
+		if isUsableThumbnail(detailed.ThumbnailURL) {
+			candidates = []string{detailed.ThumbnailURL}
+		}
+	}
+	if len(candidates) == 0 {
+		result.Status = thumbMissing
 		return result
 	}
-	after, changed := chooseThumbnail(mode, v.ThumbnailURL, detailed.ThumbnailURL)
+
+	// Pick the candidate with the largest measured pixel area. When candidates
+	// can't be measured we keep the adapter's best-first ordering.
+	best := ""
+	bestArea, bestKnown := 0, false
+	for _, candidate := range candidates {
+		area, known := measureThumbnail(ctx, client, candidate)
+		if best == "" || (known && (!bestKnown || area > bestArea)) {
+			best, bestArea, bestKnown = candidate, area, known
+		}
+	}
+	currentArea, currentKnown := measureThumbnail(ctx, client, v.ThumbnailURL)
+	result.BeforeArea, result.BeforeKnown = currentArea, currentKnown
+	result.AfterArea, result.AfterKnown = bestArea, bestKnown
+	result.After = best
+
+	changed := true
+	switch {
+	case best == v.ThumbnailURL:
+		changed = false
+	case !isUsableThumbnail(v.ThumbnailURL):
+		changed = true
+	case mode == "force" && currentKnown && bestKnown:
+		changed = bestArea > currentArea
+	}
 	if !changed {
-		if !isUsableThumbnail(v.ThumbnailURL) {
+		result.After = v.ThumbnailURL
+		if !isUsableThumbnail(v.ThumbnailURL) && !isUsableThumbnail(best) {
 			result.Status = thumbMissing
 		}
 		return result
 	}
-	if err := a.store.UpdateThumbnail(v.ID, after); err != nil {
+	if err := a.store.UpdateThumbnail(v.ID, best); err != nil {
 		result.Status = thumbFailed
 		return result
 	}
 	a.invalidateThumbnailCache(v.ID, cfg)
 	result.Status = thumbUpdated
-	result.After = after
 	return result
 }
 
@@ -250,8 +337,10 @@ func (a *App) runThumbnailRefresh(ctx context.Context, o thumbRefreshOptions) er
 		return err
 	}
 	client := thumbnailHTTPClient(cfg.HTTPProxy)
-	var scanned, processed, updated, unchanged, missing, failed int64
+	var scanned, processed, updated, unchanged, missing, failed, upgraded int64
 	scanned = int64(len(videos))
+	oldAreas := []int{}
+	newAreas := []int{}
 	delay := time.Duration(o.DelayMS) * time.Millisecond
 
 	var mu sync.Mutex
@@ -259,7 +348,7 @@ func (a *App) runThumbnailRefresh(ctx context.Context, o thumbRefreshOptions) er
 	report := func() {
 		mu.Lock()
 		defer mu.Unlock()
-		fmt.Fprintf(os.Stdout, "\r%d/%d updated=%d unchanged=%d missing=%d failed=%d", processed, scanned, updated, unchanged, missing, failed)
+		fmt.Fprintf(os.Stdout, "\r%d/%d updated=%d upgraded_low_res=%d unchanged=%d missing=%d failed=%d", processed, scanned, updated, upgraded, unchanged, missing, failed)
 	}
 	report()
 
@@ -290,6 +379,15 @@ func (a *App) runThumbnailRefresh(ctx context.Context, o thumbRefreshOptions) er
 				failed++
 			default:
 				unchanged++
+			}
+			if result.Status == thumbUpdated && result.BeforeKnown && result.AfterKnown && result.AfterArea > result.BeforeArea {
+				upgraded++
+			}
+			if result.BeforeKnown {
+				oldAreas = append(oldAreas, result.BeforeArea)
+			}
+			if result.AfterKnown {
+				newAreas = append(newAreas, result.AfterArea)
 			}
 			mu.Unlock()
 			if result.Status == thumbFailed {
@@ -325,9 +423,19 @@ feed:
 	}
 	close(jobs)
 	wg.Wait()
-	fmt.Fprintf(os.Stdout, "\n%d/%d updated=%d unchanged=%d missing=%d failed=%d\n", processed, scanned, updated, unchanged, missing, failed)
+	fmt.Fprintf(os.Stdout, "\n%d/%d updated=%d upgraded_low_res=%d unchanged=%d missing=%d failed=%d\n", processed, scanned, updated, upgraded, unchanged, missing, failed)
+	fmt.Fprintf(os.Stdout, "old median pixel area=%d (n=%d) new median pixel area=%d (n=%d)\n", median(oldAreas), len(oldAreas), median(newAreas), len(newAreas))
 	if ctx.Err() != nil {
 		fmt.Fprintln(os.Stdout, "已中断，剩余未处理项将在下次运行时继续（幂等）。")
 	}
 	return nil
+}
+
+func median(values []int) int {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]int(nil), values...)
+	sort.Ints(sorted)
+	return sorted[len(sorted)/2]
 }
