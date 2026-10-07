@@ -126,6 +126,7 @@ type Dashboard = {
     discovered: number;
   };
   traffic_bytes: number;
+  downloaded_videos: number;
   library_bytes: number;
   current_download_speed: number;
   current_connections: number;
@@ -190,6 +191,7 @@ const empty: Dashboard = {
   recently_played: [],
   counts: { videos: 0, active: 0, waiting: 0, completed: 0, discovered: 0 },
   traffic_bytes: 0,
+  downloaded_videos: 0,
   library_bytes: 0,
   current_download_speed: 0,
   current_connections: 0,
@@ -224,6 +226,17 @@ const data = ref<Dashboard>(empty),
   selectedCreator = ref<Creator>(),
   searchingCreators = ref(false),
   downloadExisting = ref(false);
+const downloadedStatLabels: Record<string, { label: string; sub: string }> = {
+  "zh-CN": { label: "已下载视频", sub: "本地已入库" },
+  "zh-TW": { label: "已下載影片", sub: "本機已入庫" },
+  en: { label: "Downloaded Videos", sub: "Stored locally" },
+  ja: { label: "ダウンロード済み動画", sub: "ローカル保存済み" },
+};
+const downloadedStat = computed(
+  () =>
+    downloadedStatLabels[translationLanguage.value] ||
+    downloadedStatLabels["zh-CN"],
+);
 const viewRoutes: Record<string, string> = {
   home: "/",
   subscriptions: "/subscriptions",
@@ -1240,6 +1253,11 @@ watch(
             <small>下载任务</small
             ><b>{{ data.counts.active + data.counts.waiting }}</b
             ><span>{{ data.counts.active }} 个进行中</span>
+          </article>
+          <article>
+            <small>{{ downloadedStat.label }}</small
+            ><b>{{ data.downloaded_videos }}</b
+            ><span>{{ downloadedStat.sub }}</span>
           </article>
           <article>
             <small>累计流量</small><b>{{ size(data.traffic_bytes) }}</b

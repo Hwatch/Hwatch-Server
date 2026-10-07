@@ -154,6 +154,7 @@ source:3144962 -> source%3A3144962
   "videos": [],
   "recently_played": [],
   "counts": {"videos":874,"active":2,"waiting":100,"completed":600,"discovered":172},
+  "downloaded_videos": 600,
   "traffic_bytes": 123,
   "library_bytes": 456,
   "current_download_speed": 789,
@@ -175,6 +176,7 @@ source:3144962 -> source%3A3144962
 - `downloads_paused` 是持久化的 HWatch 全局下载开关；为 `true` 时不再消费 `queued` 项，并尝试暂停 aria2 与 HWatch 管理的 wget 任务。
 - `current_download_speed` 单位为字节/秒，`current_connections` 是数据库中所有 `active` 任务连接数之和。
 - `downloader_mode` 为 `aria2`、`wget` 或 `auto`；`downloaders` 使用当前实现的 Go 字段名（首字母大写），包含每个引擎的在线状态和传输统计。
+- `downloaded_videos` 是正式存在于本地影视库的媒体数量（`status='completed'`，排除 `test:` fixture），与 `counts.videos`（全部记录，含未下载/已排除）不同。H.264 与 TransRunner 替换的 HEVC 媒体均计入。
 
 ## 4. 影视库与搜索
 
