@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,5 +138,90 @@ func TestVideoDetailSnapshot(t *testing.T) {
 	u, quality, err := (Collector{}).Highest(server.URL, "")
 	if err != nil || quality != 2160 || u != "https://cdn.example/video-2160.mp4" {
 		t.Fatalf("source=%q quality=%d err=%v", u, quality, err)
+	}
+}
+
+func highestFromHTML(t *testing.T, page string) (string, int64) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(page)) }))
+	defer server.Close()
+	u, q, err := (Collector{}).Highest(server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u, q
+}
+
+func downloadPanel(items ...string) string {
+	page := ""
+	for _, it := range items {
+		page += `<a class="tag_item tag_item_download vp-sheet__item" href="https://rule34video.com/get_file/51/x/1/2/video_` + it + `p.mp4/?v-acctoken=token-` + it + `&download=true" data-attach-session="PHPSESSID" role="menuitem">MP4 ` + it + `p</a>`
+	}
+	return page
+}
+
+func TestHighestSelectsDownloadPanelBest(t *testing.T) {
+	u, q := highestFromHTML(t, downloadPanel("360", "480", "720", "1080"))
+	if q != 1080 || !strings.Contains(u, "video_1080p.mp4") {
+		t.Fatalf("source=%q quality=%d, want 1080p download panel", u, q)
+	}
+}
+
+func TestHighestIgnoresLowResPlayerWhenDownloadPanelPresent(t *testing.T) {
+	page := `<script>video_url: 'https://rule34video.com/get_file/51/x/1/2/video_360.mp4', video_url_text: '360p', video_alt_url: 'https://rule34video.com/get_file/51/x/1/2/video_480.mp4', video_alt_url_text: '480p',</script>` + downloadPanel("1080")
+	u, q := highestFromHTML(t, page)
+	if q != 1080 || !strings.Contains(u, "video_1080p.mp4") {
+		t.Fatalf("source=%q quality=%d, want 1080p over 270x480 player preview", u, q)
+	}
+}
+
+func TestHighestVertical1080NotDownrankedByOrientation(t *testing.T) {
+	page := `<img class="thumb" src="https://rule34video.com/contents/videos_screenshots/1/2/preview_270x480.mp4.jpg">` + downloadPanel("1080", "720")
+	u, q := highestFromHTML(t, page)
+	if q != 1080 {
+		t.Fatalf("quality=%d source=%q, vertical 1080p must not be downranked", q, u)
+	}
+}
+
+func TestHighestSelects4KWhenOffered(t *testing.T) {
+	u, q := highestFromHTML(t, downloadPanel("1080", "2160"))
+	if q != 2160 || !strings.Contains(u, "video_2160p.mp4") {
+		t.Fatalf("source=%q quality=%d, want 2160p", u, q)
+	}
+}
+
+func TestHighestFallsBackToLegacyParser(t *testing.T) {
+	page := `<a href="https://rule34video.com/get_file/51/x/1/2/video_720.mp4">MP4 720p</a><script>video_url: 'https://rule34video.com/get_file/51/x/1/2/video_360.mp4', video_url_text: '360p'</script>`
+	u, q := highestFromHTML(t, page)
+	if q != 720 || u != "https://rule34video.com/get_file/51/x/1/2/video_720.mp4" {
+		t.Fatalf("legacy fallback source=%q quality=%d", u, q)
+	}
+}
+
+func TestHighestReadsIndexedAltRenditions(t *testing.T) {
+	page := `<script>video_url: 'https://rule34video.com/get_file/51/x/1/2/video_360.mp4', video_url_text: '360p', video_alt_url: 'https://rule34video.com/get_file/51/x/1/2/video_480.mp4', video_alt_url_text: '480p', video_alt_url2: 'https://rule34video.com/get_file/51/x/1/2/video_720p.mp4', video_alt_url2_text: '720p', video_alt_url3: 'https://rule34video.com/get_file/51/x/1/2/video_1080p.mp4', video_alt_url3_text: '1080p', video_alt_url3_hd: '1'</script>`
+	u, q := highestFromHTML(t, page)
+	if q != 1080 || !strings.Contains(u, "video_1080p.mp4") {
+		t.Fatalf("indexed alt renditions source=%q quality=%d, want 1080p", u, q)
+	}
+}
+
+func TestHighestRankMixedNamingWithoutP(t *testing.T) {
+	page := `<a class="tag_item_download" href="https://rule34video.com/get_file/51/x/1/2/video_360.mp4">MP4 360p</a>` +
+		`<a class="tag_item_download" href="https://rule34video.com/get_file/51/x/1/2/video_1080p.mp4">MP4 1080p</a>`
+	u, q := highestFromHTML(t, page)
+	if q != 1080 || !strings.Contains(u, "video_1080p.mp4") {
+		t.Fatalf("mixed naming source=%q quality=%d, want 1080p", u, q)
+	}
+}
+
+func TestHighestPreservesSignedQuery(t *testing.T) {
+	page := `<a class="tag_item_download" href="https://rule34video.com/get_file/51/x/1/2/video_1080p.mp4/?v-acctoken=SECRET&amp;download=true&amp;download_filename=clip_1080p.mp4">MP4 1080p</a>`
+	u, q := highestFromHTML(t, page)
+	if q != 1080 {
+		t.Fatalf("quality=%d", q)
+	}
+	if strings.Contains(u, "&amp;") || !strings.Contains(u, "v-acctoken=SECRET&download=true&download_filename=clip_1080p.mp4") {
+		t.Fatalf("signed query not preserved: %q", u)
 	}
 }

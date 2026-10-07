@@ -29,9 +29,13 @@ var (
 	titleRE         = regexp.MustCompile("title=[\"']([^\"']+)[\"']")
 	imageOriginalRE = regexp.MustCompile("(?i)(?:data-original|data-webp|data-src|data-rd-jpg|data-lazy|data-echo|data-thumb)=[\"']([^\"']+)[\"']")
 	imageRE         = regexp.MustCompile("(?i)src=[\"']([^\"']+)[\"']")
-	flashURLRE      = regexp.MustCompile("(?i)(?:video_(?:alt_)?url|video_url)\\s*:\\s*['\"]([^'\"]+)['\"]")
-	flashQualityRE  = regexp.MustCompile("(?i)(?:video_(?:alt_)?url_text|video_url_text)\\s*:\\s*['\"]([^'\"]+)['\"]")
+	flashURLRE      = regexp.MustCompile(`(?i)video_(?:alt_)?url\d*\s*:\s*['"]([^'"]+)['"]`)
+	flashQualityRE  = regexp.MustCompile(`(?i)video_(?:alt_)?url\d*_text\s*:\s*['"]([^'"]+)['"]`)
 	downloadRE      = regexp.MustCompile("(?i)<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>\\s*MP4\\s+(\\d+)p\\s*</a>")
+	anchorRE        = regexp.MustCompile(`(?is)<a\b[^>]*>`)
+	anchorHrefRE    = regexp.MustCompile(`(?i)href=["']([^"']+)["']`)
+	renditionRE     = regexp.MustCompile(`(?i)_(\d{3,4})p?(?:[_./?]|$)`)
+	downloadClass   = "tag_item_download"
 	durationRE      = regexp.MustCompile("(?s)custom-time[\"'].*?<span>([^<]+)</span>")
 	viewsRE         = regexp.MustCompile("(?s)custom-eye[\"'].*?<span>([^<]+)</span>")
 	dateRE          = regexp.MustCompile("(?s)custom-calendar[\"'].*?<span>([^<]+)</span>")
@@ -327,31 +331,67 @@ func (Collector) Highest(pageURL, proxy string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	best := ""
-	quality := -1
-	for _, m := range downloadRE.FindAllStringSubmatch(page, -1) {
-		q, _ := strconv.Atoi(m[2])
-		if q > quality {
-			best, quality = absolute(m[1]), q
+	best, quality := bestDownloadPanel(page)
+	if best == "" {
+		for _, m := range downloadRE.FindAllStringSubmatch(page, -1) {
+			q, _ := strconv.Atoi(m[2])
+			if q > quality {
+				best, quality = absolute(m[1]), q
+			}
 		}
 	}
-	if best != "" {
-		return best, int64(quality), nil
-	}
-	urls, labels := flashURLRE.FindAllStringSubmatch(page, -1), flashQualityRE.FindAllStringSubmatch(page, -1)
-	for i, m := range urls {
-		q := 0
-		if i < len(labels) {
-			q = int(parseCount(labels[i][1]))
-		}
-		if q > quality {
-			best, quality = absolute(m[1]), q
-		}
+	if best == "" {
+		best, quality = bestPlayerSource(page)
 	}
 	if best == "" {
 		return "", 0, errors.New("no downloadable source found")
 	}
 	return best, int64(quality), nil
+}
+
+// bestDownloadPanel selects the highest-quality rendition from the detail
+// page's Download sheet. New Rule34Video pages expose these as anchors with
+// class "tag_item_download" and the quality in the file name (e.g. _1080p.mp4);
+// the visible label is no longer a plain "MP4 <n>p" string. Quality is ranked
+// by the site label, never by width/height, so vertical 1080x1920 renditions
+// are not downranked.
+func bestDownloadPanel(page string) (string, int) {
+	best, quality := "", 0
+	for _, tag := range anchorRE.FindAllString(page, -1) {
+		if !strings.Contains(strings.ToLower(tag), downloadClass) {
+			continue
+		}
+		h := anchorHrefRE.FindStringSubmatch(tag)
+		if len(h) != 2 {
+			continue
+		}
+		q := 0
+		if m := renditionRE.FindStringSubmatch(h[1]); len(m) == 2 {
+			q, _ = strconv.Atoi(m[1])
+		}
+		if best == "" || q > quality {
+			best, quality = absolute(h[1]), q
+		}
+	}
+	return best, quality
+}
+
+// bestPlayerSource reads the flashvars playback renditions (video_url,
+// video_alt_url2/3, ...). This is the legacy path and the fallback when no
+// Download sheet is present.
+func bestPlayerSource(page string) (string, int) {
+	urls, labels := flashURLRE.FindAllStringSubmatch(page, -1), flashQualityRE.FindAllStringSubmatch(page, -1)
+	best, quality := "", 0
+	for i, m := range urls {
+		q := 0
+		if i < len(labels) {
+			q = int(parseCount(labels[i][1]))
+		}
+		if best == "" || q > quality {
+			best, quality = absolute(m[1]), q
+		}
+	}
+	return best, quality
 }
 func (Collector) ParseImported(raw string) (store.Video, error) {
 	id := ""
