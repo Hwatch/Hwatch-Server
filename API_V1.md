@@ -215,6 +215,26 @@ source:3144962 -> source%3A3144962
 GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,sound&tag_mode=all&exclude_tags=compilation&sort=views&order=desc
 ```
 
+### `GET /api/library/random`
+
+只读的「随机发现」接口，从整个已下载影视库中均匀随机抽取一小批媒体。候选限定为正式媒体数据库记录：`status=completed`、`file_path` 非空且非 `test:` 夹具（`file_path` 非空仅表示数据库记录有路径，**不代表文件在磁盘上物理存在**）。不会返回 `removed`、`excluded`、未完成、下载任务或隔离中的记录，也不会触发下载、扫描 NAS 或修改任何状态。
+
+```json
+{"items":[],"limit":6}
+```
+
+查询参数：
+
+| 参数 | 说明 |
+|---|---|
+| `limit` | 1–24，默认 6（建议保持小批量） |
+| `language` | 当前译文语言 |
+| `exclude` | 逗号分隔的 `video_id`，用于连续换一批时降低重复；最多 200 个 |
+| `q` | 复用 `/api/videos` 的搜索语义 |
+| `scope` / `tags` / `tag_mode` / `exclude_tags` / `creator` / `codec` / `min_height` | 复用 `/api/videos` 的筛选语义 |
+
+不传筛选参数时覆盖整个影视库；传入时随机范围收窄到当前有效筛选范围。响应中的 `items` 与 `/api/videos` 的 Video 结构一致。
+
 ### `GET /api/videos/facets`
 
 返回已下载影视库中可用的筛选项及视频数量：

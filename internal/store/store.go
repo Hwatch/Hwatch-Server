@@ -629,6 +629,48 @@ func (s *Store) DownloadedVideos(platform string, limit, offset int) ([]Video, e
 	return scanVideos(rows, err)
 }
 
+// MaxRandomExcludeIDs caps the recently-seen exclusion list so a client can
+// never turn the read-only random query into an oversized SQL statement.
+const MaxRandomExcludeIDs = 200
+
+// RandomVideos returns up to limit library media drawn uniformly at random,
+// optionally narrowed by the same filters as the library search. Candidates
+// are restricted to formally downloaded database rows (status "completed",
+// non-empty file_path, not a synthetic "test:" fixture); this excludes
+// removed, excluded, unfinished, download-task and quarantined rows. Note the
+// file_path check is a database-recorded path check, not a physical
+// existence verification. excludeIDs lets the UI avoid repeating recent
+// batches without pulling the whole library into the browser.
+func (s *Store) RandomVideos(limit int, opts VideoSearch, excludeIDs []string) ([]Video, error) {
+	if limit <= 0 {
+		return []Video{}, nil
+	}
+	if len(excludeIDs) > MaxRandomExcludeIDs {
+		excludeIDs = excludeIDs[:MaxRandomExcludeIDs]
+	}
+	opts.Status = "completed"
+	where, args := videoSearchWhere(opts)
+	where += " AND v.file_path<>'' AND v.id NOT LIKE 'test:%'"
+	holders := make([]string, 0, len(excludeIDs))
+	for _, id := range excludeIDs {
+		if id == "" {
+			continue
+		}
+		holders = append(holders, "?")
+		args = append(args, id)
+	}
+	if len(holders) > 0 {
+		where += " AND v.id NOT IN (" + strings.Join(holders, ",") + ")"
+	}
+	// The translated-title join placeholder must precede the WHERE args, and
+	// is harmless for the original/all scope.
+	join := " LEFT JOIN translations tt ON tt.entity_id=v.id AND tt.field='title' AND tt.language=?"
+	queryArgs := append([]any{opts.Language}, args...)
+	queryArgs = append(queryArgs, limit)
+	rows, err := s.DB.Query("SELECT "+prefixedVideoColumns("v")+" FROM videos v"+join+where+" ORDER BY random() LIMIT ?", queryArgs...)
+	return scanVideos(rows, err)
+}
+
 func (s *Store) QueueDiscovered(subscriptionSlug string) (int64, error) {
 	query := "UPDATE videos SET status='queued',error='',updated_at=? WHERE status='discovered'"
 	args := []any{Now()}
