@@ -99,6 +99,35 @@ func TestRetryResolvesFreshDownloadURL(t *testing.T) {
 	}
 }
 
+func TestTransientCircuitBreaker(t *testing.T) {
+	s := newRateLimitTestStore(t)
+	r := newRateLimiter(s)
+	// A single blip (or two) must not pause the source.
+	if w := r.RecordTransient("rule34video", "rule34video.com"); w != 0 {
+		t.Fatalf("first blip must not back off: %s", w)
+	}
+	if w := r.RecordTransient("rule34video", "rule34video.com"); w != 0 {
+		t.Fatalf("second blip must not back off: %s", w)
+	}
+	if w := r.RecordTransient("rule34video", "rule34video.com"); w <= 0 {
+		t.Fatalf("threshold reached must back off, got %s", w)
+	}
+	// Other sources are never affected by one host's connection failures.
+	if w := r.Wait("hanime1"); w != 0 {
+		t.Fatalf("hanime1 must stay runnable: %s", w)
+	}
+	// Persisted across restart.
+	r2 := newRateLimiter(s)
+	if w := r2.Wait("rule34video"); w <= 0 {
+		t.Fatalf("transient backoff not persisted")
+	}
+	// A successful transfer clears the streak.
+	r.ClearTransient("rule34video")
+	if r.states["rule34video"].transient != 0 {
+		t.Fatalf("transient streak not cleared: %d", r.states["rule34video"].transient)
+	}
+}
+
 func TestTaskRateLimitRetryCounterResets(t *testing.T) {
 	s, err := store.Open(filepath.Join(t.TempDir(), "cap.db"))
 	if err != nil {

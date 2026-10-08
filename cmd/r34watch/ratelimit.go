@@ -12,19 +12,27 @@ import (
 )
 
 const (
-	rateLimitBase          = 30 * time.Second
-	rateLimitMax           = 15 * time.Minute
-	rateLimitReset         = 10 * time.Minute
-	rateLimitMaxRetryAfter = 24 * time.Hour
-	maxRateLimitRetries    = 5
+	rateLimitBase           = 30 * time.Second
+	rateLimitMax            = 15 * time.Minute
+	rateLimitReset          = 10 * time.Minute
+	rateLimitMaxRetryAfter  = 24 * time.Hour
+	maxRateLimitRetries     = 5
+	maxSourceExpiredRetries = 5
+
+	transientThreshold = 3
+	transientBase      = 60 * time.Second
+	transientMax       = 10 * time.Minute
 )
 
 const rateLimitExhaustedMessage = "rate_limit_retry_exhausted: 来源持续限速，已停止自动重试；可手动重新下载"
+
+const sourceExpiredExhaustedMessage = "source_retry_exhausted: 下载签名持续失效或 CDN 拒绝，已停止自动重试并保留部分文件；可手动重试"
 
 type rateLimitEntry struct {
 	source      string
 	host        string
 	consecutive int
+	transient   int
 	until       time.Time
 	lastAt      time.Time
 	retryAfter  time.Duration
@@ -63,6 +71,7 @@ func (r *rateLimiter) load() {
 			source:      row.SourceKey,
 			host:        row.Host,
 			consecutive: row.Consecutive,
+			transient:   row.Transient,
 			until:       until,
 			lastAt:      lastAt,
 			retryAfter:  time.Duration(row.RetryAfterSeconds) * time.Second,
@@ -143,8 +152,75 @@ func (r *rateLimiter) Record(source, host string, retryAfter time.Duration, hasR
 		BackoffUntil:      e.until.UTC().Format(time.RFC3339),
 		Last429At:         e.lastAt.UTC().Format(time.RFC3339),
 		RetryAfterSeconds: int(e.retryAfter.Seconds()),
+		Transient:         e.transient,
 	})
 	return time.Until(e.until)
+}
+
+// RecordTransient registers a connection-level failure (TLS/EOF/reset). A single
+// blip is tolerated; the source is only paused after transientThreshold
+// consecutive failures, with a gentler schedule than 429, so one flaky CDN
+// window does not burn through the queue.
+func (r *rateLimiter) RecordTransient(source, host string) time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if source == "" {
+		source = "unknown"
+	}
+	e := r.states[source]
+	if e == nil {
+		e = &rateLimitEntry{source: source}
+		r.states[source] = e
+	}
+	now := time.Now()
+	e.transient++
+	e.lastAt = now
+	if host != "" {
+		e.host = host
+	}
+	if e.transient >= transientThreshold {
+		shift := e.transient - transientThreshold
+		if shift > 5 {
+			shift = 5
+		}
+		delay := transientBase * time.Duration(1<<uint(shift))
+		if delay > transientMax {
+			delay = transientMax
+		}
+		if until := now.Add(delay); until.After(e.until) {
+			e.until = until
+		}
+	}
+	_ = r.store.SaveRateLimit(store.RateLimitState{
+		SourceKey: e.source, Host: e.host, Consecutive: e.consecutive,
+		BackoffUntil: e.until.UTC().Format(time.RFC3339), Last429At: e.lastAt.UTC().Format(time.RFC3339),
+		RetryAfterSeconds: int(e.retryAfter.Seconds()), Transient: e.transient,
+	})
+	if e.until.After(now) {
+		return e.until.Sub(now)
+	}
+	return 0
+}
+
+// ClearTransient resets the transient-failure streak for a source after a
+// successful transfer.
+func (r *rateLimiter) ClearTransient(source string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e := r.states[source]
+	if e == nil {
+		return
+	}
+	e.transient = 0
+	if e.consecutive == 0 && !e.until.After(time.Now()) {
+		r.deleteLocked(source)
+		return
+	}
+	_ = r.store.SaveRateLimit(store.RateLimitState{
+		SourceKey: e.source, Host: e.host, Consecutive: e.consecutive,
+		BackoffUntil: e.until.UTC().Format(time.RFC3339), Last429At: e.lastAt.UTC().Format(time.RFC3339),
+		RetryAfterSeconds: int(e.retryAfter.Seconds()), Transient: 0,
+	})
 }
 
 // Snapshot lists sources currently in backoff, sorted by source key.

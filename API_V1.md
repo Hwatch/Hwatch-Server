@@ -249,14 +249,16 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 {"items":[Video],"total":168,"limit":200,"offset":0,"rate_limits":[{"source":"rule34video","host":"rule34video.com","backoff_until":"2026-10-08T14:26:52Z","retry_after_seconds":0,"waiting":52}]}
 ```
 
-`rate_limits` 是**按来源**分别记录的 HTTP 429 退避状态（不会因为 rule34video 受限而暂停 hanime1）：
+`rate_limits` 是**按来源**分别记录的退避状态（不会因为 rule34video 受限而暂停 hanime1）：
 - `source`：平台/适配器标识（rule34video、hanime1）。
-- `host`：触发限速的真实主机（无响应头时为已知来源）。
+- `host`：触发受限的真实主机。
+- `reason`：`rate_limit`（HTTP 429）或 `network`（连续连接级失败 TLS/EOF/reset 触发的来源恢复退避）。
 - `backoff_until`：最早可重试时间（RFC 3339）。
 - `retry_after_seconds`：服务端 `Retry-After`（若提供；否则为 0，表示使用本地指数退避 30s→60s→…→上限 15 分钟，但服务端 `Retry-After` 超过 15 分钟时以服务端为准）。
+- `consecutive_429` / `transient`：各自的连续失败计数。
 - `waiting`：该来源当前排队中的任务数。
 
-退避状态持久化在 SQLite 的 `rate_limits` 表，服务重启后仍会遵守未到期的退避。单个任务连续 429 重试超过 5 次后会置为 `failed`，错误为 `rate_limit_retry_exhausted`，不会永久占用队列；手动重试会重置计数。
+退避状态持久化在 SQLite 的 `rate_limits` 表，服务重启后仍会遵守未到期的退避。单个任务连续 429 重试超过 5 次后会置为 `failed`，错误为 `rate_limit_retry_exhausted`；单个任务连续 `source_expired`（签名失效/CDN 拒绝）超过 5 次会置为 `failed`，错误为 `source_retry_exhausted`，均不会永久占用队列；手动重试会重置计数。连接级故障（TLS/EOF/reset、`No URI available`、`Too slow`）按可重试处理并计入来源 `network` 退避（连续 3 次起 60s→…→10 分钟），成功一次即清零；`resume_unsupported`/`source_changed`（aria2 8/10）不会重试，保留部分文件等待人工处理。
 
 ### `POST /api/videos/download-all`
 

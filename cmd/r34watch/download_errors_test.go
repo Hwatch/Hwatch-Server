@@ -36,3 +36,36 @@ func TestClassifyDownloadErrors(t *testing.T) {
 		t.Fatalf("aria status = %+v", got)
 	}
 }
+
+func TestClassifyTransientNetworkFailures(t *testing.T) {
+	for _, message := range []string{
+		"SSL/TLS handshake failure: The TLS connection was non-proper",
+		"No URI available.",
+		"Too slow Downloading speed: 0 <= 1024(B/s), host:eu-cdn08-pr",
+		"unexpected EOF",
+		"connection reset by peer",
+	} {
+		got := classifyDownloaderStatus("1", message)
+		if got.Code != "transient_network" || !got.Retryable {
+			t.Errorf("%q = %+v, want transient_network retryable", message, got)
+		}
+	}
+	// aria2 speeds/network codes.
+	if got := classifyDownloaderStatus("5", "aria2 error 5"); got.Code != "transient_network" || !got.Retryable {
+		t.Fatalf("code 5 = %+v", got)
+	}
+	if got := classifyDownloaderStatus("6", "aria2 error 6"); got.Code != "transient_network" || !got.Retryable {
+		t.Fatalf("code 6 = %+v", got)
+	}
+	// Resume must never overwrite partial data.
+	if got := classifyDownloaderStatus("8", "aria2 error 8"); got.Code != "resume_unsupported" || got.Retryable {
+		t.Fatalf("code 8 = %+v", got)
+	}
+	if got := classifyDownloaderStatus("10", "aria2 error 10"); got.Code != "source_changed" || got.Retryable {
+		t.Fatalf("code 10 = %+v", got)
+	}
+	// 429 keeps its own path.
+	if got := classifyDownloaderStatus("1", "The response status is not successful. status=429"); got.Code != "rate_limited" {
+		t.Fatalf("429 = %+v", got)
+	}
+}

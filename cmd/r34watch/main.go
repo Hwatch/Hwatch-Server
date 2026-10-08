@@ -420,11 +420,18 @@ func (a *App) rateLimitsView() []map[string]any {
 	out := []map[string]any{}
 	for _, e := range a.rateLimits.Snapshot() {
 		waiting, _ := a.store.CountQueuedByPlatform(e.source)
+		reason := "network"
+		if e.consecutive > 0 {
+			reason = "rate_limit"
+		}
 		out = append(out, map[string]any{
 			"source":              e.source,
 			"host":                e.host,
+			"reason":              reason,
 			"backoff_until":       e.until.UTC().Format(time.RFC3339),
 			"retry_after_seconds": int(e.retryAfter.Seconds()),
+			"consecutive_429":     e.consecutive,
+			"transient":           e.transient,
 			"waiting":             waiting,
 		})
 	}
@@ -698,6 +705,13 @@ func (a *App) startQueueWorker() {
 							_ = a.store.UpdateTask(video.ID, "failed", "", "", "", rateLimitExhaustedMessage, 0, 0)
 							continue
 						}
+					} else if failure.Code == "source_expired" {
+						if n, countErr := a.store.AddTaskRateLimitRetry(video.ID); countErr == nil && n > maxSourceExpiredRetries {
+							_ = a.store.UpdateTask(video.ID, "failed", "", "", "", sourceExpiredExhaustedMessage, 0, 0)
+							continue
+						}
+					} else if failure.Code == "transient_network" {
+						a.rateLimits.RecordTransient(video.Platform, "")
 					}
 					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
 					if failure.Delay > 0 && failure.Code != "rate_limited" {
@@ -1513,6 +1527,10 @@ func (a *App) pollTasks(ctx context.Context) {
 				_ = client.Remove(removeCtx, externalID)
 				removeCancel()
 				if failure.Code == "source_expired" {
+					if n, countErr := a.store.AddTaskRateLimitRetry(v.ID); countErr == nil && n > maxSourceExpiredRetries {
+						_ = a.store.UpdateDownloaderTask(v.ID, "failed", client.ID(), externalID, path, v.PlexPath, sourceExpiredExhaustedMessage, status.Completed, status.Total)
+						continue
+					}
 					errText = a.refreshExpiredSource(v, cfg, errText)
 				} else if failure.Code == "rate_limited" {
 					a.rateLimits.Record(v.Platform, "", 0, false)
@@ -1520,6 +1538,8 @@ func (a *App) pollTasks(ctx context.Context) {
 						_ = a.store.UpdateDownloaderTask(v.ID, "failed", client.ID(), externalID, path, v.PlexPath, rateLimitExhaustedMessage, status.Completed, status.Total)
 						continue
 					}
+				} else if failure.Code == "transient_network" {
+					a.rateLimits.RecordTransient(v.Platform, "")
 				}
 				_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", path, v.PlexPath, errText, status.Completed, status.Total)
 				a.startQueueWorker()
@@ -1529,6 +1549,7 @@ func (a *App) pollTasks(ctx context.Context) {
 			_ = a.store.UpdateTransfer(v.ID, status.DownloadSpeed, status.Connections)
 			if mapped == "completed" {
 				_ = a.store.ResetTaskRateLimitRetry(v.ID)
+				a.rateLimits.ClearTransient(v.Platform)
 				fresh, _ := a.store.Video(v.ID)
 				sub, _ := a.store.Subscription(v.SubscriptionSlug)
 				layout := plex.Build(cfg.DownloadDir, sub, fresh)

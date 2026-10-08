@@ -411,39 +411,57 @@ const showCompletedTasks = ref(false);
 type RateLimit = {
   source: string;
   host: string;
+  reason: string;
   backoff_until: string;
   retry_after_seconds: number;
+  consecutive_429: number;
+  transient: number;
   waiting: number;
 };
 const rateLimits = ref<RateLimit[]>([]);
 const nowMs = ref(Date.now());
 const rateLimitLabels: Record<
   string,
-  { title: string; waiting: string; other: string; taskRow: string }
+  {
+    title: string;
+    waiting: string;
+    other: string;
+    taskRow: string;
+    taskRowNetwork: string;
+    lastError: string;
+  }
 > = {
   "zh-CN": {
     title: "来源请求受限",
     waiting: "等待任务",
     other: "其他来源下载不受影响",
     taskRow: "等待来源限速解除",
+    taskRowNetwork: "等待来源连接恢复",
+    lastError: "上次错误",
   },
   "zh-TW": {
     title: "來源請求受限",
     waiting: "等待任務",
     other: "其他來源下載不受影響",
     taskRow: "等待來源限速解除",
+    taskRowNetwork: "等待來源連線恢復",
+    lastError: "上次錯誤",
   },
   en: {
-    title: "Source rate limited",
+    title: "Source temporarily unavailable",
     waiting: "Waiting tasks",
     other: "Downloads from other sources continue",
     taskRow: "Waiting for source rate limit",
+    taskRowNetwork: "Waiting for source connection",
+    lastError: "Last error",
   },
   ja: {
-    title: "取得元がレート制限中",
+    title: "取得元が一時的に制限中",
     waiting: "待機中",
     other: "他の取得元のダウンロードは継続します",
     taskRow: "取得元の制限解除を待機中",
+    taskRowNetwork: "取得元の接続回復を待機中",
+    lastError: "前回のエラー",
   },
 };
 const rlLabel = computed(
@@ -475,8 +493,12 @@ function sourceLabel(source: string): string {
   return source;
 }
 function rateLimitedSource(platform?: string): boolean {
-  if (!platform) return false;
-  return activeRateLimits.value.some((r) => r.source === platform);
+  return rateLimitedReason(platform) !== "";
+}
+function rateLimitedReason(platform?: string): string {
+  if (!platform) return "";
+  const hit = activeRateLimits.value.find((r) => r.source === platform);
+  return hit ? hit.reason || "rate_limit" : "";
 }
 const subscriptionTypeLabel = (type = "") =>
   type === "playlist" ? "番剧订阅" : "作者订阅";
@@ -1658,6 +1680,10 @@ watch(
             <span
               >{{ rlLabel.waiting }}: {{ r.waiting }}</span
             >
+            <span class="rate-limit-reason">{{
+              r.reason === "network" ? rlLabel.taskRowNetwork : rlLabel.taskRow
+            }}</span
+            >
           </div>
           <small>{{ rlLabel.other }}</small>
         </div>
@@ -1679,12 +1705,24 @@ watch(
                 :max="v.total_bytes || 1"
               />
               <p
-                v-if="rateLimitedSource(v.platform) && v.status === 'queued'"
+                v-if="v.status === 'queued' && rateLimitedReason(v.platform)"
                 class="rate-limit-hint"
               >
-                {{ rlLabel.taskRow }}
+                {{
+                  rateLimitedReason(v.platform) === "network"
+                    ? rlLabel.taskRowNetwork
+                    : rlLabel.taskRow
+                }}
               </p>
-              <p v-else-if="v.error" class="error">{{ v.error }}</p>
+              <p v-else-if="v.status === 'failed' && v.error" class="error">
+                {{ v.error }}
+              </p>
+              <p
+                v-else-if="v.status === 'queued' && v.error"
+                class="last-error"
+              >
+                {{ rlLabel.lastError }}: {{ v.error }}
+              </p>
             </div>
             <div class="actions">
               <button
