@@ -214,7 +214,8 @@ test("弹窗 Tab 焦点、Esc、恢复焦点", async ({ page }) => {
 });
 test("亮色主题持久化和各页截图", async ({ page }) => {
   await mockAPI(page);
-  await page.goto("/");
+  await page.goto("/settings");
+  await page.getByRole("button", { name: /显示与隐私/ }).click();
   await page.getByLabel("外观主题").selectOption("light");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");

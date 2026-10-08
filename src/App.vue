@@ -699,7 +699,7 @@ const {
           共 {{ mediaExclusionTotal }} 项
         </p>
       </section>
-      <section v-else-if="view === 'integrity'">
+      <section v-else-if="view === 'integrity'" class="integrity-page">
         <p class="muted">
           扫描已完成媒体文件完整性。两种清理模式：<b>模式一</b>
           外部工具已删除、HWatch 核对后加入“已排除”； <b>模式二</b> 导入
@@ -1271,13 +1271,15 @@ const {
               }}{{
                 engine.ID === data.downloader_mode ? " · 当前模式" : ""
               }}</small
-            ><b
-              >{{ engine.Online ? "在线" : "离线" }} ·
-              {{ engine.Active || 0 }} 个任务</b
+            ><span
+              class="engine-status"
+              :class="{ available: engine.Online }"
+              >{{ engine.Online ? "在线" : "离线" }}</span
+            ><b>{{ engine.Active || 0 }} <em>个任务</em></b
             ><span
               >{{ size(engine.DownloadSpeed || 0) }}/s ·
               {{ engine.Connections || 0 }} 个连接</span
-            ><span v-if="engine.Error" class="error">{{ engine.Error }}</span>
+            >
           </div>
           <div>
             <small>总下载速度</small
@@ -1287,6 +1289,15 @@ const {
             <small>总连接数</small><b>{{ data.current_connections }}</b>
           </div>
         </div>
+        <template
+          v-for="engine in data.downloaders"
+          :key="`error-${engine.ID}`"
+        >
+          <details v-if="engine.Error" class="engine-error-details">
+            <summary>{{ engine.Name }} 连接异常 · 查看详情</summary>
+            <p>{{ engine.Error }}</p>
+          </details>
+        </template>
         <div class="toolbar">
           <select v-model="status">
             <option value="">全部状态</option>
@@ -1629,21 +1640,27 @@ const {
         </div>
       </section>
       <section v-else>
-        <div v-if="view === 'translations'" class="panel">
+        <div v-if="view === 'translations'" class="panel translation-workspace">
           <h2>WebAI 翻译交换</h2>
           <p>
             导出只包含视频标识、标题、标签和原文哈希，不包含代理密码、Cookie、下载地址或本地路径。
           </p>
-          <div class="inline">
-            <select v-model="translationLanguage">
+          <div class="translation-steps">
+          <div class="translation-step">
+            <span class="step-number">01</span><h3>导出待翻译内容</h3>
+            <p>选择目标语言，将 JSON 交给 WebAI 翻译。</p>
+            <label class="translation-language">目标语言<select v-model="translationLanguage" aria-label="翻译目标语言">
               <option value="zh-CN">简体中文 zh-CN</option>
               <option value="zh-TW">繁体中文 zh-TW</option>
               <option value="en">英语 en</option>
-              <option value="ja">日语 ja</option></select
+              <option value="ja">日语 ja</option></select></label
             ><button class="primary" @click="exportTranslation">
               导出翻译 JSON</button
-            ><button v-on:click="refreshNFO">刷新全部 Plex NFO</button
-            ><label
+            ></div>
+            <div class="translation-step">
+            <span class="step-number">02</span><h3>回导翻译结果</h3>
+            <p>保留 key、source_hash 和 fields，只填写 translations；原文变化的条目自动跳过。</p>
+            <label
               class="upload"
               :class="{ disabled: translationImportPending }"
               >回导翻译 JSON<input
@@ -1652,7 +1669,6 @@ const {
                 :disabled="translationImportPending"
                 @change="importTranslation"
             /></label>
-          </div>
           <small v-if="translationFileName" role="status">
             {{ translationFileName }}
             <template v-if="translationFileSize"
@@ -1663,10 +1679,13 @@ const {
           <small v-if="translationImportError" class="error" role="alert">{{
             translationImportError
           }}</small>
-          <small
-            >WebAI 只需填写 translations，并保留 key、source_hash 和
-            fields；原文变化的条目会自动跳过。</small
-          >
+          </div>
+          <div class="translation-step">
+            <span class="step-number">03</span><h3>更新 Plex 元数据</h3>
+            <p>回导完成后，使用现有译文批量刷新已下载视频的 NFO；不会重新下载视频。</p>
+            <button v-on:click="refreshNFO">刷新全部 Plex NFO</button>
+          </div>
+          </div>
         </div>
         <SettingsView
           v-else
