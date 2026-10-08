@@ -419,9 +419,10 @@ async function loadAuditLogs() {
   const result = await api("/api/audit?limit=100");
   auditLogs.value = result.items || [];
 }
-function auditResultLabel(result: string): string {
-  if (result === "success") return "成功";
+function auditResultLabel(result: string, action: string): string {
   if (result === "failed") return "失败";
+  if (result === "success")
+    return action && action.startsWith("POST ") ? "已受理" : "成功";
   return result || "未知";
 }
 async function switchNotificationTab(tab: "system" | "operations") {
@@ -2407,6 +2408,9 @@ watch(
           </div>
         </template>
         <template v-else>
+          <p class="muted">
+            以下为服务端请求审计：POST 的“已受理”仅表示请求已被服务器接受，不代表后台任务已完成；任务最终状态请以媒体/任务状态为准。
+          </p>
           <div class="rows notification-list">
             <article v-for="item in auditLogs" :key="item.id">
               <div
@@ -2416,7 +2420,7 @@ watch(
               <div>
                 <b>{{ item.action }}</b>
                 <small>
-                  {{ auditResultLabel(item.result) }}
+                  {{ auditResultLabel(item.result, item.action) }}
                   <template v-if="item.target_type"
                     >· {{ item.target_type }}
                     <template v-if="item.target_id"
