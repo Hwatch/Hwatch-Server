@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
+import SidebarView from "./components/SidebarView.vue";
 import StatePanel from "./components/StatePanel.vue";
 import StatusBadge from "./components/StatusBadge.vue";
 import { dialogFocus as vDialogFocus } from "./dialogFocus";
@@ -316,6 +317,14 @@ const pageDescriptions:Record<string,string> = {
   excluded:'查看排除原因，恢复允许下载',integrity:'扫描与校验媒体，所有清理均需预览和确认',
   translations:'导出与回导翻译，刷新 Plex 元数据',notifications:'系统提醒与请求级操作记录',settings:'下载、存储、备份与界面偏好',
 };
+const subscriptionQuery=ref(''), subscriptionState=ref('all'), exclusionQuery=ref('');
+const pageLoading=ref(false),pageError=ref('');let pageRequestID=0;
+const filteredSubscriptionGroups=computed(()=>subscriptionGroups.value.map(group=>({...group,sources:group.sources.filter(sub=>(subscriptionState.value==='all'||(subscriptionState.value==='enabled'?sub.enabled:subscriptionState.value==='paused'?!sub.enabled:!!sub.last_error))&&`${sub.name} ${sub.platform} ${sub.url}`.toLocaleLowerCase().includes(subscriptionQuery.value.trim().toLocaleLowerCase()))})).filter(group=>group.sources.length));
+const filteredExclusions=computed(()=>exclusions.value.filter(item=>`${item.title_snapshot} ${item.video_id} ${item.reason}`.toLocaleLowerCase().includes(exclusionQuery.value.trim().toLocaleLowerCase())));
+const vdfFilter=ref('all'),vdfPage=ref(0),expandedVdfGroups=ref<Record<string,boolean>>({});
+const filteredVdfGroups=computed(()=>vdfPreviewData.value?.items.filter(group=>vdfFilter.value==='all'||group.status===vdfFilter.value)||[]);
+const visibleVdfGroups=computed(()=>filteredVdfGroups.value.slice(vdfPage.value*25,(vdfPage.value+1)*25));
+watch(vdfFilter,()=>vdfPage.value=0);
 const viewFromPath = () => {
   const raw = window.location.pathname.replace(/\/+$/, "") || "/";
   const path = raw === "/duplicates" ? "/library" : raw;
@@ -874,6 +883,7 @@ async function loadAuth() {
   }
 }
 async function submitAuth() {
+  if(busy.value)return;
   authError.value = "";
   if (
     !auth.value.configured &&
@@ -969,6 +979,7 @@ async function loadExclusions() {
   mediaExclusionTotal.value = result.total || 0;
 }
 async function restoreExclusion(item: Exclusion) {
+  if(!confirm('恢复允许下载？之后订阅再次发现该视频时可重新下载，但不会立即创建下载任务。'))return;
   const result = await actions.run("exclusion-restore:" + item.video_id, () =>
     api("/api/media-exclusions/" + encodeURIComponent(item.video_id), {
       method: "DELETE",
@@ -1246,6 +1257,9 @@ async function restoreBackup(name: string) {
   }
 }
 async function changeView(next: string, updateHistory = true) {
+  const request=++pageRequestID;
+  pageLoading.value=true;pageError.value='';
+  try {
   if (!viewRoutes[next]) next = "home";
   // Clear transient feedback so stale messages/errors do not leak across views.
   notice.value = "";
@@ -1279,6 +1293,11 @@ async function changeView(next: string, updateHistory = true) {
   }
   if (next === "excluded") await loadExclusions();
   if (next === "integrity") await loadIntegrity();
+  } catch(error) {
+    if(request===pageRequestID)pageError.value=String(error).replace(/^Error:\s*/, '');
+  } finally {
+    if(request===pageRequestID)pageLoading.value=false;
+  }
 }
 async function subscribe() {
   subscribeError.value = "";
@@ -1642,6 +1661,7 @@ const handlePopState = () => {
 };
 const handleEscape = (event: KeyboardEvent) => {
   if (event.key !== "Escape") return;
+  if(deleteTarget.value){if(!deleting.value)deleteTarget.value=undefined;return;}
   if (selected.value) selected.value = undefined;
   else if (!sidebarCollapsed.value) setSidebarCollapsed(true);
 };
@@ -1803,89 +1823,7 @@ watch(
       aria-label="关闭侧栏"
       @click="setSidebarCollapsed(true)"
     ></button>
-    <aside aria-label="应用导航">
-      <div class="brand"><span>H</span><b>HWatch</b></div>
-      <nav>
-        <template v-for="group in navGroups" :key="group.id">
-          <button
-            v-if="group.label"
-            type="button"
-            class="nav-group"
-            :aria-expanded="openGroups[group.id] !== false"
-            @click="toggleGroup(group.id)"
-          >
-            <span>{{ group.label }}</span
-            ><span class="nav-group-caret" :class="{ open: openGroups[group.id] !== false }">⌄</span>
-          </button>
-          <template v-if="openGroups[group.id] !== false">
-            <button
-              v-for="item in group.items"
-              :key="item.id"
-              :class="{ active: view === item.id }"
-              :aria-current="view === item.id ? 'page' : undefined"
-              @click="changeView(item.id)"
-            >
-              <NavIcon :name="item.id" /><span class="nav-text">{{
-                item.label
-              }}</span
-              ><i
-                v-if="
-                  item.id === 'downloads' &&
-                  data.counts.active + data.counts.waiting
-                "
-                >{{ data.counts.active + data.counts.waiting }}</i
-              >
-              <i v-if="item.id === 'notifications' && data.unread_notifications">{{
-                data.unread_notifications
-              }}</i>
-            </button>
-          </template>
-        </template>
-      </nav>
-      <div class="bottom">
-        <label v-if="sidebarItems.language" class="sidebar-language"
-          ><NavIcon name="language" /><select
-            class="language-select"
-            v-model="translationLanguage"
-            aria-label="内容语言"
-          >
-            <option value="zh-CN">简中</option>
-            <option value="zh-TW">繁中</option>
-            <option value="en">EN</option>
-            <option value="ja">日本語</option>
-          </select></label
-        ><button v-if="sidebarItems.original" v-on:click="toggleOriginal">
-          <NavIcon name="privacy" /><span>{{
-            showOriginal ? "显示译文" : "显示原文"
-          }}</span></button
-        ><button
-          v-if="sidebarItems.demo"
-          :class="{ active: demoMode }"
-          v-on:click="toggleDemo"
-        >
-          <NavIcon name="demo" /><span>{{
-            demoMode === 0
-              ? "开启演示模式"
-              : demoMode === 1
-                ? "进入强演示模式"
-                : "关闭演示模式"
-          }}</span></button
-        ><button
-          :class="{ active: view === 'settings' }"
-          v-on:click="changeView('settings')"
-        >
-          <NavIcon name="settings" /><span>设置</span></button
-        ><small v-if="sidebarItems.aria" :class="{ online: data.aria2_online }"
-          >● aria2 {{ data.aria2_online ? "在线" : "离线" }}</small
-        >
-        <div class="sidebar-account">
-          <span><small>当前账户</small><b>{{ auth.username }}</b></span>
-          <button class="sidebar-logout" aria-label="退出登录" title="退出登录" @click="logout">
-            <NavIcon name="logout" /><span>退出登录</span>
-          </button>
-        </div>
-      </div>
-    </aside>
+    <SidebarView :nav-groups="navGroups" :open-groups="openGroups" :view="view" :data="data" :sidebar-items="sidebarItems" :translation-language="translationLanguage" :show-original="showOriginal" :demo-mode="demoMode" :auth="auth" :toggle-group="toggleGroup" :change-view="changeView" :toggle-original="toggleOriginal" :toggle-demo="toggleDemo" :logout="logout" :set-language="value => translationLanguage=value" />
     <main id="main-content" tabindex="-1">
       <PageHeader :title="viewTitles[view] || 'HWatch'" :description="pageDescriptions[view]">
         <button
@@ -1923,6 +1861,8 @@ watch(
           {{ actionPending("check:all") ? "检查中…" : "检查更新" }}
         </button>
       </PageHeader>
+      <StatePanel v-if="pageLoading" kind="loading" title="正在加载页面…" />
+      <StatePanel v-if="pageError" kind="error" title="页面加载失败" :description="pageError"><button @click="changeView(view,false)">重试</button></StatePanel>
       <div v-if="toasts.list.length" class="toasts" aria-live="polite">
         <div
           v-for="t in toasts.list"
@@ -2125,8 +2065,9 @@ watch(
               : "仅建立现有内容基线，之后发现的新视频会自动下载。"
           }}</small>
         </div>
+        <div class="toolbar"><input v-model="subscriptionQuery" type="search" aria-label="筛选订阅" placeholder="筛选名称、平台或来源链接"><select v-model="subscriptionState" aria-label="订阅状态"><option value="all">全部订阅</option><option value="enabled">已启用</option><option value="paused">已暂停</option><option value="error">检查异常</option></select><span class="muted">{{ filteredSubscriptionGroups.length }} 个分组</span></div>
         <div class="rows subscription-groups">
-          <article v-for="group in subscriptionGroups" :key="group.key">
+          <article v-for="group in filteredSubscriptionGroups" :key="group.key">
             <img
               v-if="group.avatar"
               :src="group.avatar.avatar_proxy_url"
@@ -2175,20 +2116,22 @@ watch(
                   </div>
                 </div>
                 <div class="actions">
-                  <button @click="check(sub.slug)">检查</button
-                  ><button @click="toggle(sub)">{{ sub.enabled ? "暂停" : "启用" }}</button
-                  ><button class="danger" @click="removeSub(sub)">删除</button>
+                  <button :disabled="actionPending('check:' + sub.slug)" :aria-busy="actionPending('check:' + sub.slug)" @click="check(sub.slug)">{{ actionPending('check:' + sub.slug) ? '检查中…' : '检查' }}</button
+                  ><button :disabled="actionPending('sub:' + sub.slug)" @click="toggle(sub)">{{ actionPending('sub:' + sub.slug) ? '更新中…' : sub.enabled ? "暂停" : "启用" }}</button
+                  ><button class="danger" :disabled="actionPending('sub-del:' + sub.slug)" @click="removeSub(sub)">删除</button>
                 </div>
               </div>
             </div>
           </article>
           <div v-if="!data.subscriptions.length" class="empty">还没有订阅</div>
+          <StatePanel v-else-if="!filteredSubscriptionGroups.length" title="没有匹配的订阅" description="尝试调整名称或状态筛选。" />
         </div>
       </section>
       <section v-else-if="view === 'excluded'">
         <p class="muted">这些视频已被加入“已排除”，订阅或自动发现都不会重新下载。</p>
+        <div class="toolbar"><input v-model="exclusionQuery" type="search" aria-label="搜索已排除" placeholder="搜索标题、标识或排除原因"></div>
         <div class="rows">
-          <article v-for="item in exclusions" :key="item.video_id">
+          <article v-for="item in filteredExclusions" :key="item.video_id">
             <span class="avatar">{{ (item.title_snapshot || item.video_id).slice(0, 1).toUpperCase() }}</span>
             <div>
               <b>{{ item.title_snapshot || item.video_id }}</b>
@@ -2316,13 +2259,14 @@ watch(
               [{{ cf.kind }}] {{ cf.video_id || cf.path }} · 组 {{ cf.groups.join(", ") }} — {{ cf.detail }}
             </p>
           </div>
+          <div v-if="vdfPreviewData" class="toolbar" style="margin-top:12px"><select v-model="vdfFilter" aria-label="VDF 分组状态"><option value="all">全部分组</option><option value="ready">可执行</option><option value="conflict">冲突</option><option value="already_done">此前已处理</option><option value="rejected">无法匹配</option></select><span class="muted">{{ filteredVdfGroups.length }} 组 · 每页 25 组</span></div>
           <div v-if="vdfPreviewData" class="rows" style="margin-top: 12px">
             <article
-              v-for="g in vdfPreviewData.items.slice(0, 100)"
+              v-for="g in visibleVdfGroups"
               :key="g.group_id"
               class="vdf-group"
             >
-              <div class="vdf-group-head">
+<button class="vdf-group-head" :aria-expanded="!!expandedVdfGroups[g.group_id]" @click="expandedVdfGroups[g.group_id]=!expandedVdfGroups[g.group_id]">
                 <b>{{ g.group_id }}</b>
                 <span
                   class="integrity-badge"
@@ -2330,8 +2274,8 @@ watch(
                   >{{ vdfGroupStatusLabel(g.status) }}</span
                 >
                 <span class="muted">{{ g.subscription_slug || "?" }} · 释放 {{ size(g.estimated_freed) }}</span>
-              </div>
-              <div class="vdf-items">
+              <span>{{ expandedVdfGroups[g.group_id]?"收起":"查看保留 / 删除项" }}</span></button>
+              <div v-if="expandedVdfGroups[g.group_id]" class="vdf-items">
                 <div>
                   <small class="error">删除 ({{ g.remove_items.length }})</small>
                   <p v-for="it in g.remove_items" :key="it.path" class="muted">
@@ -2353,6 +2297,7 @@ watch(
           </div>
         </div>
         <div class="panel">
+          <div v-if="filteredVdfGroups.length>25" class="pagination"><button :disabled="vdfPage===0" @click="vdfPage--">上一页分组</button><span>{{vdfPage+1}} / {{Math.ceil(filteredVdfGroups.length/25)}}</span><button :disabled="(vdfPage+1)*25>=filteredVdfGroups.length" @click="vdfPage++">下一页分组</button></div>
           <h2>模式二：导入 TransRunner 删除计划（HWatch 执行清理）</h2>
           <textarea
             v-model="planText"
