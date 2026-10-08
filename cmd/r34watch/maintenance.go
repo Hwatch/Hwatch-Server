@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -299,9 +300,37 @@ func runMaintenance(s *store.Store, args []string) error {
 	switch args[0] {
 	case "refresh-thumbnails":
 		return runThumbnailRefreshCommand(s, args[1:])
+	case "vdf-preview":
+		return runVDFPreviewCommand(s, args[1:])
 	default:
 		return fmt.Errorf("未知的 maintenance 命令: %s", args[0])
 	}
+}
+
+// runVDFPreviewCommand parses a native VDF GUI export and prints the read-only
+// matching preview. It never mutates media or the database.
+func runVDFPreviewCommand(s *store.Store, args []string) error {
+	fs := flag.NewFlagSet("vdf-preview", flag.ContinueOnError)
+	file := fs.String("file", "", "VDF GUI 导出 JSON 路径")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*file) == "" {
+		return errors.New("需要 --file")
+	}
+	raw, err := os.ReadFile(*file)
+	if err != nil {
+		return err
+	}
+	export, err := parseVDFGUIExport(raw)
+	if err != nil {
+		return err
+	}
+	a := New(s)
+	preview := a.previewVDFGUI(export)
+	encoded, _ := json.MarshalIndent(preview, "", "  ")
+	fmt.Println(string(encoded))
+	return nil
 }
 
 func runThumbnailRefreshCommand(s *store.Store, args []string) error {

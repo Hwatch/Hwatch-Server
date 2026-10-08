@@ -350,7 +350,13 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ### `POST /api/media-integrity/vdf/execute`
 
-请求体 `{"raw":"<VDF GUI 导出 JSON>","confirm":false}`。`confirm=false` 为 Dry Run；`confirm=true` 时对 `ready` 组复用 Phase 2 隔离机制：验证文件身份 → 移入同文件系统隔离区 `.hwatch-quarantine/<plan_id>/` → 事务性 `RemoveAndExclude`（reason=`vdf_gui_duplicate`）。执行状态持久化，重复执行幂等，可通过 `/api/media-integrity/plan/{id}/recover` 补齐。返回 `{plan_id,dry_run,executed,skipped,failed,needs_recovery,estimated_freed}`。仅管理员会话 + CSRF。
+请求体 `{"raw":"<VDF GUI 导出 JSON>","confirm":false}`。`confirm=false` 为 Dry Run；`confirm=true` 时对 `ready` 组：
+
+- 删除文件**仍在磁盘**：验证文件身份 → 移入同文件系统隔离区 `.hwatch-quarantine/<plan_id>/` → 事务性 `RemoveAndExclude`（reason=`vdf_gui_duplicate`）。
+- 删除文件**已被外部删除**（`absent`，如已用 VDF/Finder 清理）：不再移动，直接事务性 `RemoveAndExclude` 写入排除。
+- 保留文件必须存在；无法唯一匹配或跨订阅则拒绝。
+
+执行状态持久化，重复执行幂等，可通过 `/api/media-integrity/plan/{id}/recover` 补齐。返回 `{plan_id,dry_run,executed,skipped,failed,needs_recovery,estimated_freed}`。仅管理员会话 + CSRF。
 
 ### `POST /api/media-integrity/apply`
 

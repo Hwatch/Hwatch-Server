@@ -180,6 +180,43 @@ func TestVDFGUIStorageUnavailableAndInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestVDFGUIAlreadyDeletedExcludesOnly(t *testing.T) {
+	root := t.TempDir()
+	a, s := newIntegrityApp(t, root, false)
+	dup := filepath.Join(root, "A", "dup.mp4")
+	keep := filepath.Join(root, "A", "keep.mp4")
+	// Remove file already gone (created=false); keep present.
+	seedCompletedMedia(t, s, "rule34video:d", "rule34video", dup, false)
+	seedCompletedMedia(t, s, "rule34video:k", "rule34video", keep, true)
+	export := vdfGUIExport{CreatedAt: "2026-04-04T00:00:00Z", Groups: []vdfGUIGroup{{
+		GroupID: "g", RemoveItems: []vdfGUIItem{{Path: dup, SizeBytes: 7}}, KeepItems: []vdfGUIItem{vdfItem(keep)},
+	}}}
+	preview := a.previewVDFGUI(export)
+	if preview.ReadyGroups != 1 || preview.Items[0].RemoveItems[0].MatchStatus != "absent" {
+		t.Fatalf("already-deleted remove item must be ready: %+v", preview.Items[0])
+	}
+	// Dry run does nothing.
+	if _, err := a.executeVDFGUIGroups(export, false); err != nil {
+		t.Fatal(err)
+	}
+	if s.IsMediaExcluded("rule34video:d") {
+		t.Fatal("dry run must not exclude")
+	}
+	res, err := a.executeVDFGUIGroups(export, true)
+	if err != nil || res.Executed != 1 {
+		t.Fatalf("execute: %+v err=%v", res, err)
+	}
+	if v, _ := s.Video("rule34video:d"); v.Status != "removed" || !s.IsMediaExcluded("rule34video:d") {
+		t.Fatalf("already-deleted item not excluded: %+v", v)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("kept file must remain")
+	}
+	if _, err := os.Stat(quarantineTarget(root, vdfPlanID(export), dup)); !os.IsNotExist(err) {
+		t.Fatal("nothing should be quarantined for an already-deleted file")
+	}
+}
+
 func TestVDFGUIExecuteQuarantinesAndIsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	a, s := newIntegrityApp(t, root, false)
