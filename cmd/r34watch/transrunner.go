@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"r34watch/internal/dedupe"
 	"r34watch/internal/mediainfo"
 	"r34watch/internal/store"
 )
@@ -398,10 +402,15 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 		OutputRelativePath string `json:"output_relative_path"`
 		Profile            string `json:"profile"`
 		ApplyMode          string `json:"apply_mode"`
+		IdempotencyKey     string `json:"idempotency_key"`
 	}
 	if err := decode(r, &input); err != nil {
 		integrationError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	idemKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idemKey == "" {
+		idemKey = strings.TrimSpace(input.IdempotencyKey)
 	}
 	applyMode := strings.TrimSpace(input.ApplyMode)
 	if applyMode != "" && applyMode != transcodeApplyReplace {
@@ -430,6 +439,49 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 	if clean != transRunnerStagingDir && !strings.HasPrefix(clean, transRunnerStagingDir+string(filepath.Separator)) {
 		integrationError(w, http.StatusUnprocessableEntity, "invalid_path", "输出必须位于暂存目录 "+transRunnerStagingDir+"/ 内")
 		return
+	}
+	// Idempotent replay: if this job/key was already applied, answer from the
+	// durable ledger before touching the (possibly already consumed) staging
+	// file or the source.
+	if applyMode == transcodeApplyReplace && (idemKey != "" || strings.TrimSpace(input.RunnerJobID) != "") {
+		var existing store.TranscodeApplyOp
+		found := false
+		if idemKey != "" {
+			if op, e := a.store.TranscodeApplyByKey("idem:" + idemKey); e == nil {
+				existing, found = op, true
+			}
+		}
+		if !found && strings.TrimSpace(input.RunnerJobID) != "" {
+			if op, e := a.store.LatestTranscodeApplyByJob(input.RunnerJobID); e == nil {
+				existing, found = op, true
+			}
+		}
+		if found {
+			conflict := (existing.SourceSHA256 != "" && input.SourceSHA256 != "" && existing.SourceSHA256 != input.SourceSHA256) ||
+				(existing.OutputRelativePath != "" && existing.OutputRelativePath != clean) ||
+				(existing.Profile != "" && input.Profile != "" && existing.Profile != input.Profile)
+			if conflict {
+				integrationError(w, http.StatusConflict, "idempotency_conflict", "相同操作标识但请求内容不同，拒绝执行")
+				return
+			}
+			switch existing.Status {
+			case "applied":
+				respond(w, http.StatusOK, map[string]any{"status": "applied", "id": existing.ResultID, "idempotent": true})
+				return
+			case "pending", "applying":
+				reconciled, _ := a.reconcileTranscodeApply(existing)
+				if reconciled.Status == "applied" {
+					respond(w, http.StatusOK, map[string]any{"status": "applied", "id": reconciled.ResultID, "idempotent": true, "reconciled": true})
+					return
+				}
+				integrationError(w, http.StatusConflict, "apply_in_progress", "该任务已有正在进行的应用操作，请稍后查询")
+				return
+			case "uncertain", "needs_recovery":
+				integrationError(w, http.StatusConflict, "apply_state_uncertain", "该任务先前的应用结果无法确认，需人工核查")
+				return
+			}
+			// failed: fall through to retry via the durable claim below.
+		}
 	}
 	realRoot, err := filepath.EvalSymlinks(cfg.DownloadDir)
 	if err != nil {
@@ -474,8 +526,49 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 		"duration_seconds": probe.DurationSeconds,
 	})
 	if applyMode == transcodeApplyReplace {
+		_, _, outputSHA, hashErr := dedupe.FileHashes(realOutput)
+		if hashErr != nil || outputSHA == "" {
+			integrationError(w, http.StatusUnprocessableEntity, "output_unreadable", "无法计算转码产物哈希")
+			return
+		}
+		opKey := transcodeOpKey(input.RunnerJobID, idemKey, v.ID, input.SourceSHA256, outputSHA)
+		contentHash := transcodeContentHash(v.ID, input.SourceSHA256, outputSHA, clean, input.Profile)
+		op := store.TranscodeApplyOp{OpKey: opKey, RunnerJobID: input.RunnerJobID, VideoID: v.ID, SourceSHA256: input.SourceSHA256, OutputSHA256: outputSHA, OutputRelativePath: clean, Profile: input.Profile, ContentHash: contentHash, Status: "applying"}
+		existing, claimed, beginErr := a.store.BeginTranscodeApply(op)
+		if beginErr != nil {
+			integrationError(w, http.StatusInternalServerError, "internal_error", beginErr.Error())
+			return
+		}
+		if !claimed {
+			if existing.ContentHash != "" && existing.ContentHash != contentHash {
+				integrationError(w, http.StatusConflict, "idempotency_conflict", "相同操作标识但请求内容不同，拒绝执行")
+				return
+			}
+			switch existing.Status {
+			case "applied":
+				respond(w, http.StatusOK, map[string]any{"status": "applied", "id": existing.ResultID, "idempotent": true})
+				return
+			case "failed":
+				if err := a.store.ReclaimTranscodeApply(opKey); err != nil {
+					integrationError(w, http.StatusInternalServerError, "internal_error", err.Error())
+					return
+				}
+			case "pending", "applying":
+				reconciled, _ := a.reconcileTranscodeApply(existing)
+				if reconciled.Status == "applied" {
+					respond(w, http.StatusOK, map[string]any{"status": "applied", "id": reconciled.ResultID, "idempotent": true, "reconciled": true})
+					return
+				}
+				integrationError(w, http.StatusConflict, "apply_in_progress", "该任务已有正在进行的应用操作，请稍后查询")
+				return
+			default:
+				integrationError(w, http.StatusConflict, "apply_state_uncertain", "该任务先前的应用结果无法确认，需人工核查")
+				return
+			}
+		}
 		if applyErr := a.applyTranscodeResult(v, realOutput, input.SourceSHA256); applyErr != nil {
 			_, _ = a.store.AddTranscodeResult(store.TranscodeResult{VideoID: v.ID, RunnerJobID: input.RunnerJobID, SourceSHA256: input.SourceSHA256, OutputRelativePath: clean, Profile: input.Profile, ProbeJSON: string(probeJSON), Status: "failed"})
+			_ = a.store.UpdateTranscodeApply(opKey, "failed", 0, applyErr.Error(), "")
 			_ = a.store.AddAudit("integration:"+transRunnerName, "transcode_result_received", "video", v.ID, "failed", map[string]any{"profile": input.Profile, "apply_mode": applyMode})
 			if errors.Is(applyErr, errSourceChanged) {
 				integrationError(w, http.StatusConflict, "source_changed", "源媒体已变化，拒绝替换")
@@ -489,8 +582,9 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 			integrationError(w, http.StatusInternalServerError, "internal_error", addErr.Error())
 			return
 		}
+		_ = a.store.UpdateTranscodeApply(opKey, "applied", id, "", "")
 		_ = a.store.AddAudit("integration:"+transRunnerName, "transcode_result_received", "video", v.ID, "success", map[string]any{"result_id": id, "profile": input.Profile, "apply_mode": applyMode})
-		respond(w, http.StatusOK, map[string]any{"status": "applied", "id": id})
+		respond(w, http.StatusOK, map[string]any{"status": "applied", "id": id, "idempotent": false})
 		return
 	}
 	id, err := a.store.AddTranscodeResult(store.TranscodeResult{
@@ -511,8 +605,146 @@ func (a *App) trTranscodeResults(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusAccepted, map[string]any{"status": "validated", "id": id})
 }
 
-// --- Admin token management ----------------------------------------------
+// transcodeOpKey derives the durable idempotency key. An explicit
+// Idempotency-Key wins, otherwise the runner_job_id, otherwise a content hash.
+func transcodeOpKey(jobID, idemKey, videoID, sourceSHA, outputSHA string) string {
+	if k := strings.TrimSpace(idemKey); k != "" {
+		return "idem:" + k
+	}
+	if j := strings.TrimSpace(jobID); j != "" {
+		return "job:" + j
+	}
+	sum := sha256.Sum256([]byte(videoID + "|" + sourceSHA + "|" + outputSHA))
+	return "opf:" + hex.EncodeToString(sum[:])
+}
 
+func transcodeContentHash(videoID, sourceSHA, outputSHA, relPath, profile string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{videoID, sourceSHA, outputSHA, relPath, profile}, "|")))
+	return hex.EncodeToString(sum[:])
+}
+
+func mapApplyStatus(status string) (mapped string, applied bool) {
+	switch status {
+	case "applied":
+		return "applied", true
+	case "applying", "pending":
+		return "in_progress", false
+	case "failed":
+		return "not_applied", false
+	case "uncertain", "needs_recovery":
+		return "uncertain", false
+	default:
+		return "not_applied", false
+	}
+}
+
+// finalizeAppliedSource refreshes DB metadata from the (already replaced) source
+// file; used to complete an apply that was interrupted after the file move.
+func (a *App) finalizeAppliedSource(v store.Video, source string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	info, err := mediainfo.Probe(ctx, source)
+	if err != nil {
+		return err
+	}
+	if err := a.store.UpdateMediaInfo(v.ID, info.VideoCodec, info.AudioCodec, info.Container, info.Width, info.Height, info.FrameRate, info.BitRate, info.BitDepth); err != nil {
+		return err
+	}
+	_ = a.store.SetVideoDuration(v.ID, int64(math.Round(info.DurationSeconds)))
+	if size, quick, sha, hashErr := dedupe.FileHashes(source); hashErr == nil {
+		_ = a.store.SaveFileHashes(v.ID, size, quick, sha)
+	}
+	return nil
+}
+
+// reconcileTranscodeApply inspects the filesystem to resolve an interrupted
+// apply. It must never blindly re-replace: it compares the current source hash
+// against the recorded source and output hashes.
+func (a *App) reconcileTranscodeApply(op store.TranscodeApplyOp) (store.TranscodeApplyOp, error) {
+	v, err := a.store.Video(op.VideoID)
+	if err != nil {
+		_ = a.store.UpdateTranscodeApply(op.OpKey, "needs_recovery", 0, "视频不存在，无法核对", "")
+		return a.store.TranscodeApplyByKey(op.OpKey)
+	}
+	source := mediaPathOf(v)
+	sourceSHA := ""
+	if source != "" {
+		if _, _, sha, hashErr := dedupe.FileHashes(source); hashErr == nil {
+			sourceSHA = sha
+		}
+	}
+	switch {
+	case op.OutputSHA256 != "" && sourceSHA == op.OutputSHA256:
+		if err := a.finalizeAppliedSource(v, source); err != nil {
+			_ = a.store.UpdateTranscodeApply(op.OpKey, "needs_recovery", 0, "已替换但元数据刷新失败: "+err.Error(), source+".hwatch-pre-transcode")
+			return a.store.TranscodeApplyByKey(op.OpKey)
+		}
+		id := op.ResultID
+		if id == 0 {
+			id, _ = a.store.AddTranscodeResult(store.TranscodeResult{VideoID: v.ID, RunnerJobID: op.RunnerJobID, SourceSHA256: op.SourceSHA256, OutputRelativePath: op.OutputRelativePath, Profile: op.Profile, Status: "applied"})
+		}
+		_ = os.Remove(source + ".hwatch-pre-transcode")
+		_ = a.store.UpdateTranscodeApply(op.OpKey, "applied", id, "崩溃恢复：文件已替换", "")
+	case op.SourceSHA256 != "" && sourceSHA == op.SourceSHA256:
+		_ = a.store.UpdateTranscodeApply(op.OpKey, "failed", 0, "崩溃恢复：文件未替换，可重试", "")
+	default:
+		_ = a.store.UpdateTranscodeApply(op.OpKey, "uncertain", 0, "崩溃恢复：无法确认文件状态，需人工核查", "")
+	}
+	return a.store.TranscodeApplyByKey(op.OpKey)
+}
+
+// trTranscodeResultGet is the read-only idempotency lookup. It never triggers
+// an apply and reports not_found rather than implying a task is safe to redo.
+func (a *App) trTranscodeResultGet(w http.ResponseWriter, r *http.Request) {
+	job := strings.TrimSpace(r.PathValue("runner_job_id"))
+	if job == "" {
+		integrationError(w, http.StatusBadRequest, "invalid_request", "缺少 runner_job_id")
+		return
+	}
+	if op, err := a.store.LatestTranscodeApplyByJob(job); err == nil {
+		status, applied := mapApplyStatus(op.Status)
+		if op.Status == "applying" || op.Status == "pending" {
+			op, _ = a.reconcileTranscodeApply(op)
+			status, applied = mapApplyStatus(op.Status)
+		}
+		appliedAt := ""
+		if applied {
+			appliedAt = op.UpdatedAt
+		}
+		respond(w, http.StatusOK, map[string]any{
+			"runner_job_id": job, "status": status, "applied": applied,
+			"video_id": op.VideoID, "source_sha256": op.SourceSHA256, "output_sha256": op.OutputSHA256,
+			"applied_at": appliedAt, "legacy": false,
+		})
+		return
+	}
+	if legacy, err := a.store.LatestTranscodeResultByJob(job); err == nil {
+		applied := legacy.Status == "applied"
+		appliedAt := ""
+		status := "uncertain"
+		switch legacy.Status {
+		case "applied":
+			status, appliedAt = "applied", legacy.CreatedAt
+		case "pending":
+			status = "not_applied"
+		case "failed":
+			status = "not_applied"
+		}
+		respond(w, http.StatusOK, map[string]any{
+			"runner_job_id": job, "status": status, "applied": applied,
+			"video_id": legacy.VideoID, "source_sha256": legacy.SourceSHA256, "output_sha256": "",
+			"applied_at": appliedAt, "legacy": true,
+			"note": "历史记录缺少输出哈希与幂等键，结果仅供只读参考，不得据此自动重试",
+		})
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{
+		"runner_job_id": job, "status": "not_found", "applied": false,
+		"note": "没有该 job 的记录；not_found 不代表可以安全重复提交，尤其旧版任务需人工核查",
+	})
+}
+
+// --- Admin token management ----------------------------------------------
 func (a *App) integrationTokenGet(w http.ResponseWriter, r *http.Request) {
 	token, err := a.store.ActiveIntegrationToken(transRunnerName)
 	if err == sql.ErrNoRows {
