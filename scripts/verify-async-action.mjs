@@ -42,6 +42,25 @@ const check = (ok, message) => {
   check(calls === 1, "C: no extra call after first completes");
 }
 
+// H: an in-flight request cannot be overtaken by a later one (no stale response
+// ordering), because the same key is rejected while pending.
+{
+  const a = createAsyncActions();
+  const order = [];
+  const first = a.run("race", async () => {
+    await sleep(80);
+    order.push("first");
+    return "first";
+  });
+  const second = await a.run("race", async () => {
+    order.push("second");
+    return "second";
+  });
+  check(second.duplicate === true, "H: later submit while in-flight is rejected");
+  await first;
+  check(order.join(",") === "first", "H: only the first response applies, got " + order.join(","));
+}
+
 // E: business/failure errors are captured with the message.
 {
   const a = createAsyncActions();
