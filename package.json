@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "preview:v2": "node scripts/preview-v2.mjs",
+    "test:e2e": "playwright test",
     "build": "vue-tsc -b && vite build",
     "test": "node scripts/verify-delete-modal.mjs && node scripts/verify-nav-icons.mjs && node scripts/verify-library-card.mjs && node scripts/verify-poster-layout.mjs && node scripts/verify-rate-limit.mjs && node scripts/verify-media-integrity.mjs && node scripts/verify-async-action.mjs && node scripts/verify-async-ux.mjs && node scripts/verify-toast.mjs && node scripts/verify-ux2.mjs && node scripts/verify-ux3.mjs"
   },
