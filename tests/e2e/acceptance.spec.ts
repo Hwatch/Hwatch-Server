@@ -13,12 +13,12 @@ const pages = [
   ["/notifications", "通知"],
   ["/settings", "设置"],
 ];
-test("每个页面：四种视口、截图、无横向溢出或脚本错误", async ({ page }) => {
+test("每个页面：四种视口、截图、无横向溢出或脚本错误", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await mockAPI(page);
-  const phase = process.env.HWATCH_SCREENSHOT_PHASE || "after";
+  const phase = `${process.env.HWATCH_SCREENSHOT_PHASE || "after"}/${testInfo.project.name}`;
   mkdirSync(`acceptance/${phase}`, { recursive: true });
   for (const width of [390, 768, 1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });

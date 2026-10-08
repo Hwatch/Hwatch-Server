@@ -16,7 +16,11 @@ test("隔离 Go / SQLite 实例：创建管理员、登录、真实 API 与 CSRF
   const confirmation = page.getByLabel("确认密码");
   if (await confirmation.count())
     await confirmation.fill("isolated-v2-test-password");
+  const stream = page.waitForResponse(response=>response.url().endsWith('/api/events'));
   await page.locator(".auth-card").getByRole("button").click();
+  const streamResponse=await stream;
+  expect(streamResponse.status()).toBe(200);
+  expect(streamResponse.headers()['content-type']).toContain('text/event-stream');
   await expect(page.locator("main h1")).toHaveText("概览");
   if (!(await page.locator("aside").isVisible()))
     await page.locator(".sidebar-toggle").click();
@@ -31,6 +35,7 @@ test("隔离 Go / SQLite 实例：创建管理员、登录、真实 API 与 CSRF
     "http://127.0.0.1:5189/api/auth/status",
   );
   expect((await status.json()).authenticated).toBe(true);
+  await page.locator('.sidebar-account-menu > summary').click();
   await page
     .locator("aside")
     .getByRole("button", { name: "退出登录", exact: true })

@@ -15,4 +15,5 @@ downloads/
 /acceptance/before/
 /acceptance/after/
 /acceptance/report/
+/acceptance/scale/
 /test-results/
