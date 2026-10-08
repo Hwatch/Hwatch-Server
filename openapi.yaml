@@ -335,6 +335,7 @@ components:
       properties:
         video_id: {type: string}
         subscription_slug: {type: string}
+        platform: {type: string, description: 平台/适配器标识}
         title: {type: string}
         description: {type: string}
         translated_title: {type: string}
@@ -395,3 +396,16 @@ components:
         total: {type: integer, format: int64}
         limit: {type: integer}
         offset: {type: integer}
+        rate_limits:
+          type: array
+          description: 仅 /api/tasks 返回。按来源分别记录的 HTTP 429 退避状态。
+          items: {$ref: '#/components/schemas/RateLimit'}
+    RateLimit:
+      type: object
+      required: [source, backoff_until, waiting]
+      properties:
+        source: {type: string, description: 平台/适配器标识，例如 rule34video}
+        host: {type: string, description: 触发限速的真实主机}
+        backoff_until: {type: string, format: date-time}
+        retry_after_seconds: {type: integer, description: 服务端 Retry-After（若提供）}
+        waiting: {type: integer, description: 该来源当前等待中的 queued 任务数}

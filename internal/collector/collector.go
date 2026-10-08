@@ -134,6 +134,11 @@ func fetchWithClient(raw string, httpClient *http.Client) (string, error) {
 		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; r34watch/2.0)")
 		res, err := httpClient.Do(req)
 		if err == nil {
+			if res.StatusCode == http.StatusTooManyRequests {
+				retryAfter, hasRetryAfter := parseRetryAfter(res.Header.Get("Retry-After"), time.Now())
+				res.Body.Close()
+				return "", &RateLimitError{Host: hostOf(raw), RetryAfter: retryAfter, HasRetryAfter: hasRetryAfter, StatusCode: http.StatusTooManyRequests, Err: fmt.Errorf("source returned HTTP 429")}
+			}
 			body, readErr := io.ReadAll(io.LimitReader(res.Body, 25<<20))
 			res.Body.Close()
 			if res.StatusCode >= 200 && res.StatusCode <= 299 && readErr == nil {
@@ -144,7 +149,7 @@ func fetchWithClient(raw string, httpClient *http.Client) (string, error) {
 			} else {
 				lastErr = fmt.Errorf("source returned HTTP %d", res.StatusCode)
 			}
-			if res.StatusCode < 500 && res.StatusCode != http.StatusTooManyRequests {
+			if res.StatusCode < 500 {
 				return "", lastErr
 			}
 		} else {
@@ -155,6 +160,63 @@ func fetchWithClient(raw string, httpClient *http.Client) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("after 4 attempts: %w", lastErr)
+}
+
+// RateLimitError reports an HTTP 429 from a source host. It carries the parsed
+// Retry-After when the server supplied one so callers can honor it instead of
+// guessing with exponential backoff.
+type RateLimitError struct {
+	Host          string
+	RetryAfter    time.Duration
+	HasRetryAfter bool
+	StatusCode    int
+	Err           error
+}
+
+func (e *RateLimitError) Error() string {
+	if e.Err != nil {
+		return "HTTP 429 rate limited: " + e.Err.Error()
+	}
+	return "HTTP 429 rate limited"
+}
+func (e *RateLimitError) Unwrap() error { return e.Err }
+
+// parseRetryAfter accepts either delta-seconds or an HTTP-date. Values beyond a
+// day are clamped to a day; malformed or negative values are rejected.
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		d := time.Duration(seconds) * time.Second
+		if d > 24*time.Hour {
+			d = 24 * time.Hour
+		}
+		return d, true
+	}
+	if t, err := http.ParseTime(value); err == nil {
+		d := t.Sub(now)
+		if d < 0 {
+			return 0, false
+		}
+		if d > 24*time.Hour {
+			d = 24 * time.Hour
+		}
+		return d, true
+	}
+	return 0, false
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 func absolute(raw string) string {
 	raw = html.UnescapeString(strings.ReplaceAll(raw, "\\/", "/"))

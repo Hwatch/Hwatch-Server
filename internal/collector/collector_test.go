@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -100,6 +101,47 @@ func TestModelVideoCountUsesPageTotal(t *testing.T) {
 	// A model page whose real count happens to be zero should not be ignored.
 	if got := modelVideoCount(`<span class="total_results">(0)</span>`, 5); got != 0 {
 		t.Fatalf("zero count must be honored, got %d", got)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Now()
+	if d, ok := parseRetryAfter("120", now); !ok || d != 120*time.Second {
+		t.Fatalf("seconds: d=%s ok=%v", d, ok)
+	}
+	future := now.Add(90 * time.Second).UTC().Format(http.TimeFormat)
+	if d, ok := parseRetryAfter(future, now); !ok || d < 80*time.Second || d > 95*time.Second {
+		t.Fatalf("http-date: d=%s ok=%v", d, ok)
+	}
+	if _, ok := parseRetryAfter("-5", now); ok {
+		t.Fatal("negative Retry-After must be rejected")
+	}
+	if _, ok := parseRetryAfter("garbage", now); ok {
+		t.Fatal("garbage Retry-After must be rejected")
+	}
+	if d, ok := parseRetryAfter("999999999", now); !ok || d != 24*time.Hour {
+		t.Fatalf("huge Retry-After must clamp to 24h: d=%s ok=%v", d, ok)
+	}
+}
+
+func TestFetchReports429WithoutInternalRetry(t *testing.T) {
+	hits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	_, err := fetchWithClient(server.URL+"/page", server.Client())
+	var rle *RateLimitError
+	if !errors.As(err, &rle) {
+		t.Fatalf("expected RateLimitError, got %v", err)
+	}
+	if !rle.HasRetryAfter || rle.RetryAfter != 120*time.Second {
+		t.Fatalf("Retry-After not captured: %+v", rle)
+	}
+	if hits != 1 {
+		t.Fatalf("must not retry 429 internally, hits=%d", hits)
 	}
 }
 
