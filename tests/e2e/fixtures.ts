@@ -86,6 +86,19 @@ export const settings = {
   backup_last_error: "",
 };
 export async function mockAPI(page: Page, loggedIn = true) {
+  // Page interaction tests do not exercise SSE transport. A completed route.fulfill
+  // stream reconnects during navigation and produces WebKit access-control noise.
+  // Keep transport deterministic here; real transport belongs to live.spec.ts.
+  await page.addInitScript(() => {
+    class MockEvents {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    Object.defineProperty(window, 'EventSource', {value: MockEvents});
+  });
   let authenticated = loggedIn;
   const calls: string[] = [];
   await page.route("**/api/**", async (route) => {
@@ -230,6 +243,7 @@ export async function mockAPI(page: Page, loggedIn = true) {
       return route.fulfill({
         status: 200,
         contentType: "text/event-stream",
+        headers: { 'Access-Control-Allow-Origin': new URL(req.url()).origin, 'Access-Control-Allow-Credentials': 'true' },
         body: ": mock\n\n",
       });
     await route.fulfill({

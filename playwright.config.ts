@@ -13,7 +13,9 @@ export default defineConfig({
     browserName: "chromium",
     viewport: { width: 1280, height: 900 },
   },
+  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'webkit', use: { browserName: 'webkit' } }],
   webServer: {
+    env: { HWATCH_DEV_API: 'http://127.0.0.1:18787' },
     command: "npm run dev -- --host 127.0.0.1 --port 5188 --strictPort",
     url: "http://127.0.0.1:5188",
     reuseExistingServer: false,
