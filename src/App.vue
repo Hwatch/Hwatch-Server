@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
+import MediaCard from "./components/MediaCard.vue";
 import ToastContainer from "./components/ToastContainer.vue";
 import SidebarView from "./components/SidebarView.vue";
 import JSONImport from "./components/JSONImport.vue";
@@ -1722,6 +1723,8 @@ onBeforeUnmount(() => {
   videoAbort?.abort();
   toasts.clearAll();
 });
+watch(deletionListText,()=>{vdfPreviewData.value=undefined;cleanupPreview.value=undefined;vdfPage.value=0;expandedVdfGroups.value={};},{flush:'sync'});
+watch(planText,()=>{planPreviewData.value=undefined;},{flush:'sync'});
 watch(creatorQuery, () => {
   if (creatorTimer) clearTimeout(creatorTimer);
   creatorSearchID++;
@@ -2177,6 +2180,8 @@ watch(
           <JSONImport label="选择 VDF JSON 文件" :disabled="integrityBusy" @loaded="text=>{deletionListText=text;vdfPreviewData=undefined;cleanupPreview=undefined}" />
           <textarea
             v-model="deletionListText"
+            :disabled="integrityBusy"
+            aria-label="VDF 删除清单 JSON"
             rows="6"
             placeholder='{"version":1,"deletions":[{"video_id":"rule34video:...","original_path":"...","reason":"duplicate","kept_video_id":"..."}]}'
           ></textarea>
@@ -2298,6 +2303,8 @@ watch(
           <JSONImport label="选择删除计划 JSON 文件" :disabled="planBusy" @loaded="text=>{planText=text;planPreviewData=undefined}" />
           <textarea
             v-model="planText"
+            :disabled="planBusy"
+            aria-label="TransRunner 删除计划 JSON"
             rows="6"
             placeholder='{"kind":"transrunner-duplicate-deletion-plan","plan_version":1,"scan_id":"...","subscription_slug":"rule34video:...","executable":true,"stale":false,"user_confirmed":true,"items":[{"video_id":"...","kept_video_id":"...","original_path":"...","expected_size":123,"expected_sha256":"..."}]}'
           ></textarea>
@@ -2768,45 +2775,7 @@ watch(
           </button>
         </div>
         <div class="library">
-          <article v-for="v in videos" :key="v.video_id">
-            <button
-              class="poster"
-              :class="'poster--' + coverState(v.video_id)"
-              @click="selected = v"
-            >
-              <span class="poster-skeleton" aria-hidden="true"></span>
-              <img
-                :ref="(el) => registerCoverImg(v.video_id, el)"
-                :class="{ loaded: coverState(v.video_id) === 'loaded' }"
-                :src="'/thumb/' + v.video_id"
-                :alt="displayTitle(v)"
-                loading="lazy"
-                decoding="async"
-                @load="markCoverLoaded(v.video_id)"
-                @error="onCoverError($event, v.video_id)"
-              /><span class="poster-duration">{{
-                duration(v.duration_seconds)
-              }}</span>
-            </button>
-            <div class="meta">
-              <b>{{ displayTitle(v) }}</b
-              ><small>{{
-                displaySubtitle(
-                  v,
-                  (v.creator_name || v.subscription_slug) +
-                    " · " +
-                    (v.published_at ? localTime(v.published_at) : "日期未知"),
-                )
-              }}</small>
-              <p>
-                {{ mediaSummary(v) || v.views.toLocaleString() + " 次观看" }}
-              </p>
-            </div>
-            <div class="library-card-actions">
-              <button v-if="view === 'library'" class="library-card__play" @click="selected = v">播放</button>
-              <button v-else class="library-card__play" @click="videoAction(v, 'download')">下载</button>
-            </div>
-          </article>
+          <MediaCard v-for="v in videos" :key="v.video_id" :title="displayTitle(v)" :subtitle="displaySubtitle(v,(v.creator_name||v.subscription_slug)+' · '+(v.published_at?localTime(v.published_at):'日期未知'))" :summary="mediaSummary(v)||v.views.toLocaleString()+' 次观看'" :duration="duration(v.duration_seconds)" :src="'/thumb/'+v.video_id" :state="coverState(v.video_id)" :downloadable="view==='undownloaded'" :pending="actionPending(videoActionKey(v.video_id,'download'))" @image="el=>registerCoverImg(v.video_id,el)" @loaded="markCoverLoaded(v.video_id)" @error="onCoverError($event,v.video_id)" @play="selected=v" @download="videoAction(v,'download')" />
           <StatePanel v-if="!videos.length" :title="view === 'library' ? '影视库暂无已下载视频' : '没有未下载视频'" description="可调整筛选条件，或在订阅管理中添加来源。" />
         </div>
         <div class="pagination">
