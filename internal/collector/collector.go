@@ -58,6 +58,7 @@ var (
 	numberRE        = regexp.MustCompile("[0-9][0-9,]*")
 	nonSlugRE       = regexp.MustCompile(`[^a-z0-9]+`)
 	pageRE          = regexp.MustCompile("from:0*([0-9]+)")
+	totalResultsRE  = regexp.MustCompile(`(?i)total_results[^0-9]*\((\d+)\)`)
 )
 
 func (Collector) SearchModels(query, proxy string) ([]ModelResult, error) {
@@ -89,12 +90,26 @@ func (Collector) SearchModels(query, proxy string) ([]ModelResult, error) {
 			avatar = absolute(match[1])
 		}
 		count, _ := strconv.ParseInt(item.Total, 10, 64)
+		count = modelVideoCount(page, count)
 		out = append(out, ModelResult{ID: item.ID, Name: item.Title, URL: modelURL, AvatarURL: avatar, VideoCount: count})
 		if len(out) >= 12 {
 			break
 		}
 	}
 	return out, nil
+}
+
+// modelVideoCount returns the authoritative video count for a model page.
+// models_json.php's "total" is inflated for larger creators (e.g. 829 for a
+// model whose page reports 147), so the page's total_results (N) is preferred,
+// falling back to the API value only when the page has no count.
+func modelVideoCount(page string, fallback int64) int64 {
+	if match := totalResultsRE.FindStringSubmatch(page); len(match) == 2 {
+		if n, err := strconv.ParseInt(match[1], 10, 64); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return fallback
 }
 
 func client(proxy string, timeout time.Duration) *http.Client {
