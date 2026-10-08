@@ -20,6 +20,11 @@ check(app.includes("确认执行清理"), "missing confirm execute button");
 check(app.includes("Dry Run"), "dry run must be explicit");
 check(app.includes("cleanupStatusLabel"), "missing per-status labels");
 check(app.includes("cleanupStatusLabels"), "missing status label map");
+check(app.includes("/api/media-integrity/plan/preview"), "missing TransRunner plan preview");
+check(app.includes("/api/media-integrity/plan/execute"), "missing TransRunner plan execute");
+check(app.includes("二次确认并执行清理"), "missing double-confirm execute");
+check(app.includes("planStatusLabel"), "missing plan status labels");
+check(app.includes("recoverPlan"), "missing plan recovery entry");
 check(style.includes(".integrity-badge"), "missing integrity badge style");
 
 if (failures.length) {

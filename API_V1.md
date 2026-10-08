@@ -355,6 +355,41 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 - 无清单确认的缺失文件只展示，不自动排除。
 - 仅允许管理员会话 + CSRF；Service Token 无权调用。
 
+### `POST /api/media-integrity/plan/preview`
+
+请求体 `{"raw":"<TransRunner计划JSON>"}`。解析 TransRunner Phase 1.2 删除计划并**服务端重新校验**，只读、不写库、不动文件。计划格式：
+
+```json
+{"kind":"transrunner-duplicate-deletion-plan","plan_version":1,"scan_id":"...","subscription_slug":"rule34video:...","generated_at":"...","executable":true,"stale":false,"user_confirmed":true,"items":[{"video_id":"rule34video:...","kept_video_id":"rule34video:...","original_path":"...","expected_size":123,"expected_sha256":"...","evidence":{}}]}
+```
+
+服务端不信任客户端的 `executable/stale/user_confirmed`，并额外校验：kind/plan_version、删除项与保留项属于同一 `subscription_slug`、两者 video_id 不同、保留文件存在、删除路径在受管媒体根目录内且无符号链接越界、DB 路径与计划一致、文件大小与完整 SHA-256 一致、无其它媒体记录共享同一物理文件、非活跃下载/转码、存储已挂载。返回 `{valid,problems,total,ready,rejected,already_excluded,needs_recovery,estimated_freed,items[]}`；条目状态 `verified`/`rejected`/`already_excluded`/`needs_recovery`。
+
+### `POST /api/media-integrity/plan/execute`
+
+请求体 `{"raw":"<计划JSON>","confirm":false}`。`confirm=false` 为 Dry Run；`confirm=true` 时对 `verified` 条目：
+
+1. 再次校验存储与文件身份；
+2. 将文件**移动到同文件系统的隔离区** `.hwatch-quarantine/<plan_id>/`（跨文件系统时安全复制后删除，失败则标记失败且不排除）；
+3. 调用 `RemoveAndExclude` 事务性写入 exclusion（reason=`transrunner_duplicate`）并置 `removed`。
+
+执行状态持久化于 `deletion_plans` / `deletion_plan_items`：`pending`→`verified`→`quarantined`→`db_excluded`，失败为 `failed`/`needs_recovery`。文件移动与 SQLite 不是同一事务：先移动后写库，若写库失败保留 `quarantined` 状态，可通过恢复入口补齐。重复 execute 幂等（已 `db_excluded` 跳过；原文件与隔离文件同时存在时标记 `needs_recovery`，不覆盖）。返回 `{plan_id,dry_run,executed,skipped,failed,needs_recovery,estimated_freed}`。
+
+- **不会不可恢复地删除文件**；隔离区不会被自动清理。
+- 生产边界：仅管理员会话 + CSRF；Service Token 无删除权限。
+
+### `GET /api/media-integrity/plans`
+
+列出已导入计划的执行状态（`limit`/`offset`）。
+
+### `GET /api/media-integrity/plan/{id}`
+
+返回单个计划及其条目状态。
+
+### `POST /api/media-integrity/plan/{id}/recover`
+
+对 `quarantined`/`needs_recovery` 条目重新核对文件并补齐数据库同步（崩溃/重启后恢复）。
+
 ### `GET /api/events`
 
 Server-Sent Events 实时下载状态，响应类型 `text/event-stream`，约每秒一条：

@@ -173,6 +173,28 @@ paths:
                 raw: {type: string, description: 原始删除清单 JSON（可选，替代 deletions）}
                 deletions: {type: array, items: {type: object, additionalProperties: true}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/media-integrity/plan/preview:
+    post:
+      tags: [Library]
+      operationId: transRunnerDeletionPlanPreview
+      description: 解析并服务端重新校验 TransRunner 删除计划（kind=transrunner-duplicate-deletion-plan, plan_version=1），返回逐条校验结果；只读，不写库、不动文件。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [raw], properties: {raw: {type: string}}}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}}
+  /api/media-integrity/plan/execute:
+    post:
+      tags: [Library]
+      operationId: transRunnerDeletionPlanExecute
+      description: confirm=false 为 Dry Run；confirm=true 时对已验证条目把文件移入隔离区（同文件系统）并事务性写入排除，执行状态持久化，可重复执行与恢复。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [raw, confirm], properties: {raw: {type: string}, confirm: {type: boolean}}}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/media-integrity/plans:
+    get: {tags: [Library], operationId: listDeletionPlans, parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/media-integrity/plan/{id}:
+    get: {tags: [Library], operationId: getDeletionPlan, parameters: [{name: id, in: path, required: true, schema: {type: string}}], responses: {'200': {$ref: '#/components/responses/JSON'}, '404': {$ref: '#/components/responses/Error'}}}
+  /api/media-integrity/plan/{id}/recover:
+    post: {tags: [Library], operationId: recoverDeletionPlan, parameters: [{name: id, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/subscriptions:
     get: {tags: [Subscriptions], operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri, description: 已注册适配器支持的订阅链接}, type: {type: string, enum: [creator, playlist], description: 可省略，由链接自动识别}, download_existing: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}}
