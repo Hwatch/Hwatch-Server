@@ -17,9 +17,9 @@ const trStatus=ref<{configured:boolean;created_at:string;last_used_at:string;sco
 const trNewToken=ref(''),trBusy=ref(false),trError=ref('')
 const trScopeLabel:Record<string,string>={read_media:'读取媒体',read_dedupe_candidates:'获取去重候选',write_duplicate_results:'写入重复结果',write_transcode_results:'写入转码结果'}
 async function loadTRToken(){try{trStatus.value=await props.api('/api/integrations/transrunner/token')}catch{}}
-async function createTRToken(){trBusy.value=true;trError.value='';try{const result=await props.api('/api/integrations/transrunner/token',{method:'POST',body:JSON.stringify({rotate:trStatus.value.configured})});trNewToken.value=result.token;await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
-async function revokeTRToken(){if(!confirm('撤销 TransRunner 服务令牌？撤销后所有回调请求将立即失效。'))return;trBusy.value=true;try{await props.api('/api/integrations/transrunner/token',{method:'DELETE'});await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
-async function copyTRToken(){try{await navigator.clipboard.writeText(trNewToken.value)}catch{}}
+async function createTRToken(){if(trBusy.value)return;trBusy.value=true;trError.value='';try{const result=await props.api('/api/integrations/transrunner/token',{method:'POST',body:JSON.stringify({rotate:trStatus.value.configured})});trNewToken.value=result.token;await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
+async function revokeTRToken(){if(trBusy.value)return;if(!confirm('撤销 TransRunner 服务令牌？撤销后所有回调请求将立即失效。'))return;trBusy.value=true;try{await props.api('/api/integrations/transrunner/token',{method:'DELETE'});await loadTRToken()}catch(e){trError.value=String(e)}finally{trBusy.value=false}}
+async function copyTRToken(){try{await navigator.clipboard.writeText(trNewToken.value);trError.value="令牌已复制"}catch{trError.value="复制失败，请手动复制令牌"}}
 onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(response.ok)recovery.value=await response.json()}catch{};void loadTRToken()})
 </script>
 
