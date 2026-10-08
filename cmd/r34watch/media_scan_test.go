@@ -48,6 +48,18 @@ func seedCompletedMedia(t *testing.T, s *store.Store, id, platform, path string,
 	return v
 }
 
+func TestReconcilePreservesMissingMedia(t *testing.T) {
+	root := t.TempDir()
+	a, s := newIntegrityApp(t, root, false)
+	missing := filepath.Join(root, "A", "gone.mp4")
+	seedCompletedMedia(t, s, "rule34video:1", "rule34video", missing, false)
+	a.reconcile()
+	v, _ := s.Video("rule34video:1")
+	if v.Status != "completed" || v.FilePath != missing || v.PlexPath != missing {
+		t.Fatalf("reconcile must not fail or clear paths for missing media: %+v", v)
+	}
+}
+
 func TestMediaScanClassifiesMissingAndPresent(t *testing.T) {
 	root := t.TempDir()
 	a, s := newIntegrityApp(t, root, false)

@@ -76,8 +76,13 @@ func (a *App) reconcile() {
 			continue
 		}
 		if _, err := os.Stat(path); err != nil {
-			_ = a.store.UpdateTask(v.ID, "failed", "", "", "", "媒体文件不存在，需要重新下载", 0, 0)
-		} else if v.MediaProbedAt == "" {
+			// Missing media is surfaced by the media integrity scan and the
+			// external-deletion reconciliation. Do not mark the row failed or
+			// clear its paths here, or those flows lose the evidence they need.
+			log.Printf("reconcile: media missing for %s: %s", v.ID, path)
+			continue
+		}
+		if v.MediaProbedAt == "" {
 			a.probeMedia(v.ID, path)
 		}
 	}
