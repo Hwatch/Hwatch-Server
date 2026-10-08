@@ -131,7 +131,9 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE INDEX IF NOT EXISTS idx_media_exclusions_created ON media_exclusions(created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
-	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);"
+	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);" +
+	"CREATE TABLE IF NOT EXISTS rate_limits (source_key TEXT PRIMARY KEY,host TEXT NOT NULL DEFAULT '',consecutive_429 INTEGER NOT NULL DEFAULT 0,backoff_until TEXT NOT NULL DEFAULT '',last_429_at TEXT NOT NULL DEFAULT '',retry_after_seconds INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);" +
+	"CREATE TABLE IF NOT EXISTS task_rate_limits (video_id TEXT PRIMARY KEY,retries INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);"
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
@@ -643,6 +645,7 @@ func (s *Store) QueueVideo(id string) error {
 	if changed == 0 {
 		return errors.New("视频已经在下载队列中或已完成")
 	}
+	_, _ = s.DB.Exec("DELETE FROM task_rate_limits WHERE video_id=?", id)
 	return nil
 }
 func (s *Store) BeginSubmission(id, downloaderID, externalID, plexPath string) error {
@@ -683,6 +686,80 @@ func (s *Store) RequeueDetachedWget() (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// RateLimitState is the persisted per-source HTTP 429 backoff state.
+type RateLimitState struct {
+	SourceKey         string
+	Host              string
+	Consecutive       int
+	BackoffUntil      string
+	Last429At         string
+	RetryAfterSeconds int
+}
+
+func (s *Store) SaveRateLimit(x RateLimitState) error {
+	_, err := s.DB.Exec("INSERT INTO rate_limits(source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET host=excluded.host,consecutive_429=excluded.consecutive_429,backoff_until=excluded.backoff_until,last_429_at=excluded.last_429_at,retry_after_seconds=excluded.retry_after_seconds,updated_at=excluded.updated_at", x.SourceKey, x.Host, x.Consecutive, x.BackoffUntil, x.Last429At, x.RetryAfterSeconds, Now())
+	return err
+}
+
+func (s *Store) RateLimits() ([]RateLimitState, error) {
+	rows, err := s.DB.Query("SELECT source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds FROM rate_limits")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RateLimitState{}
+	for rows.Next() {
+		var x RateLimitState
+		if err = rows.Scan(&x.SourceKey, &x.Host, &x.Consecutive, &x.BackoffUntil, &x.Last429At, &x.RetryAfterSeconds); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteRateLimit(sourceKey string) error {
+	_, err := s.DB.Exec("DELETE FROM rate_limits WHERE source_key=?", sourceKey)
+	return err
+}
+
+// AddTaskRateLimitRetry increments and returns the number of consecutive 429
+// retries recorded for a single download task.
+func (s *Store) AddTaskRateLimitRetry(id string) (int, error) {
+	if _, err := s.DB.Exec("INSERT INTO task_rate_limits(video_id,retries,updated_at) VALUES(?,1,?) ON CONFLICT(video_id) DO UPDATE SET retries=retries+1,updated_at=excluded.updated_at", id, Now()); err != nil {
+		return 0, err
+	}
+	var n int
+	err := s.DB.QueryRow("SELECT retries FROM task_rate_limits WHERE video_id=?", id).Scan(&n)
+	return n, err
+}
+
+func (s *Store) TaskRateLimitRetries(id string) (int, error) {
+	var n int
+	err := s.DB.QueryRow("SELECT retries FROM task_rate_limits WHERE video_id=?", id).Scan(&n)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return n, err
+}
+
+func (s *Store) ResetTaskRateLimitRetry(id string) error {
+	_, err := s.DB.Exec("DELETE FROM task_rate_limits WHERE video_id=?", id)
+	return err
+}
+
+// QueuedCandidates returns queued tasks oldest-first so the worker can pick the
+// first one whose source is not rate limited without disturbing source order.
+func (s *Store) QueuedCandidates(limit int) ([]Video, error) {
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status='queued' ORDER BY updated_at ASC,id ASC LIMIT ?", limit)
+	return scanVideos(rows, err)
+}
+
+func (s *Store) CountQueuedByPlatform(platform string) (int64, error) {
+	var n int64
+	return n, s.DB.QueryRow("SELECT count(*) FROM videos WHERE status='queued' AND platform=?", platform).Scan(&n)
 }
 
 // downloadTaskStatuses are the video states that represent a real download

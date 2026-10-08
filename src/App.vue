@@ -39,6 +39,7 @@ type Sub = {
 type Video = {
   video_id: string;
   subscription_slug: string;
+  platform: string;
   title: string;
   description: string;
   page_url: string;
@@ -407,6 +408,76 @@ const pages = computed(() => Math.max(1, Math.ceil(total.value / 48))),
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
 const showCompletedTasks = ref(false);
+type RateLimit = {
+  source: string;
+  host: string;
+  backoff_until: string;
+  retry_after_seconds: number;
+  waiting: number;
+};
+const rateLimits = ref<RateLimit[]>([]);
+const nowMs = ref(Date.now());
+const rateLimitLabels: Record<
+  string,
+  { title: string; waiting: string; other: string; taskRow: string }
+> = {
+  "zh-CN": {
+    title: "来源请求受限",
+    waiting: "等待任务",
+    other: "其他来源下载不受影响",
+    taskRow: "等待来源限速解除",
+  },
+  "zh-TW": {
+    title: "來源請求受限",
+    waiting: "等待任務",
+    other: "其他來源下載不受影響",
+    taskRow: "等待來源限速解除",
+  },
+  en: {
+    title: "Source rate limited",
+    waiting: "Waiting tasks",
+    other: "Downloads from other sources continue",
+    taskRow: "Waiting for source rate limit",
+  },
+  ja: {
+    title: "取得元がレート制限中",
+    waiting: "待機中",
+    other: "他の取得元のダウンロードは継続します",
+    taskRow: "取得元の制限解除を待機中",
+  },
+};
+const rlLabel = computed(
+  () =>
+    rateLimitLabels[translationLanguage.value] || rateLimitLabels["zh-CN"],
+);
+const activeRateLimits = computed(() =>
+  rateLimits.value
+    .map((r) => ({
+      ...r,
+      remaining: Math.max(
+        0,
+        Math.floor((Date.parse(r.backoff_until) - nowMs.value) / 1000),
+      ),
+    }))
+    .filter((r) => r.remaining > 0),
+);
+function fmtCountdown(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+function sourceLabel(source: string): string {
+  if (source === "rule34video") return "Rule34Video";
+  if (source === "hanime1") return "Hanime1";
+  return source;
+}
+function rateLimitedSource(platform?: string): boolean {
+  if (!platform) return false;
+  return activeRateLimits.value.some((r) => r.source === platform);
+}
 const subscriptionTypeLabel = (type = "") =>
   type === "playlist" ? "番剧订阅" : "作者订阅";
 const size = (n = 0) =>
@@ -623,6 +694,8 @@ async function loadVideos() {
 		if (requestID !== videoRequestID) return;
 		videos.value = result.items;
 		total.value = result.total;
+		if (view.value === "downloads")
+			rateLimits.value = result.rate_limits || [];
 	} catch (error) {
 		if (error instanceof DOMException && error.name === "AbortError") return;
 		throw error;
@@ -959,6 +1032,7 @@ function mergeTasks(payload: {
   data.value.current_connections = payload.connections || 0;
 }
 let refreshTimer: number | undefined;
+let countdownTimer: number | undefined;
 let events: EventSource | undefined;
 let creatorTimer: number | undefined;
 let creatorSearchID = 0;
@@ -987,8 +1061,14 @@ async function startApplication() {
   };
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = window.setInterval(() => {
-    if (!document.hidden) void refreshDashboard();
+    if (document.hidden) return;
+    void refreshDashboard();
+    if (view.value === "downloads") void loadVideos();
   }, 60000);
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = window.setInterval(() => {
+    if (view.value === "downloads") nowMs.value = Date.now();
+  }, 1000);
 }
 onMounted(async () => {
   window.addEventListener("popstate", handlePopState);
@@ -1006,6 +1086,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibility);
   events?.close();
   if (refreshTimer) clearInterval(refreshTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
   if (creatorTimer) clearTimeout(creatorTimer);
   if (videoLoadTimer) clearTimeout(videoLoadTimer);
   videoAbort?.abort();
@@ -1563,6 +1644,23 @@ watch(
             <option value="completed">已完成</option></select
           ><button @click="loadVideos">刷新</button>
         </div>
+        <div v-if="activeRateLimits.length" class="rate-limit-banner">
+          <b>{{ rlLabel.title }}</b>
+          <div
+            v-for="r in activeRateLimits"
+            :key="r.source"
+            class="rate-limit-row"
+          >
+            <span class="rate-limit-source">{{ sourceLabel(r.source) }}</span>
+            <span class="rate-limit-countdown">{{
+              fmtCountdown(r.remaining)
+            }}</span>
+            <span
+              >{{ rlLabel.waiting }}: {{ r.waiting }}</span
+            >
+          </div>
+          <small>{{ rlLabel.other }}</small>
+        </div>
         <div class="queue">
           <article v-for="v in unfinishedDownloadTasks" :key="v.video_id">
             <img :src="'/thumb/' + v.video_id" :alt="displayTitle(v)" loading="lazy" />
@@ -1580,7 +1678,13 @@ watch(
                 :value="v.bytes_downloaded"
                 :max="v.total_bytes || 1"
               />
-              <p v-if="v.error" class="error">{{ v.error }}</p>
+              <p
+                v-if="rateLimitedSource(v.platform) && v.status === 'queued'"
+                class="rate-limit-hint"
+              >
+                {{ rlLabel.taskRow }}
+              </p>
+              <p v-else-if="v.error" class="error">{{ v.error }}</p>
             </div>
             <div class="actions">
               <button

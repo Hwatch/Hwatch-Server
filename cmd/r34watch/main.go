@@ -42,10 +42,9 @@ type App struct {
 	bulkRunning    bool
 	thumbMu        sync.Mutex
 	thumbWait      map[string]chan struct{}
-	rateMu         sync.Mutex
-	consecutive429 int
-	backoffUntil   time.Time
-	last429        time.Time
+	rateLimits     *rateLimiter
+	queueWake      chan struct{}
+	engineOverride downloader.Engine
 	nfoMu          sync.Mutex
 	nfoRunning     bool
 	hashMu         sync.Mutex
@@ -62,7 +61,9 @@ type App struct {
 }
 
 func New(s *store.Store) *App {
-	return &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}, adapters.Hanime1{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
+	a := &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}, adapters.Hanime1{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, queueWake: make(chan struct{}, 1), hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
+	a.rateLimits = newRateLimiter(s)
+	return a
 }
 func (a *App) reconcile() {
 	items, _ := a.store.Videos(100000, 0, "completed", "")
@@ -165,7 +166,7 @@ func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 }
 func videoMap(v store.Video) map[string]any {
 	failure := classifyDownloadMessage(v.Error)
-	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "title": v.Title, "description": v.Description, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "likes": v.Likes, "like_rate": v.LikeRate, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "error_code": failure.Code, "error_retryable": failure.Retryable, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
+	return map[string]any{"video_id": v.ID, "subscription_slug": v.SubscriptionSlug, "platform": v.Platform, "title": v.Title, "description": v.Description, "page_url": v.PageURL, "published_at": v.PublishedAt, "discovered_at": v.DiscoveredAt, "thumbnail_url": v.ThumbnailURL, "views": v.Views, "likes": v.Likes, "like_rate": v.LikeRate, "duration_seconds": v.DurationSeconds, "creator_name": v.CreatorName, "creator_url": v.CreatorURL, "creator_avatar": v.CreatorAvatar, "creators": jsonValue(v.CreatorsJSON), "source_relation": jsonValue(v.SourceRelationJSON), "uploader_name": v.UploaderName, "uploader_url": v.UploaderURL, "uploader_avatar": v.UploaderAvatar, "categories": jsonValue(v.CategoriesJSON), "tags": jsonValue(v.TagsJSON), "external_links": jsonValue(v.ExternalLinksJSON), "status": v.Status, "aria_gid": v.AriaGID, "downloader_id": v.DownloaderID, "external_task_id": v.ExternalID, "file_path": v.FilePath, "plex_path": v.PlexPath, "bytes_downloaded": v.BytesDownloaded, "total_bytes": v.TotalBytes, "download_speed": v.DownloadSpeed, "connections": v.Connections, "video_codec": v.VideoCodec, "audio_codec": v.AudioCodec, "container": v.Container, "width": v.Width, "height": v.Height, "frame_rate": v.FrameRate, "bit_rate": v.BitRate, "bit_depth": v.BitDepth, "media_probed_at": v.MediaProbedAt, "transcode_status": v.TranscodeStatus, "plex_season": v.PlexSeason, "plex_episode": v.PlexEpisode, "error": v.Error, "error_code": failure.Code, "error_retryable": failure.Retryable, "downloaded_at": v.DownloadedAt, "updated_at": v.UpdatedAt}
 }
 func translatedVideoMap(v store.Video, language string, translations map[string]store.Translation) map[string]any {
 	item := videoMap(v)
@@ -210,6 +211,9 @@ func (a *App) aria(cfg store.Settings) downloader.Engine {
 	return downloader.NewAria(cfg.AriaRPCURL, cfg.AriaSecret)
 }
 func (a *App) selectedEngine(cfg store.Settings) downloader.Engine {
+	if a.engineOverride != nil {
+		return a.engineOverride
+	}
 	if cfg.DownloaderMode == "wget" {
 		return a.wget
 	}
@@ -408,7 +412,23 @@ func (a *App) listTasks(w http.ResponseWriter, r *http.Request) {
 		language = "zh-CN"
 	}
 	translations, _ := a.store.Translations(language)
-	respond(w, 200, map[string]any{"items": translatedVideoMaps(items, language, translations), "total": total, "limit": limit, "offset": offset})
+	respond(w, 200, map[string]any{"items": translatedVideoMaps(items, language, translations), "total": total, "limit": limit, "offset": offset, "rate_limits": a.rateLimitsView()})
+}
+
+// rateLimitsView exposes per-source 429 backoff for the download center.
+func (a *App) rateLimitsView() []map[string]any {
+	out := []map[string]any{}
+	for _, e := range a.rateLimits.Snapshot() {
+		waiting, _ := a.store.CountQueuedByPlatform(e.source)
+		out = append(out, map[string]any{
+			"source":              e.source,
+			"host":                e.host,
+			"backoff_until":       e.until.UTC().Format(time.RFC3339),
+			"retry_after_seconds": int(e.retryAfter.Seconds()),
+			"waiting":             waiting,
+		})
+	}
+	return out
 }
 
 type translationItem struct {
@@ -606,6 +626,7 @@ func (a *App) startQueueWorker() {
 	a.bulkMu.Lock()
 	if a.bulkRunning {
 		a.bulkMu.Unlock()
+		a.signalQueue()
 		return
 	}
 	a.bulkRunning = true
@@ -624,9 +645,23 @@ func (a *App) startQueueWorker() {
 			if cfgErr != nil || cfg.DownloadPaused {
 				return
 			}
-			if wait := a.rateLimitWait(); wait > 0 {
-				log.Printf("download queue paused for %s after HTTP 429", wait.Round(time.Second))
-				time.Sleep(wait)
+			candidates, candErr := a.store.QueuedCandidates(200)
+			if candErr != nil || len(candidates) == 0 {
+				return
+			}
+			video, wait := a.pickRunnable(candidates)
+			if video == nil {
+				// Every queued source is rate limited. Sleep to the nearest
+				// release, capped so a newly enqueued task for another source
+				// is noticed quickly without busy polling.
+				if wait <= 0 || wait > 30*time.Second {
+					wait = 30 * time.Second
+				}
+				select {
+				case <-time.After(wait):
+				case <-a.queueWake:
+				}
+				continue
 			}
 			engine := a.selectedEngine(cfg)
 			if waiter, ok := engine.(downloader.CapacityWaiter); ok {
@@ -637,12 +672,7 @@ func (a *App) startQueueWorker() {
 					continue
 				}
 			}
-			videos, err := a.store.Videos(1, 0, "queued", "")
-			if err != nil || len(videos) == 0 {
-				return
-			}
-			video := videos[0]
-			if err = a.queue(video.ID); err != nil {
+			if err := a.queue(video.ID); err != nil {
 				log.Printf("persistent queue %s: %v", video.ID, err)
 				if err.Error() == "下载队列已暂停" {
 					return
@@ -661,10 +691,15 @@ func (a *App) startQueueWorker() {
 					continue
 				}
 				if failure.Retryable {
-					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
 					if failure.Code == "rate_limited" {
-						a.record429()
+						host, retryAfter, hasRetryAfter := sourceRateLimitFromError(err)
+						a.rateLimits.Record(video.Platform, host, retryAfter, hasRetryAfter)
+						if n, countErr := a.store.AddTaskRateLimitRetry(video.ID); countErr == nil && n > maxRateLimitRetries {
+							_ = a.store.UpdateTask(video.ID, "failed", "", "", "", rateLimitExhaustedMessage, 0, 0)
+							continue
+						}
 					}
+					_ = a.store.UpdateTask(video.ID, "queued", "", "", "", err.Error(), 0, 0)
 					if failure.Delay > 0 && failure.Code != "rate_limited" {
 						time.Sleep(failure.Delay)
 					}
@@ -676,40 +711,32 @@ func (a *App) startQueueWorker() {
 		}
 	}()
 }
+
+func (a *App) signalQueue() {
+	select {
+	case a.queueWake <- struct{}{}:
+	default:
+	}
+}
+
+// pickRunnable returns the oldest queued task whose source is not rate limited,
+// plus the nearest release time when all candidates are limited.
+func (a *App) pickRunnable(candidates []store.Video) (*store.Video, time.Duration) {
+	nearest := time.Duration(-1)
+	for i := range candidates {
+		if wait := a.rateLimits.Wait(candidates[i].Platform); wait > 0 {
+			if nearest < 0 || wait < nearest {
+				nearest = wait
+			}
+			continue
+		}
+		return &candidates[i], 0
+	}
+	return nil, nearest
+}
+
 func isRateLimited(message string) bool {
 	return strings.Contains(message, "HTTP 429") || strings.Contains(message, "status=429")
-}
-func (a *App) record429() time.Duration {
-	a.rateMu.Lock()
-	defer a.rateMu.Unlock()
-	a.consecutive429++
-	a.last429 = time.Now()
-	shift := a.consecutive429 - 1
-	if shift > 5 {
-		shift = 5
-	}
-	delay := 30 * time.Second * time.Duration(1<<shift)
-	if delay > 15*time.Minute {
-		delay = 15 * time.Minute
-	}
-	until := time.Now().Add(delay)
-	if until.After(a.backoffUntil) {
-		a.backoffUntil = until
-	}
-	return delay
-}
-func (a *App) rateLimitWait() time.Duration {
-	a.rateMu.Lock()
-	defer a.rateMu.Unlock()
-	if !a.last429.IsZero() && time.Since(a.last429) > 10*time.Minute {
-		a.consecutive429 = 0
-		a.backoffUntil = time.Time{}
-		a.last429 = time.Time{}
-	}
-	if wait := time.Until(a.backoffUntil); wait > 0 {
-		return wait
-	}
-	return 0
 }
 func intParam(r *http.Request, key string, def, min, max int) int {
 	value, err := strconv.Atoi(r.URL.Query().Get(key))
@@ -1488,7 +1515,11 @@ func (a *App) pollTasks(ctx context.Context) {
 				if failure.Code == "source_expired" {
 					errText = a.refreshExpiredSource(v, cfg, errText)
 				} else if failure.Code == "rate_limited" {
-					a.record429()
+					a.rateLimits.Record(v.Platform, "", 0, false)
+					if n, countErr := a.store.AddTaskRateLimitRetry(v.ID); countErr == nil && n > maxRateLimitRetries {
+						_ = a.store.UpdateDownloaderTask(v.ID, "failed", client.ID(), externalID, path, v.PlexPath, rateLimitExhaustedMessage, status.Completed, status.Total)
+						continue
+					}
 				}
 				_ = a.store.UpdateDownloaderTask(v.ID, "queued", "", "", path, v.PlexPath, errText, status.Completed, status.Total)
 				a.startQueueWorker()
@@ -1497,6 +1528,7 @@ func (a *App) pollTasks(ctx context.Context) {
 			_ = a.store.UpdateDownloaderTask(v.ID, mapped, client.ID(), externalID, path, v.PlexPath, errText, status.Completed, status.Total)
 			_ = a.store.UpdateTransfer(v.ID, status.DownloadSpeed, status.Connections)
 			if mapped == "completed" {
+				_ = a.store.ResetTaskRateLimitRetry(v.ID)
 				fresh, _ := a.store.Video(v.ID)
 				sub, _ := a.store.Subscription(v.SubscriptionSlug)
 				layout := plex.Build(cfg.DownloadDir, sub, fresh)
