@@ -7,7 +7,7 @@ type Backup={name:string;size:number;created_at:string;sha256:string;valid:boole
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
 type API=(path:string,init?:RequestInit)=>Promise<any>
-const props=defineProps<{settings:Settings;busy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
+const props=defineProps<{settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
 const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
@@ -34,7 +34,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <div class="downloader-capability"><span><b>aria2</b><small>多连接、全局限速、断点续传</small></span><span><b>wget</b><small>单连接、限速、断点续传</small></span></div>
         <label>下载与 Plex 媒体目录<input v-model="props.settings.download_dir" placeholder="/volume1/media/HWatch"><small>视频直接按 Plex 电视库结构写入，无需复制第二份。</small></label>
         <div class="setting-grid"><label>并发下载任务数<input v-model.number="props.settings.max_concurrent" type="number" min="1" max="20"></label><label>单任务连接数<input v-model.number="props.settings.connections_per_download" type="number" min="1" max="16"></label><label>全局下载限速（KB/s）<input v-model.number="props.settings.download_limit_kbps" type="number" min="0"><small>0 表示不限速</small></label><label>最低保留空间（字节）<input v-model.number="props.settings.min_free_bytes" type="number"></label></div>
-        <button class="primary save-setting" :disabled="busy">保存设置</button>
+        <button class="primary save-setting" :disabled="settingsBusy">{{ settingsBusy ? "正在保存…" : "保存设置" }}</button>
       </form>
     </section>
 
@@ -46,7 +46,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <form @submit.prevent="emit('save')">
           <label>备份目录<input v-model="props.settings.backup_dir" :placeholder="props.backupDirectory"><small>留空时使用媒体目录下的 .hwatch-backups。</small></label>
           <div class="setting-grid"><label>每日备份时间<input v-model="props.settings.backup_time" type="time"></label><label>保留数量<input v-model.number="props.settings.backup_retention" type="number" min="1" max="365"></label></div>
-          <div class="actions"><button class="primary" :disabled="busy">保存备份设置</button><button type="button" :disabled="busy" @click="emit('createBackup')">立即备份</button></div>
+          <div class="actions"><button class="primary" :disabled="settingsBusy">{{ settingsBusy ? "正在保存…" : "保存备份设置" }}</button><button type="button" :disabled="backupsBusy" @click="emit('createBackup')">{{ backupsBusy ? "处理中…" : "立即备份" }}</button></div>
         </form>
         <p v-if="backupSensitive" class="error">数据库包含代理或下载器凭据，备份文件属于敏感数据；目录权限已限制为仅服务账号可读写。</p>
         <p v-if="settings.backup_last_error" class="error">最近备份失败：{{settings.backup_last_error}}</p>
@@ -59,7 +59,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
           <small v-if="recovery.summary.source_media_root!==recovery.summary.current_media_root">{{recovery.summary.source_media_root||'（原目录未知）'}} → {{recovery.summary.current_media_root}}</small>
           <p v-if="recovery.summary.aria_unavailable" class="error">aria2 暂时不可用，旧 GID 已原样保留，服务会自动重试协调。</p>
         </div>
-        <div class="backup-list"><article v-for="item in backups" :key="item.name"><span><b>{{item.name}}</b><small>{{size(item.size)}} · SHA-256 {{item.sha256.slice(0,12)}}…</small></span><button class="danger" :disabled="busy||!item.valid" @click="emit('restoreBackup',item.name)">{{item.valid?'恢复':'校验失败'}}</button></article><div v-if="!backups.length" class="empty compact-empty">还没有数据库备份</div></div>
+        <div class="backup-list"><article v-for="item in backups" :key="item.name"><span><b>{{item.name}}</b><small>{{size(item.size)}} · SHA-256 {{item.sha256.slice(0,12)}}…</small></span><button class="danger" :disabled="backupsBusy||!item.valid" @click="emit('restoreBackup',item.name)">{{item.valid?'恢复':'校验失败'}}</button></article><div v-if="!backups.length" class="empty compact-empty">还没有数据库备份</div></div>
       </div>
     </section>
 
@@ -72,7 +72,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <label>aria2 RPC 地址<input v-model="props.settings.aria_rpc_url"></label>
         <label>aria2 RPC 密钥<input v-model="props.settings.aria_secret" type="password" autocomplete="new-password"></label>
         <div class="setting-grid"><label>每日检查时间<input v-model="props.settings.check_time" type="time"></label><label>时区<input v-model="props.settings.timezone" placeholder="Asia/Shanghai"></label></div>
-        <button class="primary save-setting" :disabled="busy">保存设置</button>
+        <button class="primary save-setting" :disabled="settingsBusy">{{ settingsBusy ? "正在保存…" : "保存设置" }}</button>
       </form>
     </section>
 
@@ -84,7 +84,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <label class="setting-check"><input v-model="props.settings.require_creator_match" type="checkbox"><span><b>验证实际创作者</b><small>实际创作者与订阅作者不一致时不下载</small></span></label>
         <label>标题关键词<textarea v-model="props.settings.exclude_title_keywords" rows="2" placeholder="compilation, collection, 合集, 集锦"></textarea></label>
         <div class="setting-grid"><label>排除上传者<input v-model="props.settings.exclude_uploaders" placeholder="逗号分隔"></label><label>排除分类<input v-model="props.settings.exclude_categories" placeholder="逗号分隔"></label><label>排除标签<input v-model="props.settings.exclude_tags" placeholder="逗号分隔"></label><label>最大时长（秒）<input v-model.number="props.settings.max_duration_seconds" type="number" min="0"><small>0 表示不限制</small></label></div>
-        <div class="actions"><button class="primary save-setting" :disabled="busy">保存规则</button><button type="button" :disabled="busy" @click="emit('previewExclusions')">预览命中</button></div>
+        <div class="actions"><button class="primary save-setting" :disabled="settingsBusy">{{ settingsBusy ? "正在保存…" : "保存规则" }}</button><button type="button" :disabled="settingsBusy" @click="emit('previewExclusions')">预览命中</button></div>
         <div v-if="exclusionPreview.length" class="backup-list"><small>共命中 {{exclusionTotal}} 项，当前显示 {{exclusionPreview.length}} 项</small><article v-for="item in exclusionPreview" :key="item.id"><span><b>{{item.title}}</b><small>{{item.reason}} · {{item.status}}</small></span></article></div>
       </form>
     </section>
@@ -122,7 +122,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </button>
       <div v-if="open==='import'" class="setting-body">
         <label>HTML 数据<textarea :value="importHtml" rows="8" placeholder="粘贴视频详情区 HTML" @input="emit('update:importHtml',($event.target as HTMLTextAreaElement).value)"></textarea></label>
-        <button :disabled="!importHtml||busy" @click="emit('import')">解析并导入</button>
+        <button :disabled="!importHtml||importBusy" @click="emit('import')">{{ importBusy ? "导入中…" : "解析并导入" }}</button>
       </div>
     </section>
 

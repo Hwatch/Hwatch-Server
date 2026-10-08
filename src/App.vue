@@ -613,6 +613,24 @@ const planExecutePending = computed(() => actions.pending("plan-execute"));
 const planActionError = computed(
   () => actions.error("plan-preview") || actions.error("plan-execute"),
 );
+function actionPending(key: string): boolean {
+  return actions.pending(key);
+}
+function videoActionKey(videoId: string, _action: string): string {
+  // Key by video only, so two conflicting actions on the same video cannot run
+  // at once, while different videos stay independent.
+  return "video:" + videoId;
+}
+const settingsBusy = computed(() => actions.pending("settings-save"));
+const backupsBusy = computed(
+  () =>
+    actions.pending("backup-create") ||
+    actions.pending("backups-load") ||
+    Object.keys(actions.states).some(
+      (k) => k.startsWith("backup-restore:") && actions.pending(k),
+    ),
+);
+const importBusy = computed(() => actions.pending("import-html"));
 const planStatusLabels: Record<string, string> = {
   pending: "待处理",
   verified: "已验证",
@@ -924,9 +942,16 @@ async function loadNotifications() {
   data.value.unread_notifications = result.unread;
 }
 async function markNotificationsRead() {
-  await api("/api/notifications/read-all", { method: "POST" });
-  data.value.unread_notifications = 0;
-  await loadNotifications();
+  const result = await actions.run("notif-read", () =>
+    api("/api/notifications/read-all", { method: "POST" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
+    data.value.unread_notifications = 0;
+    await loadNotifications();
+  } else {
+    notice.value = "标记已读失败：" + (result.error || "");
+  }
 }
 async function loadExclusions() {
   const result = await api("/api/media-exclusions?limit=200");
@@ -934,12 +959,19 @@ async function loadExclusions() {
   mediaExclusionTotal.value = result.total || 0;
 }
 async function restoreExclusion(item: Exclusion) {
-  await act(async () => {
-    await api("/api/media-exclusions/" + encodeURIComponent(item.video_id), { method: "DELETE" });
+  const result = await actions.run("exclusion-restore:" + item.video_id, () =>
+    api("/api/media-exclusions/" + encodeURIComponent(item.video_id), {
+      method: "DELETE",
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
     exclusions.value = exclusions.value.filter((x) => x.video_id !== item.video_id);
     mediaExclusionTotal.value = Math.max(0, mediaExclusionTotal.value - 1);
     notice.value = "已恢复允许下载";
-  });
+  } else {
+    notice.value = "恢复失败：" + (result.error || "");
+  }
 }
 async function loadIntegrity() {
   const result = await actions.run("integrity-scan", async () => {
@@ -1099,12 +1131,20 @@ async function confirmDelete() {
   }
 }
 async function previewExclusions() {
-  await act(async () => {
-    const result = await api("/api/exclusions/preview", { method: "POST", body: JSON.stringify(settings.value) });
-    exclusionPreview.value = result.items;
-    exclusionTotal.value = result.total;
-    notice.value = `当前规则会排除 ${result.total} 项`;
-  });
+  const result = await actions.run("exclusions-preview", () =>
+    api("/api/exclusions/preview", {
+      method: "POST",
+      body: JSON.stringify(settings.value),
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    exclusionPreview.value = result.value.items;
+    exclusionTotal.value = result.value.total;
+    notice.value = `当前规则会排除 ${result.value.total} 项`;
+  } else if (!result.ok) {
+    notice.value = "预览失败：" + (result.error || "");
+  }
 }
 async function loadVideos() {
 	const requestID = ++videoRequestID;
@@ -1152,30 +1192,48 @@ async function loadSettings() {
   await loadBackups();
 }
 async function loadBackups() {
-  const result = await api("/api/backups");
-  backups.value = result.items;
-  backupDirectory.value = result.directory;
-  backupSensitive.value = result.sensitive;
+  const result = await actions.run("backups-load", () => api("/api/backups"));
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    backups.value = result.value.items;
+    backupDirectory.value = result.value.directory;
+    backupSensitive.value = result.value.sensitive;
+  } else if (!result.ok) {
+    notice.value = "备份列表加载失败：" + (result.error || "");
+  }
 }
 async function createBackup() {
-  await act(async () => {
-    await api("/api/backups", { method: "POST" });
+  const result = await actions.run("backup-create", () =>
+    api("/api/backups", { method: "POST" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
     notice.value = "数据库备份已创建";
     await loadSettings();
-  });
+  } else {
+    notice.value = "创建备份失败：" + (result.error || "");
+  }
 }
 async function restoreBackup(name: string) {
   if (
     !confirm("确认使用 " + name + " 恢复数据库？下载会暂停，服务随后自动重启。")
   )
     return;
-  await act(async () => {
-    await api("/api/backups/" + encodeURIComponent(name) + "/restore", {
+  const result = await actions.run("backup-restore:" + name, () =>
+    api("/api/backups/" + encodeURIComponent(name) + "/restore", {
       method: "POST",
       body: JSON.stringify({ confirm: true }),
-    });
-    notice.value = "正在恢复数据库并重启服务…";
-  });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
+    // 202: the restore request was accepted; the service restart is not done yet.
+    notice.value = "已提交恢复请求：服务将暂停下载并重启";
+  } else {
+    // Never auto-retry a destructive restore; ask the user to verify the service.
+    notice.value =
+      "恢复请求结果未知：" + (result.error || "") + "；请核对服务状态后再决定，勿自动重试";
+  }
 }
 async function changeView(next: string, updateHistory = true) {
   if (!viewRoutes[next]) next = "home";
@@ -1211,16 +1269,6 @@ async function changeView(next: string, updateHistory = true) {
   }
   if (next === "excluded") await loadExclusions();
   if (next === "integrity") await loadIntegrity();
-}
-async function act(run: () => Promise<void>) {
-  busy.value = true;
-  try {
-    await run();
-  } catch (e) {
-    notice.value = String(e);
-  } finally {
-    busy.value = false;
-  }
 }
 async function subscribe() {
   subscribeError.value = "";
@@ -1287,18 +1335,32 @@ function chooseCreator(creator: Creator) {
   modelURL.value = creator.url;
 }
 async function check(slug = "") {
-  await act(async () => {
-    await api("/api/check" + (slug ? "/" + slug : ""), { method: "POST" });
+  const result = await actions.run("check:" + (slug || "all"), () =>
+    api("/api/check" + (slug ? "/" + slug : ""), { method: "POST" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
     await changeView("downloads");
     notice.value = "检查任务已开始";
-  });
+  } else {
+    notice.value = "检查失败：" + (result.error || "");
+  }
 }
 async function toggle(sub: Sub) {
-  await api("/api/subscriptions/" + sub.slug, {
-    method: "PATCH",
-    body: JSON.stringify({ enabled: !sub.enabled }),
-  });
-  await refreshDashboard();
+  const key = "sub:" + sub.slug;
+  const result = await actions.run(key, () =>
+    api("/api/subscriptions/" + sub.slug, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: !sub.enabled }),
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
+    await refreshDashboard();
+  } else {
+    notice.value = "更新订阅失败：" + (result.error || "");
+    await refreshDashboard();
+  }
 }
 async function removeSub(sub: Sub) {
   if (
@@ -1311,8 +1373,12 @@ async function removeSub(sub: Sub) {
     )
   )
     return;
-  await api("/api/subscriptions/" + sub.slug, { method: "DELETE" });
-  await refreshDashboard();
+  const result = await actions.run("sub-del:" + sub.slug, () =>
+    api("/api/subscriptions/" + sub.slug, { method: "DELETE" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) await refreshDashboard();
+  else notice.value = "删除订阅失败：" + (result.error || "");
 }
 async function videoAction(v: Video, action: string) {
   if (
@@ -1324,19 +1390,24 @@ async function videoAction(v: Video, action: string) {
     )
   )
     return;
-  await act(async () => {
-    await api("/api/videos/" + v.video_id + "/" + action, { method: "POST" });
-    const labels: Record<string, string> = {
-      download: "已提交下载任务",
-      retry: "已提交重试",
-      pause: "已请求暂停",
-      resume: "已请求恢复",
-      delete: "已提交删除任务",
-    };
-    notice.value =
-      (labels[action] || "操作已提交") + "：" + displayTitle(v);
+  const labels: Record<string, string> = {
+    download: "已提交下载任务",
+    retry: "已提交重试",
+    pause: "已请求暂停",
+    resume: "已请求恢复",
+    delete: "已提交删除任务",
+  };
+  const result = await actions.run(videoActionKey(v.video_id, action), () =>
+    api("/api/videos/" + v.video_id + "/" + action, { method: "POST" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
+    notice.value = (labels[action] || "操作已提交") + "：" + displayTitle(v);
     await loadVideos();
-  });
+  } else {
+    notice.value =
+      (labels[action] || "操作") + "失败：" + (result.error || "");
+  }
 }
 async function downloadAll() {
   if (
@@ -1347,44 +1418,69 @@ async function downloadAll() {
     )
   )
     return;
-  await act(async () => {
-    const r = await api("/api/videos/download-all", { method: "POST" });
-    notice.value = "正在后台建立 " + r.accepted + " 个下载任务";
+  const result = await actions.run("download-all", () =>
+    api("/api/videos/download-all", { method: "POST" }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    // Only the queue submission is confirmed here; the tasks run in background.
+    notice.value = "已提交 " + result.value.accepted + " 个下载任务，正在后台处理";
     await changeView("downloads");
-  });
+  } else if (!result.ok) {
+    notice.value = "提交下载失败：" + (result.error || "");
+  }
 }
 async function toggleDownloads() {
   const paused = !data.value.downloads_paused;
-  await act(async () => {
-    await api("/api/downloads/toggle", {
+  const result = await actions.run("downloads-toggle", () =>
+    api("/api/downloads/toggle", {
       method: "POST",
       body: JSON.stringify({ paused }),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
     data.value.downloads_paused = paused;
     notice.value = paused ? "已暂停全部下载" : "已继续全部下载";
     await loadVideos();
-  });
+  } else {
+    notice.value = "切换下载状态失败：" + (result.error || "");
+    await refreshDashboard();
+  }
 }
 async function saveSettings() {
-  await act(async () => {
-    settings.value = await api("/api/settings", {
+  const result = await actions.run("settings-save", () =>
+    api("/api/settings", {
       method: "PUT",
       body: JSON.stringify(settings.value),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
+    // Refresh from the server response only after a confirmed save.
+    if (result.value) settings.value = result.value;
     notice.value = "设置已保存";
     await refreshDashboard();
-  });
+  } else {
+    // Keep the user's edited values untouched on failure.
+    notice.value = "保存设置失败：" + (result.error || "");
+  }
 }
 async function importPage() {
-  await act(async () => {
-    await api("/api/import/html", {
+  const result = await actions.run("import-html", () =>
+    api("/api/import/html", {
       method: "POST",
       body: JSON.stringify({ html: importHTML.value }),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok) {
     notice.value = "HTML 数据已导入";
     importHTML.value = "";
     await loadVideos();
-  });
+  } else {
+    notice.value = "导入失败：" + (result.error || "");
+  }
 }
 function exportTranslation() {
   window.location.href =
@@ -1429,13 +1525,19 @@ async function refreshNFO() {
     )
   )
     return;
-  await act(async () => {
-    const result = await api("/api/plex/refresh-nfo", {
+  const result = await actions.run("nfo-refresh", () =>
+    api("/api/plex/refresh-nfo", {
       method: "POST",
       body: JSON.stringify({ language: translationLanguage.value }),
-    });
-    notice.value = "正在后台刷新 " + result.accepted + " 个 NFO 文件";
-  });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    // Accepted for background processing; not a completion signal.
+    notice.value = "已提交刷新，后台处理 " + result.value.accepted + " 个 NFO 文件";
+  } else if (!result.ok) {
+    notice.value = "刷新 NFO 失败：" + (result.error || "");
+  }
 }
 function privateID(v: Video) {
   return "媒体项目 " + v.video_id.split(":").pop()!.slice(-4).toUpperCase();
@@ -1783,18 +1885,20 @@ watch(
         <button
           v-if="view === 'undownloaded'"
           class="primary"
-          :disabled="busy || !total"
+          :disabled="actionPending('download-all') || !total"
+          :aria-busy="actionPending('download-all')"
           @click="downloadAll"
         >
-          下载全部（{{ total }}）</button
+          {{ actionPending("download-all") ? "提交中…" : `下载全部（${total}）` }}</button
         ><button
           v-else-if="view === 'downloads'"
           class="download-master"
           :class="{ paused: data.downloads_paused }"
-          :disabled="busy"
+          :disabled="actionPending('downloads-toggle')"
+          :aria-busy="actionPending('downloads-toggle')"
           @click="toggleDownloads"
         >
-          {{ data.downloads_paused ? "继续全部" : "暂停全部" }}</button
+          {{ actionPending("downloads-toggle") ? "处理中…" : data.downloads_paused ? "继续全部" : "暂停全部" }}</button
         ><button
           v-else-if="
             ![
@@ -1806,10 +1910,11 @@ watch(
             ].includes(view)
           "
           class="primary"
-          :disabled="busy"
+          :disabled="actionPending('check:all')"
+          :aria-busy="actionPending('check:all')"
           @click="check()"
         >
-          检查更新
+          {{ actionPending("check:all") ? "检查中…" : "检查更新" }}
         </button>
       </header>
       <div v-if="toasts.list.length" class="toasts" aria-live="polite">
@@ -1936,7 +2041,7 @@ watch(
               placeholder="粘贴作者页或播放清单链接"
             /><button
               class="primary"
-              :disabled="busy || subscribePending || !modelURL.trim()"
+              :disabled="subscribePending || !modelURL.trim()"
               :aria-busy="subscribePending"
               @click="subscribe"
             >
@@ -1999,8 +2104,13 @@ watch(
           <div v-if="selectedCreator" class="selected-creator">
             <span
               ><small>已选择</small><b>{{ selectedCreator.name }}</b></span
-            ><button class="primary" :disabled="busy" v-on:click="subscribe">
-              订阅所选作者
+            ><button
+              class="primary"
+              :disabled="subscribePending"
+              :aria-busy="subscribePending"
+              v-on:click="subscribe"
+            >
+              {{ subscribePending ? "正在添加…" : "订阅所选作者" }}
             </button>
           </div>
           <small>{{
@@ -2080,7 +2190,7 @@ watch(
               <small>{{ item.reason || '用户删除并排除' }}</small>
             </div>
             <div class="actions">
-              <button :disabled="busy" @click="restoreExclusion(item)">恢复允许下载</button>
+              <button :disabled="actionPending('exclusion-restore:' + item.video_id)" @click="restoreExclusion(item)">恢复允许下载</button>
             </div>
           </article>
           <div v-if="!exclusions.length" class="empty">没有已排除的视频</div>
@@ -2538,20 +2648,27 @@ watch(
             <div class="actions">
               <button
                 v-if="v.status === 'active' || v.status === 'waiting'"
+                :disabled="actionPending(videoActionKey(v.video_id, 'pause'))"
                 @click="videoAction(v, 'pause')"
               >
-                暂停</button
+                {{ actionPending(videoActionKey(v.video_id, "pause")) ? "暂停中…" : "暂停" }}</button
               ><button
                 v-if="v.status === 'paused'"
+                :disabled="actionPending(videoActionKey(v.video_id, 'resume'))"
                 @click="videoAction(v, 'resume')"
               >
-                继续</button
+                {{ actionPending(videoActionKey(v.video_id, "resume")) ? "恢复中…" : "继续" }}</button
               ><button
                 v-if="v.status === 'failed' || v.status === 'excluded'"
+                :disabled="actionPending(videoActionKey(v.video_id, 'retry'))"
                 @click="videoAction(v, 'retry')"
               >
-                {{ v.status === "excluded" ? "重新判断" : "重试" }}</button
-              ><button class="danger" @click="videoAction(v, 'delete')">
+                {{ actionPending(videoActionKey(v.video_id, "retry")) ? "处理中…" : (v.status === "excluded" ? "重新判断" : "重试") }}</button
+              ><button
+                class="danger"
+                :disabled="actionPending(videoActionKey(v.video_id, 'delete'))"
+                @click="videoAction(v, 'delete')"
+              >
                 删除
               </button>
             </div>
@@ -2806,7 +2923,10 @@ watch(
           v-else
           :settings="settings"
           :api="api"
-          :busy="busy"
+          :busy="settingsBusy"
+          :settings-busy="settingsBusy"
+          :backups-busy="backupsBusy"
+          :import-busy="importBusy"
           :import-html="importHTML"
           :demo-mode="demoMode"
           :sidebar-items="sidebarItems"

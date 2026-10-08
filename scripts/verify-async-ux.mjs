@@ -18,7 +18,7 @@ check(!app.includes("pinia") && !app.includes("vuex"), "no new state-management 
 
 // A/B: subscribe shows loading immediately and keeps it while pending.
 check(app.includes("subscribePending") && app.includes("正在添加"), "subscribe button must show loading");
-check(/subscribePending[^>]*disabled|disabled="busy \|\| subscribePending/.test(app) || app.includes("busy || subscribePending || !modelURL.trim()"), "subscribe must be disabled while pending");
+check(app.includes('subscribePending || !modelURL.trim()') || /subscribePending[^>]*disabled/.test(app), "subscribe must be disabled while pending");
 check(app.includes('role="alert"') && app.includes("subscribeError"), "subscribe error must be visible");
 
 // F: non-idempotent timeout guidance (no blind resubmit).
