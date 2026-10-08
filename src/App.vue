@@ -3,7 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
+import ToastContainer from "./components/ToastContainer.vue";
 import SidebarView from "./components/SidebarView.vue";
+import JSONImport from "./components/JSONImport.vue";
+import PaginationBar from "./components/PaginationBar.vue";
 import StatePanel from "./components/StatePanel.vue";
 import StatusBadge from "./components/StatusBadge.vue";
 import { dialogFocus as vDialogFocus } from "./dialogFocus";
@@ -319,6 +322,9 @@ const pageDescriptions:Record<string,string> = {
 };
 const subscriptionQuery=ref(''), subscriptionState=ref('all'), exclusionQuery=ref('');
 const pageLoading=ref(false),pageError=ref('');let pageRequestID=0;
+const videosLoading=ref(false),videosError=ref('');
+const notificationSeverity=ref('all');
+const visibleNotifications=computed(()=>notifications.value.filter(item=>notificationSeverity.value==='all'||(notificationSeverity.value==='unread'?!item.read_at:item.severity===notificationSeverity.value)));
 const filteredSubscriptionGroups=computed(()=>subscriptionGroups.value.map(group=>({...group,sources:group.sources.filter(sub=>(subscriptionState.value==='all'||(subscriptionState.value==='enabled'?sub.enabled:subscriptionState.value==='paused'?!sub.enabled:!!sub.last_error))&&`${sub.name} ${sub.platform} ${sub.url}`.toLocaleLowerCase().includes(subscriptionQuery.value.trim().toLocaleLowerCase()))})).filter(group=>group.sources.length));
 const filteredExclusions=computed(()=>exclusions.value.filter(item=>`${item.title_snapshot} ${item.video_id} ${item.reason}`.toLocaleLowerCase().includes(exclusionQuery.value.trim().toLocaleLowerCase())));
 const vdfFilter=ref('all'),vdfPage=ref(0),expandedVdfGroups=ref<Record<string,boolean>>({});
@@ -878,6 +884,9 @@ async function loadAuth() {
   try {
     auth.value = await api("/api/auth/status");
     authUsername.value = auth.value.username || "";
+  } catch(error) {
+    authError.value='无法连接服务：'+String(error).replace(/^Error:\s*/, '');
+    auth.value={configured:true,authenticated:false};
   } finally {
     authReady.value = true;
   }
@@ -1169,6 +1178,7 @@ async function previewExclusions() {
 }
 async function loadVideos() {
 	const requestID = ++videoRequestID;
+  videosLoading.value=true;videosError.value='';
 	videoAbort?.abort();
 	videoAbort = new AbortController();
   const p = new URLSearchParams({
@@ -1202,7 +1212,9 @@ async function loadVideos() {
 			rateLimits.value = result.rate_limits || [];
 	} catch (error) {
 		if (error instanceof DOMException && error.name === "AbortError") return;
-		throw error;
+		if(requestID===videoRequestID)videosError.value=String(error).replace(/^Error:\s*/, '');
+	} finally {
+    if(requestID===videoRequestID)videosLoading.value=false;
 	}
 }
 async function loadFacets() {
@@ -1863,25 +1875,8 @@ watch(
       </PageHeader>
       <StatePanel v-if="pageLoading" kind="loading" title="正在加载页面…" />
       <StatePanel v-if="pageError" kind="error" title="页面加载失败" :description="pageError"><button @click="changeView(view,false)">重试</button></StatePanel>
-      <div v-if="toasts.list.length" class="toasts" aria-live="polite">
-        <div
-          v-for="t in toasts.list"
-          :key="t.id"
-          class="toast"
-          :class="'toast--' + t.type"
-          :role="t.type === 'error' ? 'alert' : 'status'"
-        >
-          <span class="toast__message">{{ t.message }}</span>
-          <button
-            type="button"
-            class="toast__close"
-            aria-label="关闭通知"
-            @click="toasts.dismiss(t.id)"
-          >
-            ×
-          </button>
-        </div>
-      </div>
+      <StatePanel v-if="videosError && ['library','undownloaded','downloads'].includes(view)" kind="error" title="列表加载失败" :description="videosError"><button @click="loadVideos">重试加载</button></StatePanel>
+      <ToastContainer :toasts="toasts" />
       <div v-if="data.health_warnings.length" class="health-alert">
         <b>系统运行提醒</b
         ><span
@@ -2179,6 +2174,7 @@ watch(
         <div v-if="integrityNotice" class="notice" role="status">{{ integrityNotice }}</div>
         <div class="panel">
           <h2>导入 VDF 删除清单</h2>
+          <JSONImport label="选择 VDF JSON 文件" :disabled="integrityBusy" @loaded="text=>{deletionListText=text;vdfPreviewData=undefined;cleanupPreview=undefined}" />
           <textarea
             v-model="deletionListText"
             rows="6"
@@ -2299,6 +2295,7 @@ watch(
         <div class="panel">
           <div v-if="filteredVdfGroups.length>25" class="pagination"><button :disabled="vdfPage===0" @click="vdfPage--">上一页分组</button><span>{{vdfPage+1}} / {{Math.ceil(filteredVdfGroups.length/25)}}</span><button :disabled="(vdfPage+1)*25>=filteredVdfGroups.length" @click="vdfPage++">下一页分组</button></div>
           <h2>模式二：导入 TransRunner 删除计划（HWatch 执行清理）</h2>
+          <JSONImport label="选择删除计划 JSON 文件" :disabled="planBusy" @loaded="text=>{planText=text;planPreviewData=undefined}" />
           <textarea
             v-model="planText"
             rows="6"
@@ -2446,6 +2443,7 @@ watch(
         </div>
         <template v-if="notificationTab === 'system'">
           <div class="toolbar">
+            <select v-model="notificationSeverity" aria-label="通知筛选"><option value="all">全部通知</option><option value="unread">未读</option><option value="warning">警告</option><option value="error">错误</option><option value="info">信息</option></select>
             <button
               :disabled="!data.unread_notifications"
               @click="markNotificationsRead"
@@ -2455,7 +2453,7 @@ watch(
           </div>
           <div class="rows notification-list">
             <article
-              v-for="item in notifications"
+              v-for="item in visibleNotifications"
               :key="item.id"
               :class="{ unread: !item.read_at }"
             >
@@ -2656,6 +2654,7 @@ watch(
             </div>
           </article>
         </div>
+        <PaginationBar :page="page" :pages="pages" :total="total" :busy="videosLoading" @change="next=>{page=next;loadVideos()}" />
       </section>
       <section v-else-if="view === 'library' || view === 'undownloaded'">
         <div class="toolbar library-toolbar">
@@ -2960,7 +2959,7 @@ watch(
       <a :href="selected.page_url" target="_blank">打开详情页</a>
     </div>
   </div>
-  <div v-if="deleteTarget" class="modal" @click.self="deleteTarget = undefined">
+  <div v-if="deleteTarget" class="modal" @click.self="!deleting && (deleteTarget = undefined)">
     <div v-dialog-focus class="player" role="dialog" aria-modal="true" aria-label="删除这个视频" style="max-width:520px">
       <h2>删除这个视频？</h2>
       <p class="muted">{{ displayTitle(deleteTarget) }}</p>
