@@ -24,6 +24,11 @@ const (
 	transientMax       = 10 * time.Minute
 )
 
+// downloaderOfflineRetry is how long the persistent queue worker waits before
+// retrying after a transient downloader/DB error, instead of exiting and
+// stalling every queued task until the next enqueue event.
+var downloaderOfflineRetry = 15 * time.Second
+
 const rateLimitExhaustedMessage = "rate_limit_retry_exhausted: 来源持续限速，已停止自动重试；可手动重新下载"
 
 const sourceExpiredExhaustedMessage = "source_retry_exhausted: 下载签名持续失效或 CDN 拒绝，已停止自动重试并保留部分文件；可手动重试"

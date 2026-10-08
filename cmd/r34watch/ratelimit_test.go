@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"r34watch/internal/adapters"
 	"r34watch/internal/downloader"
@@ -35,6 +36,26 @@ func (f *fakeEngine) ResumeAll(context.Context) error             { return nil }
 func (f *fakeEngine) SetGlobal(context.Context, int, int64) error { return nil }
 func (f *fakeEngine) Health(context.Context) downloader.Health {
 	return downloader.Health{ID: "aria2", Online: true, SupportsMulti: true}
+}
+
+// flakyEngine reports the downloader as offline until setOnline(true) is
+// called, simulating a transient aria2 RPC failure.
+type flakyEngine struct {
+	fakeEngine
+	mu     sync.Mutex
+	online bool
+}
+
+func (f *flakyEngine) Health(context.Context) downloader.Health {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return downloader.Health{ID: "aria2", Online: f.online, SupportsMulti: true}
+}
+
+func (f *flakyEngine) setOnline(v bool) {
+	f.mu.Lock()
+	f.online = v
+	f.mu.Unlock()
 }
 
 type fakeResolveAdapter struct {
@@ -163,5 +184,62 @@ func TestTaskRateLimitRetryCounterResets(t *testing.T) {
 	}
 	if n, _ := s.TaskRateLimitRetries("rule34video:9"); n != 0 {
 		t.Fatalf("manual retry must reset counter, got %d", n)
+	}
+}
+
+// TestQueueWorkerSurvivesDownloaderOffline guards against a transient aria2
+// health-check failure permanently stopping the persistent queue worker. The
+// worker must keep retrying and resume automatically once the downloader
+// recovers, without waiting for a new enqueue event.
+func TestQueueWorkerSurvivesDownloaderOffline(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "offline.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.AddSubscription(store.Subscription{Slug: "rule34video:creator1", Name: "Creator", URL: "https://rule34video.com/models/creator1/", Platform: "rule34video", Type: "creator", SourceID: "creator1", Enabled: true, CreatedAt: store.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec("INSERT INTO videos(id,subscription_slug,platform,title,page_url,discovered_at,updated_at,status,duration_seconds,creator_url) VALUES(?,?,?,?,?,?,?,?,?,?)",
+		"rule34video:1", "rule34video:creator1", "rule34video", "t", "https://rule34video.com/video/1/", store.Now(), store.Now(), "queued", 100, "https://rule34video.com/models/creator1/"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := s.Settings()
+	cfg.DownloadDir = t.TempDir()
+	cfg.MinFreeBytes = 0
+	_ = s.SaveSettings(cfg)
+
+	prevRetry := downloaderOfflineRetry
+	downloaderOfflineRetry = 20 * time.Millisecond
+	defer func() { downloaderOfflineRetry = prevRetry }()
+
+	a := New(s)
+	engine := &flakyEngine{online: false}
+	a.engineOverride = engine
+	a.adapters.Register(&fakeResolveAdapter{urls: []string{"https://cdn.example/a_1080p.mp4?v-acctoken=AAA"}})
+
+	a.startQueueWorker()
+	// Give the worker time to hit the offline downloader a few times.
+	time.Sleep(150 * time.Millisecond)
+	engine.setOnline(true)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		engine.fakeEngine.mu.Lock()
+		n := len(engine.fakeEngine.urls)
+		engine.fakeEngine.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	engine.fakeEngine.mu.Lock()
+	submitted := len(engine.fakeEngine.urls)
+	engine.fakeEngine.mu.Unlock()
+	if submitted != 1 {
+		t.Fatalf("worker did not resume after downloader recovered, submissions=%d", submitted)
+	}
+	if v, err := s.Video("rule34video:1"); err != nil || (v.Status != "waiting" && v.Status != "active") {
+		t.Fatalf("queued task not submitted after recovery: status=%q err=%v", v.Status, err)
 	}
 }

@@ -654,11 +654,21 @@ func (a *App) startQueueWorker() {
 				return
 			}
 			cfg, cfgErr := a.store.Settings()
-			if cfgErr != nil || cfg.DownloadPaused {
+			if cfgErr != nil {
+				// A transient settings read error must not kill the worker,
+				// otherwise queued tasks stall until the next enqueue event.
+				a.waitForQueueRetry(downloaderOfflineRetry)
+				continue
+			}
+			if cfg.DownloadPaused {
 				return
 			}
 			candidates, candErr := a.store.QueuedCandidates(200)
-			if candErr != nil || len(candidates) == 0 {
+			if candErr != nil {
+				a.waitForQueueRetry(downloaderOfflineRetry)
+				continue
+			}
+			if len(candidates) == 0 {
 				return
 			}
 			video, wait := a.pickRunnable(candidates)
@@ -694,7 +704,11 @@ func (a *App) startQueueWorker() {
 					continue
 				}
 				if failure.Code == "downloader_offline" {
-					return
+					// The downloader may be momentarily unreachable (RPC
+					// timeout while busy). Keep the worker alive and retry
+					// instead of stalling the whole queue indefinitely.
+					a.waitForQueueRetry(downloaderOfflineRetry)
+					continue
 				}
 				if strings.HasPrefix(err.Error(), "excluded: ") {
 					continue
@@ -735,6 +749,16 @@ func (a *App) signalQueue() {
 	select {
 	case a.queueWake <- struct{}{}:
 	default:
+	}
+}
+
+// waitForQueueRetry blocks until the retry delay elapses or a new task is
+// enqueued, so a transient downloader/database error does not permanently
+// stop the persistent queue worker.
+func (a *App) waitForQueueRetry(d time.Duration) {
+	select {
+	case <-time.After(d):
+	case <-a.queueWake:
 	}
 }
 
