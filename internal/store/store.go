@@ -137,7 +137,7 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS rate_limits (source_key TEXT PRIMARY KEY,host TEXT NOT NULL DEFAULT '',consecutive_429 INTEGER NOT NULL DEFAULT 0,backoff_until TEXT NOT NULL DEFAULT '',last_429_at TEXT NOT NULL DEFAULT '',retry_after_seconds INTEGER NOT NULL DEFAULT 0,transient INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS task_rate_limits (video_id TEXT PRIMARY KEY,retries INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE TABLE IF NOT EXISTS deletion_plans (plan_id TEXT PRIMARY KEY,kind TEXT NOT NULL DEFAULT '',plan_version INTEGER NOT NULL DEFAULT 0,subscription_slug TEXT NOT NULL DEFAULT '',scan_id TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);" +
-	"CREATE TABLE IF NOT EXISTS deletion_plan_items (plan_id TEXT NOT NULL,video_id TEXT NOT NULL,kept_video_id TEXT NOT NULL DEFAULT '',expected_size INTEGER NOT NULL DEFAULT 0,expected_sha256 TEXT NOT NULL DEFAULT '',original_path TEXT NOT NULL DEFAULT '',quarantine_path TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(plan_id,video_id));"
+	"CREATE TABLE IF NOT EXISTS deletion_plan_items (plan_id TEXT NOT NULL,video_id TEXT NOT NULL,group_id TEXT NOT NULL DEFAULT '',kept_video_id TEXT NOT NULL DEFAULT '',expected_size INTEGER NOT NULL DEFAULT 0,expected_sha256 TEXT NOT NULL DEFAULT '',original_path TEXT NOT NULL DEFAULT '',quarantine_path TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(plan_id,video_id));"
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
@@ -186,6 +186,7 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE duplicate_candidates ADD COLUMN algorithm_version TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE duplicate_candidates ADD COLUMN metrics_json TEXT NOT NULL DEFAULT '{}'",
 		"ALTER TABLE rate_limits ADD COLUMN transient INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE deletion_plan_items ADD COLUMN group_id TEXT NOT NULL DEFAULT ''",
 	} {
 		_, _ = db.Exec(statement)
 	}
