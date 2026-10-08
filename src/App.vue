@@ -409,6 +409,39 @@ type CleanupPreview = {
 };
 const mediaScan = ref<MediaScan>();
 const cleanupPreview = ref<CleanupPreview>();
+type VdfItemView = {
+  path: string;
+  size_bytes: number;
+  resolution?: string;
+  match_status: string;
+  video_id?: string;
+  subscription_slug?: string;
+  db_path?: string;
+  file_size?: number;
+  detail?: string;
+};
+type VdfGroupView = {
+  group_id: string;
+  reason: string;
+  status: string;
+  subscription_slug: string;
+  problems: string[];
+  remove_items: VdfItemView[];
+  keep_items: VdfItemView[];
+  estimated_freed: number;
+};
+type VdfPreview = {
+  format: string;
+  storage_available: boolean;
+  groups: number;
+  ready_groups: number;
+  rejected_groups: number;
+  remove_items: number;
+  matched_items: number;
+  estimated_freed: number;
+  items: VdfGroupView[];
+};
+const vdfPreviewData = ref<VdfPreview>();
 const deletionListText = ref("");
 const integrityNotice = ref("");
 const integrityBusy = ref(false);
@@ -859,11 +892,39 @@ async function importDeletionList() {
   }
   integrityBusy.value = true;
   try {
-    cleanupPreview.value = await api("/api/media-integrity/import", {
+    const result = await api("/api/media-integrity/import", {
       method: "POST",
       body: deletionListText.value,
     });
+    if (result && result.format === "vdf_gui") {
+      vdfPreviewData.value = result;
+      cleanupPreview.value = undefined;
+    } else {
+      cleanupPreview.value = result;
+      vdfPreviewData.value = undefined;
+    }
     integrityNotice.value = "";
+  } catch (e) {
+    integrityNotice.value = String(e);
+  } finally {
+    integrityBusy.value = false;
+  }
+}
+async function vdfExecute(confirm: boolean) {
+  integrityBusy.value = true;
+  try {
+    const result = await api("/api/media-integrity/vdf/execute", {
+      method: "POST",
+      body: JSON.stringify({ raw: deletionListText.value, confirm }),
+    });
+    integrityNotice.value = confirm
+      ? `VDF 清理：执行 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}，需恢复 ${result.needs_recovery}`
+      : `VDF Dry run：${vdfPreviewData.value?.ready_groups ?? 0} 组可清理，预计释放 ${size(result.estimated_freed)}`;
+    if (confirm) {
+      await loadIntegrity();
+      await loadExclusions();
+      await importDeletionList();
+    }
   } catch (e) {
     integrityNotice.value = String(e);
   } finally {
@@ -1879,20 +1940,78 @@ watch(
           ></textarea>
           <div class="inline" style="margin-top: 10px">
             <button :disabled="integrityBusy" @click="importDeletionList">预览</button>
-            <button
-              class="primary"
-              :disabled="integrityBusy || !cleanupPreview"
-              @click="applyDeletionList(false)"
+            <template v-if="vdfPreviewData">
+              <button
+                class="primary"
+                :disabled="integrityBusy"
+                @click="vdfExecute(false)"
+              >
+                VDF Dry Run
+              </button>
+              <button
+                class="danger"
+                :disabled="integrityBusy || !vdfPreviewData.ready_groups"
+                @click="vdfExecute(true)"
+              >
+                二次确认并执行 VDF 清理
+              </button>
+            </template>
+            <template v-else>
+              <button
+                class="primary"
+                :disabled="integrityBusy || !cleanupPreview"
+                @click="applyDeletionList(false)"
+              >
+                Dry Run
+              </button>
+              <button
+                class="danger"
+                :disabled="integrityBusy || !cleanupPreview || !cleanupPreview.candidates"
+                @click="applyDeletionList(true)"
+              >
+                确认执行清理
+              </button>
+            </template>
+          </div>
+          <div v-if="vdfPreviewData" class="stats" style="margin-top: 12px">
+            <article><small>VDF 组</small><b>{{ vdfPreviewData.groups }}</b><span>原生导出</span></article>
+            <article><small>可清理组</small><b>{{ vdfPreviewData.ready_groups }}</b><span>已验证匹配</span></article>
+            <article><small>拒绝组</small><b>{{ vdfPreviewData.rejected_groups }}</b><span>需人工核对</span></article>
+            <article><small>已匹配媒体</small><b>{{ vdfPreviewData.matched_items }}</b><span>/ {{ vdfPreviewData.remove_items }} 删除项</span></article>
+            <article><small>预计释放</small><b>{{ size(vdfPreviewData.estimated_freed) }}</b><span>可回收空间</span></article>
+          </div>
+          <div v-if="vdfPreviewData" class="rows" style="margin-top: 12px">
+            <article
+              v-for="g in vdfPreviewData.items.slice(0, 100)"
+              :key="g.group_id"
+              class="vdf-group"
             >
-              Dry Run
-            </button>
-            <button
-              class="danger"
-              :disabled="integrityBusy || !cleanupPreview || !cleanupPreview.candidates"
-              @click="applyDeletionList(true)"
-            >
-              确认执行清理
-            </button>
+              <div class="vdf-group-head">
+                <b>{{ g.group_id }}</b>
+                <span class="integrity-badge" :class="'integrity-' + (g.status === 'ready' ? 'verified' : 'rejected')">{{
+                  g.status === "ready" ? "可清理" : "已拒绝"
+                }}</span>
+                <span class="muted">{{ g.subscription_slug || "?" }} · 释放 {{ size(g.estimated_freed) }}</span>
+              </div>
+              <div class="vdf-items">
+                <div>
+                  <small class="error">删除 ({{ g.remove_items.length }})</small>
+                  <p v-for="it in g.remove_items" :key="it.path" class="muted">
+                    {{ it.match_status === "matched" ? "✓" : "✗" }} {{ it.path }}
+                    <em v-if="it.video_id">→ {{ it.video_id }} ({{ it.match_status }})</em>
+                    <em v-else>({{ it.match_status }})</em>
+                  </p>
+                </div>
+                <div>
+                  <small>保留 ({{ g.keep_items.length }})</small>
+                  <p v-for="it in g.keep_items" :key="it.path" class="muted">
+                    {{ it.match_status === "matched" ? "✓" : "✗" }} {{ it.path }}
+                    <em v-if="it.video_id">→ {{ it.video_id }}</em>
+                  </p>
+                </div>
+              </div>
+              <p v-if="g.problems.length" class="error">{{ g.problems.join("；") }}</p>
+            </article>
           </div>
         </div>
         <div class="panel">

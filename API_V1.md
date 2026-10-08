@@ -339,13 +339,18 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 ### `POST /api/media-integrity/import`
 
-请求体为外部 VDF/TransRunner 删除清单 JSON（顶层数组，或 `{"version":1,"generated_at":"...","deletions":[...]}`）。每条至少包含 `video_id`，可选 `original_path`、`size`、`deleted_at`、`reason`（`duplicate`）、`kept_video_id`、`evidence`、`reference`。按 canonical `video_id` 匹配数据库，**不依据文件名**认定同一视频。返回校验预览（不写库）：
+自动识别删除清单格式并返回校验预览（不写库、不动文件）：
 
-```json
-{"storage_available":true,"deletions":8,"candidates":2,"already_excluded":1,"skipped":5,"items":[...]}
-```
+- **外部已删除清单**（顶层数组，或 `{"version":1,"deletions":[...]}`）：每条含 `video_id`，可选 `original_path`、`size`、`reason`、`kept_video_id`、`evidence`。按 canonical `video_id` 匹配，不依据文件名。返回 `{format:"legacy_deletion_list",storage_available,deletions,candidates,already_excluded,skipped,items}`。条目状态：`candidate`、`file_present`、`path_mismatch`、`unknown_video`、`not_completed`、`active`、`already_excluded`、`already_removed`、`path_invalid`。
+- **VDF GUI 原生导出**（`{"CreatedAt":...,"EstimatedTotalSavingsBytes":...,"Groups":[{"GroupId":...,"RemoveItems":[{"Path","SizeBytes","Resolution","DateCreated"}],"KeepItems":[...]}]}`）：VDF 无 `video_id`，HWatch 用 Path 匹配媒体（先按媒体根相对路径精确匹配，再按末两段路径后缀，最后按**唯一 basename**；macOS 前缀差异由后缀/basename 兼容）。无法唯一匹配（`unmatched`/`ambiguous`）时拒绝执行。返回 `{format:"vdf_gui",storage_available,groups,ready_groups,rejected_groups,remove_items,matched_items,estimated_freed,items:[{group_id,status,subscription_slug,problems,remove_items,keep_items,estimated_freed}]}`。
 
-条目状态：`candidate`（可清理）、`file_present`（文件仍在，拒绝）、`path_mismatch`（清单路径与数据库不一致）、`unknown_video`、`not_completed`、`active`（下载/转码中）、`already_excluded`、`already_removed`、`path_invalid`。
+**格式通过 schema 判别**（存在 `kind` → TransRunner 计划；存在 `Groups`/`groups` → VDF GUI；数组或 `deletions` → 外部清单），不会把 pending 删除计划误当成已删除清单。TransRunner 计划请用“模式二” `/plan/*`。
+
+组校验：删除项与保留项必须属于同一订阅、video_id 不同、保留文件存在、删除文件大小与 VDF 记录一致、删除路径受管；不同版本/无法确认一致时按 `rejected` 处理，不允许执行。
+
+### `POST /api/media-integrity/vdf/execute`
+
+请求体 `{"raw":"<VDF GUI 导出 JSON>","confirm":false}`。`confirm=false` 为 Dry Run；`confirm=true` 时对 `ready` 组复用 Phase 2 隔离机制：验证文件身份 → 移入同文件系统隔离区 `.hwatch-quarantine/<plan_id>/` → 事务性 `RemoveAndExclude`（reason=`vdf_gui_duplicate`）。执行状态持久化，重复执行幂等，可通过 `/api/media-integrity/plan/{id}/recover` 补齐。返回 `{plan_id,dry_run,executed,skipped,failed,needs_recovery,estimated_freed}`。仅管理员会话 + CSRF。
 
 ### `POST /api/media-integrity/apply`
 
