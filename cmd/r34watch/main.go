@@ -393,6 +393,37 @@ func csvValues(raw string) []string {
 	}
 	return out
 }
+
+// libraryRandom serves a small, uniformly random sample of library media for
+// the "random discovery" panel. It is read-only and reuses the library filter
+// semantics; the requested batch size is intentionally small.
+func (a *App) libraryRandom(w http.ResponseWriter, r *http.Request) {
+	limit := intParam(r, "limit", 6, 1, 24)
+	values := r.URL.Query()
+	language := values.Get("language")
+	if language == "" {
+		language = "zh-CN"
+	}
+	opts := store.VideoSearch{
+		Query:       values.Get("q"),
+		Scope:       values.Get("scope"),
+		Language:    language,
+		TagMode:     values.Get("tag_mode"),
+		Creator:     values.Get("creator"),
+		Codec:       values.Get("codec"),
+		Tags:        csvValues(values.Get("tags")),
+		ExcludeTags: csvValues(values.Get("exclude_tags")),
+		MinHeight:   intParam(r, "min_height", 0, 0, 10000),
+	}
+	items, err := a.store.RandomVideos(limit, opts, csvValues(values.Get("exclude")))
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	translations, _ := a.store.Translations(language)
+	respond(w, 200, map[string]any{"items": translatedVideoMaps(items, language, translations), "limit": limit})
+}
+
 func (a *App) videoFacets(w http.ResponseWriter, r *http.Request) {
 	items, err := a.store.VideoFacets()
 	if err != nil {
@@ -1927,6 +1958,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/transrunner/v1/transcode-results/{runner_job_id}", a.requireIntegrationScope("read_media", a.trTranscodeResultGet))
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
+	mux.HandleFunc("GET /api/library/random", a.libraryRandom)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)
 	mux.HandleFunc("GET /api/translations/export", a.exportTranslations)
 	mux.HandleFunc("POST /api/translations/import", a.importTranslations)

@@ -126,6 +126,11 @@ const {
   minHeight,
   sortBy,
   sortOrder,
+  randomItems,
+  randomError,
+  randomScope,
+  randomOpen,
+  loadRandom,
   pages,
   unfinishedDownloadTasks,
   completedDownloadTasks,
@@ -1584,6 +1589,66 @@ const {
           >
             清除筛选
           </button>
+        </div>
+        <div v-if="view === 'library'" class="panel random-discovery">
+          <div class="random-head">
+            <button
+              class="random-title"
+              type="button"
+              :aria-expanded="randomOpen"
+              @click="randomOpen = !randomOpen"
+            >
+              随机发现
+            </button>
+            <span class="random-sub"
+              >从整个影视库随机抽取，发现久未播放的内容。</span
+            >
+            <select v-model="randomScope" aria-label="随机范围">
+              <option value="all">全部媒体</option>
+              <option value="current">当前筛选</option>
+            </select>
+            <button
+              class="primary"
+              :disabled="actionPending('library-random')"
+              :aria-busy="actionPending('library-random')"
+              @click="loadRandom(true)"
+            >
+              {{ actionPending("library-random") ? "换一批中…" : "换一批" }}
+            </button>
+          </div>
+          <p v-if="randomError" class="random-error" role="status">
+            {{ randomError }}
+          </p>
+          <div v-if="randomOpen" class="library random-grid">
+            <MediaCard
+              v-for="v in randomItems"
+              :key="'random-' + v.video_id"
+              :title="displayTitle(v)"
+              :subtitle="
+                displaySubtitle(
+                  v,
+                  (v.creator_name || v.subscription_slug) +
+                    ' · ' +
+                    (v.published_at ? localTime(v.published_at) : '日期未知'),
+                )
+              "
+              :summary="mediaSummary(v) || v.views.toLocaleString() + ' 次观看'"
+              :duration="duration(v.duration_seconds)"
+              :src="'/thumb/' + v.video_id"
+              :state="coverState(v.video_id)"
+              :downloadable="false"
+              :pending="false"
+              @image="(el) => registerCoverImg(v.video_id, el)"
+              @loaded="markCoverLoaded(v.video_id)"
+              @error="onCoverError($event, v.video_id)"
+              @play="selected = v"
+            />
+            <StatePanel
+              v-if="!randomItems.length && !actionPending('library-random')"
+              title="暂无随机推荐"
+              description="当前范围内没有可随机发现的已下载媒体。"
+            />
+          </div>
         </div>
         <div class="library">
           <MediaCard
