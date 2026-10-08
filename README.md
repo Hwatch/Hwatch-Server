@@ -112,4 +112,12 @@ SQLite 和 aria2 会话位于 data 目录。Plex 将同一个宿主机媒体目�
 
 ## 项目状态
 
+### Frontend 2.0 独立体验
+
+`feature/frontend-v2` 基于 TransRunner 集成分支开发，保留现有 API 与安全流程，不自动部署或合并主线。
+
+运行 `npm ci`、`npm run build`、`npm run preview:v2`，可在 `http://127.0.0.1:5189` 使用临时 SQLite 和媒体目录体验。浏览器验收使用 `npm run test:e2e`；包含真实隔离后端的完整验收使用 `HWATCH_LIVE_TEST=1 npm run test:e2e`（先启动独立预览）。
+
+审计见 [FRONTEND_AUDIT.md](FRONTEND_AUDIT.md)，交付、性能与测试限制见 [FRONTEND_V2_DELIVERY.md](FRONTEND_V2_DELIVERY.md)。截图对比入口为 `acceptance/index.html`。
+
 当前仍处于快速开发阶段。未完成事项与长期规划见 [TODO.md](TODO.md)。正式公开仓库前还需要由维护者选择并添加 LICENSE。
