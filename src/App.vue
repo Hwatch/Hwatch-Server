@@ -431,6 +431,69 @@ const cleanupStatusLabels: Record<string, string> = {
 function cleanupStatusLabel(status: string): string {
   return cleanupStatusLabels[status] || status;
 }
+type PlanItemView = {
+  video_id: string;
+  kept_video_id: string;
+  original_path: string;
+  expected_size: number;
+  expected_sha256: string;
+  status: string;
+  reason?: string;
+  freed_bytes?: number;
+};
+type PlanPreview = {
+  kind: string;
+  plan_version: number;
+  scan_id: string;
+  subscription_slug: string;
+  valid: boolean;
+  problems: string[];
+  total: number;
+  ready: number;
+  rejected: number;
+  already_excluded: number;
+  needs_recovery: number;
+  estimated_freed: number;
+  items: PlanItemView[];
+};
+type PlanResult = {
+  plan_id: string;
+  dry_run: boolean;
+  executed: number;
+  skipped: number;
+  failed: number;
+  needs_recovery: number;
+  estimated_freed: number;
+};
+type DeletionPlanRow = {
+  plan_id: string;
+  kind: string;
+  plan_version: number;
+  subscription_slug: string;
+  scan_id: string;
+  status: string;
+  created_at: string;
+};
+const planText = ref("");
+const planPreviewData = ref<PlanPreview>();
+const planResult = ref<PlanResult>();
+const deletionPlans = ref<DeletionPlanRow[]>([]);
+const planNotice = ref("");
+const planBusy = ref(false);
+const planStatusLabels: Record<string, string> = {
+  pending: "待处理",
+  verified: "已验证",
+  rejected: "已拒绝",
+  already_excluded: "已排除",
+  quarantined: "已隔离",
+  db_excluded: "已清理",
+  failed: "失败",
+  needs_recovery: "需恢复",
+  completed: "已完成",
+};
+function planStatusLabel(status: string): string {
+  return planStatusLabels[status] || status;
+}
 const deleteTarget = ref<Video | undefined>(undefined);
 const deleteMode = ref<"delete_and_exclude" | "delete_only">("delete_and_exclude");
 const deleting = ref(false);
@@ -719,10 +782,74 @@ async function loadIntegrity() {
   integrityBusy.value = true;
   try {
     mediaScan.value = await api("/api/media-integrity/scan");
+    await loadDeletionPlans();
   } catch (e) {
     integrityNotice.value = String(e);
   } finally {
     integrityBusy.value = false;
+  }
+}
+async function loadDeletionPlans() {
+  try {
+    deletionPlans.value = (await api("/api/media-integrity/plans")).items || [];
+  } catch {}
+}
+async function previewTransRunnerPlan() {
+  if (!planText.value.trim()) {
+    planNotice.value = "请粘贴 TransRunner 删除计划 JSON";
+    return;
+  }
+  planBusy.value = true;
+  try {
+    planPreviewData.value = await api("/api/media-integrity/plan/preview", {
+      method: "POST",
+      body: JSON.stringify({ raw: planText.value }),
+    });
+    planResult.value = undefined;
+    planNotice.value = "";
+  } catch (e) {
+    planNotice.value = String(e);
+  } finally {
+    planBusy.value = false;
+  }
+}
+async function executeTransRunnerPlan(confirm: boolean) {
+  planBusy.value = true;
+  try {
+    const result = await api("/api/media-integrity/plan/execute", {
+      method: "POST",
+      body: JSON.stringify({ raw: planText.value, confirm }),
+    });
+    planResult.value = result;
+    planNotice.value = confirm
+      ? `已清理 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}，需恢复 ${result.needs_recovery}`
+      : `Dry run：${planPreviewData.value?.ready ?? 0} 项可清理，预计释放 ${size(result.estimated_freed)}`;
+    await loadDeletionPlans();
+    if (confirm) {
+      await loadIntegrity();
+      await loadExclusions();
+      await previewTransRunnerPlan();
+    }
+  } catch (e) {
+    planNotice.value = String(e);
+  } finally {
+    planBusy.value = false;
+  }
+}
+async function recoverPlan(planId: string) {
+  planBusy.value = true;
+  try {
+    const result = await api(
+      "/api/media-integrity/plan/" + encodeURIComponent(planId) + "/recover",
+      { method: "POST" },
+    );
+    planNotice.value = `恢复：完成 ${result.executed}，需恢复 ${result.needs_recovery}`;
+    await loadDeletionPlans();
+    await loadIntegrity();
+  } catch (e) {
+    planNotice.value = String(e);
+  } finally {
+    planBusy.value = false;
   }
 }
 async function importDeletionList() {
@@ -1714,8 +1841,9 @@ watch(
       </section>
       <section v-else-if="view === 'integrity'">
         <p class="muted">
-          扫描已完成媒体文件完整性，并导入外部 VDF 删除清单来安全清理数据库并加入“已排除”。默认 Dry
-          Run，未确认前不会修改任何记录；缺失但无清单确认的文件只展示、不自动排除。
+          扫描已完成媒体文件完整性。两种清理模式：<b>模式一</b> 外部工具已删除、HWatch 核对后加入“已排除”；
+          <b>模式二</b> 导入 TransRunner 删除计划，由 HWatch 将重复文件移入隔离区并更新数据库/排除。
+          全部默认 Dry Run，需二次确认；缺失但无计划确认的文件只展示、不自动排除。
         </p>
         <div class="toolbar">
           <button class="primary" :disabled="integrityBusy" @click="loadIntegrity">
@@ -1765,6 +1893,85 @@ watch(
             >
               确认执行清理
             </button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>模式二：导入 TransRunner 删除计划（HWatch 执行清理）</h2>
+          <textarea
+            v-model="planText"
+            rows="6"
+            placeholder='{"kind":"transrunner-duplicate-deletion-plan","plan_version":1,"scan_id":"...","subscription_slug":"rule34video:...","executable":true,"stale":false,"user_confirmed":true,"items":[{"video_id":"...","kept_video_id":"...","original_path":"...","expected_size":123,"expected_sha256":"..."}]}'
+          ></textarea>
+          <div class="inline" style="margin-top: 10px">
+            <button :disabled="planBusy" @click="previewTransRunnerPlan">校验预览</button>
+            <button
+              class="primary"
+              :disabled="planBusy || !planPreviewData"
+              @click="executeTransRunnerPlan(false)"
+            >
+              Dry Run
+            </button>
+            <button
+              class="danger"
+              :disabled="planBusy || !planPreviewData || !planPreviewData.ready"
+              @click="executeTransRunnerPlan(true)"
+            >
+              二次确认并执行清理
+            </button>
+          </div>
+          <div v-if="planNotice" class="notice" role="status" style="margin-top: 10px">
+            {{ planNotice }}
+          </div>
+          <div v-if="planPreviewData" class="stats" style="margin-top: 12px">
+            <article><small>计划条数</small><b>{{ planPreviewData.total }}</b><span>{{ planPreviewData.subscription_slug }}</span></article>
+            <article><small>可清理</small><b>{{ planPreviewData.ready }}</b><span>已验证一致</span></article>
+            <article><small>已拒绝</small><b>{{ planPreviewData.rejected }}</b><span>校验不通过</span></article>
+            <article><small>需恢复</small><b>{{ planPreviewData.needs_recovery }}</b><span>文件已不在</span></article>
+            <article><small>预计释放</small><b>{{ size(planPreviewData.estimated_freed) }}</b><span>可回收空间</span></article>
+          </div>
+          <div v-if="planResult" class="muted" style="margin-top: 8px">
+            {{ planResult.dry_run ? "Dry Run" : "已执行" }} · 清理 {{ planResult.executed }} · 跳过
+            {{ planResult.skipped }} · 失败 {{ planResult.failed }} · 需恢复 {{ planResult.needs_recovery }}
+          </div>
+          <div v-if="planPreviewData" class="rows" style="margin-top: 12px">
+            <article
+              v-for="item in planPreviewData.items.slice(0, 200)"
+              :key="item.video_id"
+              class="integrity-row"
+            >
+              <span class="avatar">{{ item.video_id.slice(-1).toUpperCase() }}</span>
+              <div>
+                <b>{{ item.video_id }}</b>
+                <small>保留: {{ item.kept_video_id }}</small>
+                <small>{{ item.original_path }}</small>
+                <small v-if="item.reason" class="error">{{ item.reason }}</small>
+              </div>
+              <span class="integrity-badge" :class="'integrity-' + item.status">{{
+                planStatusLabel(item.status)
+              }}</span>
+            </article>
+          </div>
+          <div v-if="planPreviewData && !planPreviewData.valid" class="error" style="margin-top: 8px">
+            计划不可执行：{{ planPreviewData.problems.join("；") }}
+          </div>
+        </div>
+        <div v-if="deletionPlans.length" class="panel">
+          <h2>删除计划执行记录</h2>
+          <div class="rows">
+            <article v-for="p in deletionPlans" :key="p.plan_id" class="integrity-row">
+              <span class="avatar">{{ planStatusLabel(p.status).slice(0, 1) }}</span>
+              <div>
+                <b>{{ p.scan_id || p.plan_id }}</b>
+                <small>{{ p.subscription_slug }}</small>
+                <small>{{ localTime(p.created_at) }}</small>
+              </div>
+              <span class="actions">
+                <button :disabled="planBusy" @click="recoverPlan(p.plan_id)">恢复/核对</button>
+                <span class="integrity-badge" :class="'integrity-' + p.status">{{
+                  planStatusLabel(p.status)
+                }}</span>
+              </span>
+            </article>
           </div>
         </div>
         <div v-if="mediaScan" class="panel">
