@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const appPath = fileURLToPath(new URL("../src/App.vue", import.meta.url));
-const src = readFileSync(appPath, "utf8");
+const src = readFileSync(appPath, "utf8") + readFileSync(fileURLToPath(new URL("../src/useHWatchApp.ts", import.meta.url)), "utf8");
 
 const failures = [];
 const check = (ok, message) => {
