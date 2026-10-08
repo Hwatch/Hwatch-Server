@@ -2,6 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
+import PageHeader from "./components/PageHeader.vue";
+import StatePanel from "./components/StatePanel.vue";
+import StatusBadge from "./components/StatusBadge.vue";
+import { dialogFocus as vDialogFocus } from "./dialogFocus";
 import { requestJSON } from "./api-client";
 import { createAsyncActions } from "./asyncAction";
 import { createToasts } from "./toast";
@@ -305,6 +309,12 @@ const viewTitles: Record<string, string> = {
   translations: "翻译管理",
   notifications: "通知",
   settings: "设置",
+};
+const pageDescriptions:Record<string,string> = {
+  home:'下载、媒体与存储的实时概况', subscriptions:'管理作者与番剧来源，查看采集和下载进度',
+  downloads:'查看下载速度、队列和失败原因',library:'浏览已下载媒体，搜索原文与译文',undownloaded:'筛选发现的作品并提交下载',
+  excluded:'查看排除原因，恢复允许下载',integrity:'扫描与校验媒体，所有清理均需预览和确认',
+  translations:'导出与回导翻译，刷新 Plex 元数据',notifications:'系统提醒与请求级操作记录',settings:'下载、存储、备份与界面偏好',
 };
 const viewFromPath = () => {
   const raw = window.location.pathname.replace(/\/+$/, "") || "/";
@@ -1720,6 +1730,7 @@ watch(
 );
 </script>
 <template>
+  <a v-if="auth.authenticated" href="#main-content" class="skip-link">跳到主要内容</a>
   <div v-if="!authReady" class="auth-screen">
     <div class="auth-card">
       <div class="auth-logo">H</div>
@@ -1792,7 +1803,7 @@ watch(
       aria-label="关闭侧栏"
       @click="setSidebarCollapsed(true)"
     ></button>
-    <aside>
+    <aside aria-label="应用导航">
       <div class="brand"><span>H</span><b>HWatch</b></div>
       <nav>
         <template v-for="group in navGroups" :key="group.id">
@@ -1811,6 +1822,7 @@ watch(
               v-for="item in group.items"
               :key="item.id"
               :class="{ active: view === item.id }"
+              :aria-current="view === item.id ? 'page' : undefined"
               @click="changeView(item.id)"
             >
               <NavIcon :name="item.id" /><span class="nav-text">{{
@@ -1874,14 +1886,8 @@ watch(
         </div>
       </div>
     </aside>
-    <main>
-      <header>
-        <div>
-          <p class="eyebrow">{{ view.toUpperCase() }}</p>
-          <h1>
-            {{ viewTitles[view] || "HWatch" }}
-          </h1>
-        </div>
+    <main id="main-content" tabindex="-1">
+      <PageHeader :title="viewTitles[view] || 'HWatch'" :description="pageDescriptions[view]">
         <button
           v-if="view === 'undownloaded'"
           class="primary"
@@ -1916,7 +1922,7 @@ watch(
         >
           {{ actionPending("check:all") ? "检查中…" : "检查更新" }}
         </button>
-      </header>
+      </PageHeader>
       <div v-if="toasts.list.length" class="toasts" aria-live="polite">
         <div
           v-for="t in toasts.list"
@@ -2616,6 +2622,7 @@ watch(
                 <b>{{ displayTitle(v) }}</b
                 ><span>{{ pct(v) }}%</span>
               </div>
+              <StatusBadge :status="v.status" />
               <small
                 >{{ size(v.bytes_downloaded) }} /
                 {{ v.total_bytes ? size(v.total_bytes) : "等待获取大小" }} ·
@@ -2856,9 +2863,7 @@ watch(
               <button v-else class="library-card__play" @click="videoAction(v, 'download')">下载</button>
             </div>
           </article>
-          <div v-if="!videos.length" class="empty">
-            {{ view === "library" ? "影视库暂无已下载视频" : "没有未下载视频" }}
-          </div>
+          <StatePanel v-if="!videos.length" :title="view === 'library' ? '影视库暂无已下载视频' : '没有未下载视频'" description="可调整筛选条件，或在订阅管理中添加来源。" />
         </div>
         <div class="pagination">
           <button
@@ -2973,7 +2978,7 @@ watch(
     </nav>
   </div>
   <div v-if="selected" class="modal" @click.self="selected = undefined">
-    <div class="player" role="dialog" aria-modal="true" :aria-label="displayTitle(selected)">
+    <div v-dialog-focus class="player" role="dialog" aria-modal="true" :aria-label="displayTitle(selected)">
       <div class="player-top-actions">
         <button class="danger" @click="openDelete(selected)">删除</button>
         <button class="close" @click="selected = undefined">关闭</button>
@@ -3011,7 +3016,7 @@ watch(
     </div>
   </div>
   <div v-if="deleteTarget" class="modal" @click.self="deleteTarget = undefined">
-    <div class="player" role="dialog" aria-modal="true" style="max-width:520px">
+    <div v-dialog-focus class="player" role="dialog" aria-modal="true" aria-label="删除这个视频" style="max-width:520px">
       <h2>删除这个视频？</h2>
       <p class="muted">{{ displayTitle(deleteTarget) }}</p>
       <div class="delete-options">
