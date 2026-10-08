@@ -1627,10 +1627,20 @@ export function useHWatchApp() {
       notice.value = "导入失败：" + (result.error || "");
     }
   }
-  function exportTranslation() {
-    window.location.href =
-      "/api/translations/export?language=" +
-      encodeURIComponent(translationLanguage.value);
+  async function exportTranslation() {
+    const language = translationLanguage.value;
+    const result = await actions.run('translation-export', async () => {
+      const payload = await api('/api/translations/export?language=' + encodeURIComponent(language));
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hwatch-translations-${language}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    if (!result.ok && !result.duplicate) notice.value = '导出失败：' + (result.error || '');
   }
   async function importTranslation(event: Event) {
     const input = event.target as HTMLInputElement;
