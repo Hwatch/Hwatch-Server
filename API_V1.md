@@ -325,6 +325,36 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 
 删除与排除管理仅允许管理员会话 + CSRF；Service Token 即使具有 `read_media` 也不得删除媒体或管理排除项。前端“重复审查”页面已移除，但重复候选/指纹后端与 `/api/transrunner/v1/duplicate-results` 仍然保留，供 TransRunner 使用。
 
+### `GET /api/media-integrity/scan`
+
+只读扫描 `completed` 媒体的本地文件完整性，返回分类计数与异常条目：
+
+```json
+{"storage_available":true,"total":2696,"present":2619,"missing":40,"moved":2,"permission_denied":0,"path_invalid":3,"unreadable":0,"items":[{"video_id":"rule34video:...","platform":"rule34video","title":"...","path":"...","status":"missing","detail":"..."}],"scanned_at":"..."}
+```
+
+- `status`：`present`、`missing`、`moved`（同目录存在同名文件，疑似移动）、`permission_denied`、`path_invalid`、`unreadable`。
+- **存储不可访问时 `storage_available=false` 且不返回任何缺失判定**（避免把 NAS 断线当作删除）。
+- 只读，不修改数据库；不扫描下载中/转码中/未完成的媒体。
+
+### `POST /api/media-integrity/import`
+
+请求体为外部 VDF/TransRunner 删除清单 JSON（顶层数组，或 `{"version":1,"generated_at":"...","deletions":[...]}`）。每条至少包含 `video_id`，可选 `original_path`、`size`、`deleted_at`、`reason`（`duplicate`）、`kept_video_id`、`evidence`、`reference`。按 canonical `video_id` 匹配数据库，**不依据文件名**认定同一视频。返回校验预览（不写库）：
+
+```json
+{"storage_available":true,"deletions":8,"candidates":2,"already_excluded":1,"skipped":5,"items":[...]}
+```
+
+条目状态：`candidate`（可清理）、`file_present`（文件仍在，拒绝）、`path_mismatch`（清单路径与数据库不一致）、`unknown_video`、`not_completed`、`active`（下载/转码中）、`already_excluded`、`already_removed`、`path_invalid`。
+
+### `POST /api/media-integrity/apply`
+
+请求体 `{"confirm":false,"raw":"<清单JSON>"}` 或 `{"confirm":false,"deletions":[...]}`。`confirm=false` 为 Dry Run，只返回 `{dry_run,candidates,executed,skipped,failed}`；`confirm=true` 才会执行。执行前对每条重新校验（存储已挂载、文件确实缺失、状态仍为 `completed`、未加入排除），然后**在单个 SQLite 事务内**写入 `media_exclusions`（reason=`vdf_duplicate`）并将视频置为 `removed`；每条独立事务，单项失败不影响其它条目，重复导入幂等。
+
+- 仅删除数据库记录并写入 exclusion；**不会删除或移动任何文件**（文件已由外部工具删除）。
+- 无清单确认的缺失文件只展示，不自动排除。
+- 仅允许管理员会话 + CSRF；Service Token 无权调用。
+
 ### `GET /api/events`
 
 Server-Sent Events 实时下载状态，响应类型 `text/event-stream`，约每秒一条：

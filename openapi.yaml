@@ -140,6 +140,39 @@ paths:
       description: 删除指定 video_id 的排除 tombstone（恢复允许下载）；不会自动创建下载任务。
       parameters: [{name: video_id, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/CSRF'}]
       responses: {'200': {$ref: '#/components/responses/JSON'}}
+  /api/media-integrity/scan:
+    get:
+      tags: [Library]
+      operationId: mediaIntegrityScan
+      description: 只读扫描已完成媒体的文件完整性；存储不可用时不会判定缺失。
+      parameters: [{name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 1000000, default: 100000}}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}}
+  /api/media-integrity/import:
+    post:
+      tags: [Library]
+      operationId: mediaIntegrityImport
+      description: 解析外部 VDF 删除清单（数组或 {deletions:[...]}）并返回校验预览，不修改数据库。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}}
+  /api/media-integrity/apply:
+    post:
+      tags: [Library]
+      operationId: mediaIntegrityApply
+      description: 对已确认缺失且由删除清单匹配的媒体执行“移除记录并加入已排除”；confirm=false 为 Dry Run。每个视频独立事务，失败不影响其它条目。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: {type: boolean, description: 必须为 true 才执行写入}
+                raw: {type: string, description: 原始删除清单 JSON（可选，替代 deletions）}
+                deletions: {type: array, items: {type: object, additionalProperties: true}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/subscriptions:
     get: {tags: [Subscriptions], operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     post: {tags: [Subscriptions], operationId: createSubscription, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [url], properties: {url: {type: string, format: uri, description: 已注册适配器支持的订阅链接}, type: {type: string, enum: [creator, playlist], description: 可省略，由链接自动识别}, download_existing: {type: boolean, default: false}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '502': {$ref: '#/components/responses/Error'}}}

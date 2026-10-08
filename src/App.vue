@@ -245,6 +245,7 @@ const viewRoutes: Record<string, string> = {
   undownloaded: "/undownloaded",
   library: "/library",
   excluded: "/excluded",
+  integrity: "/integrity",
   translations: "/translations",
   notifications: "/notifications",
   settings: "/settings",
@@ -256,6 +257,7 @@ const viewTitles: Record<string, string> = {
   undownloaded: "未下载",
   library: "影视库",
   excluded: "已排除",
+  integrity: "媒体完整性",
   translations: "翻译管理",
   notifications: "通知",
   settings: "设置",
@@ -300,6 +302,7 @@ const navGroups = [
     items: [
       { id: "library", label: "影视库" },
       { id: "excluded", label: "已排除" },
+      { id: "integrity", label: "媒体完整性" },
     ],
   },
   {
@@ -368,6 +371,66 @@ const backups = ref<Backup[]>([]),
 const notifications = ref<Notification[]>([]);
 const exclusions = ref<Exclusion[]>([]);
 const mediaExclusionTotal = ref(0);
+type MediaScanItem = {
+  video_id: string;
+  platform: string;
+  title: string;
+  path: string;
+  status: string;
+  detail?: string;
+};
+type MediaScan = {
+  storage_available: boolean;
+  total: number;
+  present: number;
+  missing: number;
+  moved: number;
+  permission_denied: number;
+  path_invalid: number;
+  unreadable: number;
+  items: MediaScanItem[];
+  scanned_at: string;
+};
+type CleanupPreviewItem = {
+  video_id: string;
+  platform: string;
+  title: string;
+  path: string;
+  status: string;
+  detail?: string;
+};
+type CleanupPreview = {
+  storage_available: boolean;
+  deletions: number;
+  candidates: number;
+  already_excluded: number;
+  skipped: number;
+  items: CleanupPreviewItem[];
+};
+const mediaScan = ref<MediaScan>();
+const cleanupPreview = ref<CleanupPreview>();
+const deletionListText = ref("");
+const integrityNotice = ref("");
+const integrityBusy = ref(false);
+const cleanupStatusLabels: Record<string, string> = {
+  candidate: "可加入排除",
+  already_excluded: "已排除",
+  already_removed: "已移除",
+  unknown_video: "未知 video_id",
+  not_completed: "非已完成",
+  active: "下载/转码中",
+  path_mismatch: "路径不一致",
+  file_present: "文件仍存在",
+  path_invalid: "路径无效",
+  missing: "文件缺失",
+  moved: "疑似移动",
+  permission_denied: "权限错误",
+  unreadable: "无法读取",
+  present: "正常",
+};
+function cleanupStatusLabel(status: string): string {
+  return cleanupStatusLabels[status] || status;
+}
 const deleteTarget = ref<Video | undefined>(undefined);
 const deleteMode = ref<"delete_and_exclude" | "delete_only">("delete_and_exclude");
 const deleting = ref(false);
@@ -652,6 +715,53 @@ async function restoreExclusion(item: Exclusion) {
     notice.value = "已恢复允许下载";
   });
 }
+async function loadIntegrity() {
+  integrityBusy.value = true;
+  try {
+    mediaScan.value = await api("/api/media-integrity/scan");
+  } catch (e) {
+    integrityNotice.value = String(e);
+  } finally {
+    integrityBusy.value = false;
+  }
+}
+async function importDeletionList() {
+  if (!deletionListText.value.trim()) {
+    integrityNotice.value = "请粘贴 VDF 删除清单 JSON";
+    return;
+  }
+  integrityBusy.value = true;
+  try {
+    cleanupPreview.value = await api("/api/media-integrity/import", {
+      method: "POST",
+      body: deletionListText.value,
+    });
+    integrityNotice.value = "";
+  } catch (e) {
+    integrityNotice.value = String(e);
+  } finally {
+    integrityBusy.value = false;
+  }
+}
+async function applyDeletionList(confirm: boolean) {
+  integrityBusy.value = true;
+  try {
+    const result = await api("/api/media-integrity/apply", {
+      method: "POST",
+      body: JSON.stringify({ raw: deletionListText.value, confirm }),
+    });
+    integrityNotice.value = confirm
+      ? `已清理 ${result.executed} 项，跳过 ${result.skipped}，失败 ${result.failed}`
+      : `Dry run：${result.candidates} 项可加入排除`;
+    await loadIntegrity();
+    await importDeletionList();
+    if (confirm) await loadExclusions();
+  } catch (e) {
+    integrityNotice.value = String(e);
+  } finally {
+    integrityBusy.value = false;
+  }
+}
 function openDelete(video: Video) {
   deleteTarget.value = video;
   deleteMode.value = "delete_and_exclude";
@@ -780,6 +890,7 @@ async function changeView(next: string, updateHistory = true) {
   if (next === "settings") await loadSettings();
   if (next === "notifications") await loadNotifications();
   if (next === "excluded") await loadExclusions();
+  if (next === "integrity") await loadIntegrity();
 }
 async function act(run: () => Promise<void>) {
   busy.value = true;
@@ -1337,6 +1448,7 @@ watch(
               'translations',
               'notifications',
               'excluded',
+              'integrity',
             ].includes(view)
           "
           class="primary"
@@ -1599,6 +1711,107 @@ watch(
           <div v-if="!exclusions.length" class="empty">没有已排除的视频</div>
         </div>
         <p v-if="mediaExclusionTotal" class="muted">共 {{ mediaExclusionTotal }} 项</p>
+      </section>
+      <section v-else-if="view === 'integrity'">
+        <p class="muted">
+          扫描已完成媒体文件完整性，并导入外部 VDF 删除清单来安全清理数据库并加入“已排除”。默认 Dry
+          Run，未确认前不会修改任何记录；缺失但无清单确认的文件只展示、不自动排除。
+        </p>
+        <div class="toolbar">
+          <button class="primary" :disabled="integrityBusy" @click="loadIntegrity">
+            扫描媒体库
+          </button>
+        </div>
+        <div v-if="mediaScan" class="stats">
+          <article><small>总媒体数</small><b>{{ mediaScan.total }}</b><span>已完成媒体</span></article>
+          <article><small>正常文件</small><b>{{ mediaScan.present }}</b><span>存在且可读</span></article>
+          <article><small>确认缺失</small><b>{{ mediaScan.missing }}</b><span>文件不存在</span></article>
+          <article>
+            <small>存储状态</small><b>{{ mediaScan.storage_available ? "正常" : "不可访问" }}</b
+            ><span>{{ mediaScan.storage_available ? "已挂载" : "已阻止缺失判定" }}</span>
+          </article>
+          <article>
+            <small>疑似移动/权限</small
+            ><b>{{ mediaScan.moved + mediaScan.permission_denied }}</b><span>需人工确认</span>
+          </article>
+        </div>
+        <div v-if="cleanupPreview" class="stats">
+          <article><small>清单条数</small><b>{{ cleanupPreview.deletions }}</b><span>VDF deletions</span></article>
+          <article><small>可加入排除</small><b>{{ cleanupPreview.candidates }}</b><span>已验证缺失</span></article>
+          <article><small>已排除</small><b>{{ cleanupPreview.already_excluded }}</b><span>幂等跳过</span></article>
+          <article><small>跳过</small><b>{{ cleanupPreview.skipped }}</b><span>非候选</span></article>
+        </div>
+        <div v-if="integrityNotice" class="notice" role="status">{{ integrityNotice }}</div>
+        <div class="panel">
+          <h2>导入 VDF 删除清单</h2>
+          <textarea
+            v-model="deletionListText"
+            rows="6"
+            placeholder='{"version":1,"deletions":[{"video_id":"rule34video:...","original_path":"...","reason":"duplicate","kept_video_id":"..."}]}'
+          ></textarea>
+          <div class="inline" style="margin-top: 10px">
+            <button :disabled="integrityBusy" @click="importDeletionList">预览</button>
+            <button
+              class="primary"
+              :disabled="integrityBusy || !cleanupPreview"
+              @click="applyDeletionList(false)"
+            >
+              Dry Run
+            </button>
+            <button
+              class="danger"
+              :disabled="integrityBusy || !cleanupPreview || !cleanupPreview.candidates"
+              @click="applyDeletionList(true)"
+            >
+              确认执行清理
+            </button>
+          </div>
+        </div>
+        <div v-if="mediaScan" class="panel">
+          <h2>缺失/异常列表</h2>
+          <div class="rows">
+            <article
+              v-for="item in mediaScan.items.slice(0, 200)"
+              :key="item.video_id"
+              class="integrity-row"
+            >
+              <span class="avatar">{{ (item.title || item.video_id).slice(0, 1).toUpperCase() }}</span>
+              <div>
+                <b>{{ item.title || item.video_id }}</b>
+                <small>{{ item.platform }} · {{ item.video_id }}</small>
+                <small>{{ item.path || "（无路径）" }}</small>
+                <small v-if="item.detail" class="error">{{ item.detail }}</small>
+              </div>
+              <span class="integrity-badge" :class="'integrity-' + item.status">{{
+                cleanupStatusLabel(item.status)
+              }}</span>
+            </article>
+            <div v-if="!mediaScan.items.length" class="empty">
+              没有发现缺失或异常文件
+            </div>
+          </div>
+        </div>
+        <div v-if="cleanupPreview" class="panel">
+          <h2>清单校验结果</h2>
+          <div class="rows">
+            <article
+              v-for="item in cleanupPreview.items.slice(0, 200)"
+              :key="item.video_id + item.status"
+              class="integrity-row"
+            >
+              <span class="avatar">{{ (item.title || item.video_id).slice(0, 1).toUpperCase() }}</span>
+              <div>
+                <b>{{ item.title || item.video_id }}</b>
+                <small>{{ item.video_id }}</small>
+                <small v-if="item.path">{{ item.path }}</small>
+                <small v-if="item.detail" class="error">{{ item.detail }}</small>
+              </div>
+              <span class="integrity-badge" :class="'integrity-' + item.status">{{
+                cleanupStatusLabel(item.status)
+              }}</span>
+            </article>
+          </div>
+        </div>
       </section>
       <section v-else-if="view === 'notifications'">
         <div class="toolbar">
