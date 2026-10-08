@@ -1,5 +1,7 @@
 package store
 
+import "errors"
+
 // MediaExclusion is a user-created tombstone keyed by the canonical video_id. It
 // permanently blocks automatic discovery of that video regardless of title, URL
 // or filename changes.
@@ -84,4 +86,38 @@ func (s *Store) MarkVideoRemoved(videoID string) error {
 	}
 	_, _ = s.DB.Exec("UPDATE media_fingerprints SET file_size=0,quick_hash='',sha256='',hash_status='',updated_at=? WHERE video_id=?", Now(), videoID)
 	return nil
+}
+
+// RemoveAndExclude atomically writes a media exclusion tombstone and marks the
+// video removed. It is used when the media file is already gone (external VDF
+// de-duplication) and must not touch the filesystem. Both writes commit
+// together or not at all, and the upsert makes repeated syncs idempotent.
+func (s *Store) RemoveAndExclude(videoID string, e MediaExclusion) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT INTO media_exclusions(video_id,source,reason,title_snapshot,original_url_snapshot,thumbnail_snapshot,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(video_id) DO UPDATE SET source=excluded.source,reason=excluded.reason,title_snapshot=excluded.title_snapshot,original_url_snapshot=excluded.original_url_snapshot,thumbnail_snapshot=excluded.thumbnail_snapshot",
+		e.VideoID, e.Source, e.Reason, e.TitleSnapshot, e.OriginalURLSnapshot, e.ThumbnailSnapshot, Now()); err != nil {
+		return err
+	}
+	res, err := tx.Exec("UPDATE videos SET status='removed',file_path='',plex_path='',aria_gid='',external_task_id='',downloader_id='',download_speed=0,connections=0,error='',downloaded_at='',updated_at=? WHERE id=?", Now(), videoID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return errors.New("video not found")
+	}
+	if _, err = tx.Exec("UPDATE media_fingerprints SET file_size=0,quick_hash='',sha256='',hash_status='',updated_at=? WHERE video_id=?", Now(), videoID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CompletedVideos lists formally completed media oldest-first for integrity
+// scans.
+func (s *Store) CompletedVideos(limit, offset int) ([]Video, error) {
+	rows, err := s.DB.Query("SELECT "+videoColumns+" FROM videos WHERE status='completed' ORDER BY downloaded_at ASC,id ASC LIMIT ? OFFSET ?", limit, offset)
+	return scanVideos(rows, err)
 }
