@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import { requestJSON } from "./api-client";
+import { createAsyncActions } from "./asyncAction";
 type Link = { Name?: string; URL?: string; Image?: string };
 type Creator = {
   platform: string;
@@ -216,6 +217,10 @@ const data = ref<Dashboard>(empty),
   page = ref(0),
   notice = ref(""),
   busy = ref(false),
+  subscribeError = ref(""),
+  translationFileName = ref(""),
+  translationFileSize = ref(0),
+  translationStage = ref(""),
   modelURL = ref(""),
   selected = ref<Video>(),
   importHTML = ref(""),
@@ -227,6 +232,20 @@ const data = ref<Dashboard>(empty),
   selectedCreator = ref<Creator>(),
   searchingCreators = ref(false),
   downloadExisting = ref(false);
+const actions = createAsyncActions();
+const subscribePending = computed(() => actions.pending("subscribe"));
+const subscribeStatus = computed(() =>
+  subscribePending.value ? "正在保存订阅，请稍候…" : "",
+);
+const translationImportPending = computed(() =>
+  actions.pending("translate-import"),
+);
+const translationImportError = computed(() => actions.error("translate-import"));
+const vdfPreviewPending = computed(() => actions.pending("vdf-preview"));
+const vdfExecutePending = computed(() => actions.pending("vdf-execute"));
+const vdfActionError = computed(() =>
+  actions.error("vdf-preview") || actions.error("vdf-execute"),
+);
 const downloadedStatLabels: Record<string, { label: string; sub: string }> = {
   "zh-CN": { label: "已下载视频", sub: "本地已入库" },
   "zh-TW": { label: "已下載影片", sub: "本機已入庫" },
@@ -461,7 +480,17 @@ type VdfPreview = {
 const vdfPreviewData = ref<VdfPreview>();
 const deletionListText = ref("");
 const integrityNotice = ref("");
-const integrityBusy = ref(false);
+const integrityBusy = computed(
+  () =>
+    actions.pending("integrity-scan") ||
+    actions.pending("integrity-import") ||
+    actions.pending("vdf-execute") ||
+    actions.pending("apply-legacy"),
+);
+const integrityImportPending = computed(() =>
+  actions.pending("integrity-import"),
+);
+const integrityImportError = computed(() => actions.error("integrity-import"));
 const cleanupStatusLabels: Record<string, string> = {
   candidate: "可加入排除",
   already_excluded: "已排除",
@@ -529,7 +558,17 @@ const planPreviewData = ref<PlanPreview>();
 const planResult = ref<PlanResult>();
 const deletionPlans = ref<DeletionPlanRow[]>([]);
 const planNotice = ref("");
-const planBusy = ref(false);
+const planBusy = computed(
+  () =>
+    actions.pending("plan-preview") ||
+    actions.pending("plan-execute") ||
+    actions.pending("plan-recover"),
+);
+const planPreviewPending = computed(() => actions.pending("plan-preview"));
+const planExecutePending = computed(() => actions.pending("plan-execute"));
+const planActionError = computed(
+  () => actions.error("plan-preview") || actions.error("plan-execute"),
+);
 const planStatusLabels: Record<string, string> = {
   pending: "待处理",
   verified: "已验证",
@@ -859,14 +898,12 @@ async function restoreExclusion(item: Exclusion) {
   });
 }
 async function loadIntegrity() {
-  integrityBusy.value = true;
-  try {
+  const result = await actions.run("integrity-scan", async () => {
     mediaScan.value = await api("/api/media-integrity/scan");
     await loadDeletionPlans();
-  } catch (e) {
-    integrityNotice.value = String(e);
-  } finally {
-    integrityBusy.value = false;
+  });
+  if (!result.ok && !result.duplicate) {
+    integrityNotice.value = result.error || "扫描失败";
   }
 }
 async function loadDeletionPlans() {
@@ -879,57 +916,52 @@ async function previewTransRunnerPlan() {
     planNotice.value = "请粘贴 TransRunner 删除计划 JSON";
     return;
   }
-  planBusy.value = true;
-  try {
+  const result = await actions.run("plan-preview", async () => {
     planPreviewData.value = await api("/api/media-integrity/plan/preview", {
       method: "POST",
       body: JSON.stringify({ raw: planText.value }),
     });
     planResult.value = undefined;
-    planNotice.value = "";
-  } catch (e) {
-    planNotice.value = String(e);
-  } finally {
-    planBusy.value = false;
-  }
+  });
+  if (result.duplicate) return;
+  planNotice.value = result.ok ? "" : result.error || "预览失败";
 }
 async function executeTransRunnerPlan(confirm: boolean) {
-  planBusy.value = true;
-  try {
-    const result = await api("/api/media-integrity/plan/execute", {
+  const result = await actions.run("plan-execute", () =>
+    api("/api/media-integrity/plan/execute", {
       method: "POST",
       body: JSON.stringify({ raw: planText.value, confirm }),
-    });
-    planResult.value = result;
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    planResult.value = result.value;
     planNotice.value = confirm
-      ? `已清理 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}，需恢复 ${result.needs_recovery}`
-      : `Dry run：${planPreviewData.value?.ready ?? 0} 项可清理，预计释放 ${size(result.estimated_freed)}`;
+      ? `已清理 ${result.value.executed}，跳过 ${result.value.skipped}，失败 ${result.value.failed}，需恢复 ${result.value.needs_recovery}`
+      : `Dry run：${planPreviewData.value?.ready ?? 0} 项可清理，预计释放 ${size(result.value.estimated_freed)}`;
     await loadDeletionPlans();
     if (confirm) {
       await loadIntegrity();
       await loadExclusions();
       await previewTransRunnerPlan();
     }
-  } catch (e) {
-    planNotice.value = String(e);
-  } finally {
-    planBusy.value = false;
+  } else if (!result.ok) {
+    planNotice.value = result.error || "执行失败";
   }
 }
 async function recoverPlan(planId: string) {
-  planBusy.value = true;
-  try {
-    const result = await api(
-      "/api/media-integrity/plan/" + encodeURIComponent(planId) + "/recover",
-      { method: "POST" },
-    );
-    planNotice.value = `恢复：完成 ${result.executed}，需恢复 ${result.needs_recovery}`;
+  const result = await actions.run("plan-recover", () =>
+    api("/api/media-integrity/plan/" + encodeURIComponent(planId) + "/recover", {
+      method: "POST",
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    planNotice.value = `恢复：完成 ${result.value.executed}，需恢复 ${result.value.needs_recovery}`;
     await loadDeletionPlans();
     await loadIntegrity();
-  } catch (e) {
-    planNotice.value = String(e);
-  } finally {
-    planBusy.value = false;
+  } else if (!result.ok) {
+    planNotice.value = result.error || "恢复失败";
   }
 }
 async function importDeletionList() {
@@ -937,64 +969,64 @@ async function importDeletionList() {
     integrityNotice.value = "请粘贴 VDF 删除清单 JSON";
     return;
   }
-  integrityBusy.value = true;
-  try {
-    const result = await api("/api/media-integrity/import", {
+  const result = await actions.run("integrity-import", () =>
+    api("/api/media-integrity/import", {
       method: "POST",
       body: deletionListText.value,
-    });
-    if (result && result.format === "vdf_gui") {
-      vdfPreviewData.value = result;
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    if (result.value.format === "vdf_gui") {
+      vdfPreviewData.value = result.value;
       cleanupPreview.value = undefined;
     } else {
-      cleanupPreview.value = result;
+      cleanupPreview.value = result.value;
       vdfPreviewData.value = undefined;
     }
     integrityNotice.value = "";
-  } catch (e) {
-    integrityNotice.value = String(e);
-  } finally {
-    integrityBusy.value = false;
+  } else if (!result.ok) {
+    integrityNotice.value = result.error || "导入失败";
   }
 }
 async function vdfExecute(confirm: boolean) {
-  integrityBusy.value = true;
-  try {
-    const result = await api("/api/media-integrity/vdf/execute", {
+  const result = await actions.run("vdf-execute", () =>
+    api("/api/media-integrity/vdf/execute", {
       method: "POST",
       body: JSON.stringify({ raw: deletionListText.value, confirm }),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
     integrityNotice.value = confirm
-      ? `VDF 清理：执行 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}，需恢复 ${result.needs_recovery}`
-      : `VDF Dry run：${vdfPreviewData.value?.ready_groups ?? 0} 组可清理，预计释放 ${size(result.estimated_freed)}`;
+      ? `VDF 清理：执行 ${result.value.executed}，跳过 ${result.value.skipped}，失败 ${result.value.failed}，需恢复 ${result.value.needs_recovery}`
+      : `VDF Dry run：${vdfPreviewData.value?.ready_groups ?? 0} 组可清理，预计释放 ${size(result.value.estimated_freed)}`;
     if (confirm) {
       await loadIntegrity();
       await loadExclusions();
       await importDeletionList();
     }
-  } catch (e) {
-    integrityNotice.value = String(e);
-  } finally {
-    integrityBusy.value = false;
+  } else if (!result.ok) {
+    integrityNotice.value = result.error || "VDF 执行失败";
   }
 }
 async function applyDeletionList(confirm: boolean) {
-  integrityBusy.value = true;
-  try {
-    const result = await api("/api/media-integrity/apply", {
+  const result = await actions.run("apply-legacy", () =>
+    api("/api/media-integrity/apply", {
       method: "POST",
       body: JSON.stringify({ raw: deletionListText.value, confirm }),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
     integrityNotice.value = confirm
-      ? `已清理 ${result.executed} 项，跳过 ${result.skipped}，失败 ${result.failed}`
-      : `Dry run：${result.candidates} 项可加入排除`;
+      ? `已清理 ${result.value.executed} 项，跳过 ${result.value.skipped}，失败 ${result.value.failed}`
+      : `Dry run：${result.value.candidates} 项可加入排除`;
     await loadIntegrity();
     await importDeletionList();
     if (confirm) await loadExclusions();
-  } catch (e) {
-    integrityNotice.value = String(e);
-  } finally {
-    integrityBusy.value = false;
+  } else if (!result.ok) {
+    integrityNotice.value = result.error || "执行失败";
   }
 }
 function openDelete(video: Video) {
@@ -1103,6 +1135,12 @@ async function restoreBackup(name: string) {
 }
 async function changeView(next: string, updateHistory = true) {
   if (!viewRoutes[next]) next = "home";
+  // Clear transient feedback so stale messages/errors do not leak across views.
+  notice.value = "";
+  subscribeError.value = "";
+  translationStage.value = "";
+  planNotice.value = "";
+  integrityNotice.value = "";
   view.value = next;
   revealGroupFor(next);
   document.title = (viewTitles[next] || "HWatch") + " · HWatch";
@@ -1138,14 +1176,21 @@ async function act(run: () => Promise<void>) {
   }
 }
 async function subscribe() {
-  await act(async () => {
-    const r = await api("/api/subscriptions", {
+  subscribeError.value = "";
+  // pending is set synchronously inside run() before the first await, so the
+  // button flips to loading immediately.
+  const result = await actions.run("subscribe", () =>
+    api("/api/subscriptions", {
       method: "POST",
       body: JSON.stringify({
         url: modelURL.value,
         download_existing: downloadExisting.value,
       }),
-    });
+    }),
+  );
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    const r = result.value;
     notice.value =
       "已建立 " +
       r.slug +
@@ -1159,7 +1204,13 @@ async function subscribe() {
     selectedCreator.value = undefined;
     downloadExisting.value = false;
     await refreshDashboard();
-  });
+  } else if (!result.ok) {
+    // Never assume the server did not create the subscription on timeout/lost
+    // response: keep the input and tell the user to verify by refreshing.
+    subscribeError.value =
+      (result.error || "添加订阅失败") +
+      "；请先刷新订阅列表确认是否已创建，再决定是否重试";
+  }
 }
 async function searchCreators() {
   if (creatorTimer) clearTimeout(creatorTimer);
@@ -1191,8 +1242,8 @@ function chooseCreator(creator: Creator) {
 async function check(slug = "") {
   await act(async () => {
     await api("/api/check" + (slug ? "/" + slug : ""), { method: "POST" });
-    notice.value = "检查任务已开始";
     await changeView("downloads");
+    notice.value = "检查任务已开始";
   });
 }
 async function toggle(sub: Sub) {
@@ -1286,21 +1337,33 @@ function exportTranslation() {
     encodeURIComponent(translationLanguage.value);
 }
 async function importTranslation(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
   if (!file) return;
-  await act(async () => {
-    const result = await api("/api/translations/import", {
+  translationFileName.value = file.name;
+  translationFileSize.value = file.size;
+  translationStage.value = "正在上传并导入…";
+  const result = await actions.run("translate-import", async () =>
+    api("/api/translations/import", {
       method: "POST",
       body: await file.text(),
-    });
-    notice.value =
-      "已导入 " +
-      result.imported_fields +
-      " 个翻译字段，跳过 " +
-      result.skipped_items +
-      " 条";
-    (event.target as HTMLInputElement).value = "";
-  });
+    }),
+  );
+  // Reset on both success and failure so the same file can be selected again.
+  input.value = "";
+  if (result.duplicate) return;
+  if (result.ok && result.value) {
+    const r = result.value;
+    let message = "已导入 " + r.imported_fields + " 个翻译字段";
+    if (typeof r.skipped_items === "number")
+      message += "，跳过 " + r.skipped_items + " 条";
+    if (typeof r.failed_items === "number")
+      message += "，失败 " + r.failed_items + " 条";
+    notice.value = message;
+    translationStage.value = "导入完成";
+  } else if (!result.ok) {
+    translationStage.value = "导入失败，可重新选择文件重试";
+  }
 }
 async function refreshNFO() {
   if (
@@ -1799,12 +1862,15 @@ watch(
               placeholder="粘贴作者页或播放清单链接"
             /><button
               class="primary"
-              :disabled="busy || !modelURL.trim()"
+              :disabled="busy || subscribePending || !modelURL.trim()"
+              :aria-busy="subscribePending"
               @click="subscribe"
             >
-              订阅
+              {{ subscribePending ? "正在添加…" : "订阅" }}
             </button>
           </div>
+          <small v-if="subscribeStatus" role="status">{{ subscribeStatus }}</small>
+          <small v-if="subscribeError" class="error" role="alert">{{ subscribeError }}</small>
           <label class="download-existing"
             ><input v-model="downloadExisting" type="checkbox" />
             下载全部现有视频</label
@@ -1986,18 +2052,30 @@ watch(
             placeholder='{"version":1,"deletions":[{"video_id":"rule34video:...","original_path":"...","reason":"duplicate","kept_video_id":"..."}]}'
           ></textarea>
           <div class="inline" style="margin-top: 10px">
-            <button :disabled="integrityBusy" @click="importDeletionList">预览</button>
+            <button
+              :disabled="integrityBusy"
+              :aria-busy="integrityImportPending"
+              @click="importDeletionList"
+            >
+              {{ integrityImportPending ? "校验中…" : "预览" }}
+            </button>
             <template v-if="vdfPreviewData">
               <button
                 class="primary"
                 :disabled="integrityBusy"
+                :aria-busy="vdfExecutePending"
                 @click="vdfExecute(false)"
               >
-                VDF Dry Run
+                {{ vdfExecutePending ? "处理中…" : "VDF Dry Run" }}
               </button>
               <button
                 class="danger"
-                :disabled="integrityBusy || !vdfPreviewData.ready_groups"
+                :disabled="
+                  integrityBusy ||
+                  !vdfPreviewData.ready_groups ||
+                  vdfPreviewData.has_conflicts
+                "
+                :aria-busy="vdfExecutePending"
                 @click="vdfExecute(true)"
               >
                 二次确认并执行 VDF 清理
@@ -2092,10 +2170,17 @@ watch(
             placeholder='{"kind":"transrunner-duplicate-deletion-plan","plan_version":1,"scan_id":"...","subscription_slug":"rule34video:...","executable":true,"stale":false,"user_confirmed":true,"items":[{"video_id":"...","kept_video_id":"...","original_path":"...","expected_size":123,"expected_sha256":"..."}]}'
           ></textarea>
           <div class="inline" style="margin-top: 10px">
-            <button :disabled="planBusy" @click="previewTransRunnerPlan">校验预览</button>
+            <button
+              :disabled="planBusy"
+              :aria-busy="planPreviewPending"
+              @click="previewTransRunnerPlan"
+            >
+              {{ planPreviewPending ? "校验中…" : "校验预览" }}
+            </button>
             <button
               class="primary"
               :disabled="planBusy || !planPreviewData"
+              :aria-busy="planExecutePending"
               @click="executeTransRunnerPlan(false)"
             >
               Dry Run
@@ -2103,6 +2188,7 @@ watch(
             <button
               class="danger"
               :disabled="planBusy || !planPreviewData || !planPreviewData.ready"
+              :aria-busy="planExecutePending"
               @click="executeTransRunnerPlan(true)"
             >
               二次确认并执行清理
@@ -2577,13 +2663,24 @@ watch(
             ><button class="primary" @click="exportTranslation">
               导出翻译 JSON</button
             ><button v-on:click="refreshNFO">刷新全部 Plex NFO</button
-            ><label class="upload"
+            ><label class="upload" :class="{ disabled: translationImportPending }"
               >回导翻译 JSON<input
                 type="file"
                 accept="application/json,.json"
+                :disabled="translationImportPending"
                 @change="importTranslation"
             /></label>
           </div>
+          <small v-if="translationFileName" role="status">
+            {{ translationFileName }}
+            <template v-if="translationFileSize"
+              >（{{ size(translationFileSize) }}）</template
+            >
+            · {{ translationImportPending ? "正在导入…" : translationStage }}
+          </small>
+          <small v-if="translationImportError" class="error" role="alert">{{
+            translationImportError
+          }}</small>
           <small
             >WebAI 只需填写 translations，并保留 key、source_hash 和
             fields；原文变化的条目会自动跳过。</small
