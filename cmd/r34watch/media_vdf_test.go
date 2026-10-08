@@ -58,7 +58,7 @@ func TestVDFGUISingleAndMultiRemove(t *testing.T) {
 		KeepItems:   []vdfGUIItem{vdfItem(keep)},
 	}}}
 	preview := a.previewVDFGUI(single)
-	if preview.Format != importFormatVDFGUI || preview.Groups != 1 || preview.ReadyGroups != 1 || preview.MatchedItems != 2 {
+	if preview.Format != importFormatVDFGUI || preview.Groups != 1 || preview.ReadyGroups != 1 || preview.RemoveMatched != 1 || preview.KeepMatched != 1 {
 		t.Fatalf("single preview = %+v", preview)
 	}
 	if preview.EstimatedFreed != int64(len("payload")) {
@@ -71,7 +71,7 @@ func TestVDFGUISingleAndMultiRemove(t *testing.T) {
 		KeepItems:   []vdfGUIItem{vdfItem(keep)},
 	}}}
 	mp := a.previewVDFGUI(multi)
-	if mp.ReadyGroups != 1 || mp.MatchedItems != 3 {
+	if mp.ReadyGroups != 1 || mp.RemoveMatched != 2 || mp.KeepMatched != 1 {
 		t.Fatalf("multi preview = %+v", mp)
 	}
 }

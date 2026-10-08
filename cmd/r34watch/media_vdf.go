@@ -172,15 +172,16 @@ func matchVideoPath(idx mediaPathIndex, cfg store.Settings, rawPath string) (sto
 }
 
 type vdfItemView struct {
-	Path             string `json:"path"`
-	SizeBytes        int64  `json:"size_bytes"`
-	Resolution       string `json:"resolution,omitempty"`
-	MatchStatus      string `json:"match_status"`
-	VideoID          string `json:"video_id,omitempty"`
-	SubscriptionSlug string `json:"subscription_slug,omitempty"`
-	DBPath           string `json:"db_path,omitempty"`
-	FileSize         int64  `json:"file_size,omitempty"`
-	Detail           string `json:"detail,omitempty"`
+	Path             string   `json:"path"`
+	SizeBytes        int64    `json:"size_bytes"`
+	Resolution       string   `json:"resolution,omitempty"`
+	MatchStatus      string   `json:"match_status"`
+	VideoID          string   `json:"video_id,omitempty"`
+	SubscriptionSlug string   `json:"subscription_slug,omitempty"`
+	DBPath           string   `json:"db_path,omitempty"`
+	FileSize         int64    `json:"file_size,omitempty"`
+	Detail           string   `json:"detail,omitempty"`
+	Groups           []string `json:"groups,omitempty"`
 }
 
 type vdfGroupView struct {
@@ -194,17 +195,42 @@ type vdfGroupView struct {
 	EstimatedFreed   int64         `json:"estimated_freed"`
 }
 
-type vdfPreview struct {
-	Format           string         `json:"format"`
-	StorageAvailable bool           `json:"storage_available"`
-	Groups           int            `json:"groups"`
-	ReadyGroups      int            `json:"ready_groups"`
-	RejectedGroups   int            `json:"rejected_groups"`
-	RemoveItems      int            `json:"remove_items"`
-	MatchedItems     int            `json:"matched_items"`
-	EstimatedFreed   int64          `json:"estimated_freed"`
-	Items            []vdfGroupView `json:"items"`
+type vdfConflict struct {
+	Kind    string   `json:"kind"`
+	VideoID string   `json:"video_id,omitempty"`
+	Path    string   `json:"path,omitempty"`
+	Groups  []string `json:"groups"`
+	Detail  string   `json:"detail"`
 }
+
+type vdfPreview struct {
+	Format              string         `json:"format"`
+	StorageAvailable    bool           `json:"storage_available"`
+	HasConflicts        bool           `json:"has_conflicts"`
+	Groups              int            `json:"groups"`
+	ReadyGroups         int            `json:"ready_groups"`
+	AlreadyDoneGroups   int            `json:"already_done_groups"`
+	ConflictGroups      int            `json:"conflict_groups"`
+	RejectedGroups      int            `json:"rejected_groups"`
+	RemoveTotal         int            `json:"remove_total"`
+	RemoveMatched       int            `json:"remove_matched"`
+	RemoveAlreadyDone   int            `json:"remove_already_done"`
+	RemoveUnmatched     int            `json:"remove_unmatched"`
+	KeepTotal           int            `json:"keep_total"`
+	KeepMatched         int            `json:"keep_matched"`
+	KeepMissing         int            `json:"keep_missing"`
+	CrossGroupConflicts int            `json:"cross_group_conflicts"`
+	EstimatedFreed      int64          `json:"estimated_freed"`
+	Conflicts           []vdfConflict  `json:"conflicts"`
+	Items               []vdfGroupView `json:"items"`
+}
+
+const (
+	vdfStatusReady       = "ready"
+	vdfStatusAlreadyDone = "already_done"
+	vdfStatusConflict    = "conflict"
+	vdfStatusRejected    = "rejected"
+)
 
 func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Settings, allowMissing bool) vdfItemView {
 	view := vdfItemView{Path: item.Path, SizeBytes: item.SizeBytes, Resolution: item.Resolution}
@@ -252,56 +278,174 @@ func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Setti
 	return view
 }
 
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, s := range in {
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
+}
+
+func pathSuffixKey(cfg store.Settings, raw string) string {
+	norm := normalizeMediaPath(cfg.DownloadDir, filepath.FromSlash(raw))
+	if norm == "" {
+		return ""
+	}
+	return strings.ToLower(strings.Join(lastComponents(norm, 2), "/"))
+}
+
+// alreadyDoneRemoveVideo returns the canonical video_id only when there is
+// reliable evidence a remove target was previously applied: a db_excluded
+// deletion_plan_items row with the same two-component path suffix whose video is
+// now removed and has a media_exclusions tombstone. Filename-only or
+// file-absence-only evidence is never accepted.
+func (a *App) alreadyDoneRemoveVideo(cfg store.Settings, excluded []store.DeletionPlanItem, rawPath string) (string, bool) {
+	key := pathSuffixKey(cfg, rawPath)
+	if key == "" {
+		return "", false
+	}
+	found := ""
+	for _, it := range excluded {
+		if pathSuffixKey(cfg, it.OriginalPath) != key {
+			continue
+		}
+		v, err := a.store.Video(it.VideoID)
+		if err != nil || v.Status != "removed" || !a.store.IsMediaExcluded(it.VideoID) {
+			continue
+		}
+		if found != "" && found != it.VideoID {
+			return "", false // ambiguous evidence
+		}
+		found = it.VideoID
+	}
+	return found, found != ""
+}
+
+// previewVDFGUI performs a full, plan-global safety review: it never mutates the
+// database or filesystem, and it blocks the whole plan when any cross-group
+// identity conflict exists.
 func (a *App) previewVDFGUI(export vdfGUIExport) vdfPreview {
 	cfg, _ := a.store.Settings()
-	preview := vdfPreview{Format: importFormatVDFGUI, Items: []vdfGroupView{}}
-	preview.StorageAvailable = storagePathAvailable(cfg.DownloadDir, cfg.StorageMountRequired)
+	p := vdfPreview{Format: importFormatVDFGUI, Items: []vdfGroupView{}, Conflicts: []vdfConflict{}}
+	p.StorageAvailable = storagePathAvailable(cfg.DownloadDir, cfg.StorageMountRequired)
 	idx := a.buildMediaPathIndex(cfg)
-	preview.Groups = len(export.Groups)
+	excluded, _ := a.store.DeletionPlanItemsByStatus(itemDBExcluded)
+	p.Groups = len(export.Groups)
+
+	views := make([]vdfGroupView, 0, len(export.Groups))
+	rejectGroup := map[string]bool{}
+
+	removePathGroups := map[string][]string{}
+	keepPathGroups := map[string][]string{}
+	removeVideoGroups := map[string][]string{}
+	keepVideoGroups := map[string][]string{}
+	removePathVideo := map[string]string{}
+	pathVideoIDs := map[string]map[string]bool{}
+	type spHit struct{ gid, vid, path string }
+	spHits := []spHit{}
+
 	for _, group := range export.Groups {
-		view := vdfGroupView{GroupID: group.GroupID, Reason: group.Reason, Status: "ready", Problems: []string{}, RemoveItems: []vdfItemView{}, KeepItems: []vdfItemView{}}
+		view := vdfGroupView{GroupID: group.GroupID, Reason: group.Reason, Status: vdfStatusReady, Problems: []string{}, RemoveItems: []vdfItemView{}, KeepItems: []vdfItemView{}}
 		slugs := map[string]bool{}
 		removeIDs := map[string]bool{}
 		keepIDs := map[string]bool{}
+		hasReject := false
+
 		for _, item := range group.RemoveItems {
 			iv := a.verifyVDFItem(item, idx, cfg, true)
-			view.RemoveItems = append(view.RemoveItems, iv)
-			preview.RemoveItems++
-			if iv.MatchStatus == "matched" || iv.MatchStatus == "absent" {
-				preview.MatchedItems++
+			p.RemoveTotal++
+			key := pathSuffixKey(cfg, item.Path)
+			switch iv.MatchStatus {
+			case "matched", "absent":
+				p.RemoveMatched++
 				if iv.MatchStatus == "matched" {
-					preview.EstimatedFreed += iv.FileSize
+					p.EstimatedFreed += iv.FileSize
 					view.EstimatedFreed += iv.FileSize
+					if shared, _ := a.store.CountVideosWithPath(iv.DBPath, iv.VideoID); shared > 0 {
+						spHits = append(spHits, spHit{group.GroupID, iv.VideoID, iv.DBPath})
+					}
 				}
 				slugs[iv.SubscriptionSlug] = true
 				removeIDs[iv.VideoID] = true
-			} else {
-				view.Problems = append(view.Problems, "删除项无法安全匹配: "+item.Path+" ("+iv.MatchStatus+")")
+				removeVideoGroups[iv.VideoID] = append(removeVideoGroups[iv.VideoID], group.GroupID)
+				if key != "" {
+					removePathGroups[key] = append(removePathGroups[key], group.GroupID)
+					removePathVideo[key] = iv.VideoID
+					if pathVideoIDs[key] == nil {
+						pathVideoIDs[key] = map[string]bool{}
+					}
+					pathVideoIDs[key][iv.VideoID] = true
+				}
+			default:
+				if vid, ok := a.alreadyDoneRemoveVideo(cfg, excluded, item.Path); ok {
+					iv.MatchStatus = "already_done"
+					iv.VideoID = vid
+					iv.Detail = "此前已成功清理并加入排除"
+					p.RemoveAlreadyDone++
+					removeVideoGroups[vid] = append(removeVideoGroups[vid], group.GroupID)
+					if v, e := a.store.Video(vid); e == nil {
+						iv.SubscriptionSlug = v.SubscriptionSlug
+						slugs[iv.SubscriptionSlug] = true
+					}
+				} else {
+					p.RemoveUnmatched++
+					hasReject = true
+					view.Problems = append(view.Problems, "删除项无法安全匹配: "+item.Path+" ("+iv.MatchStatus+")")
+				}
 			}
+			view.RemoveItems = append(view.RemoveItems, iv)
 		}
+
 		for _, item := range group.KeepItems {
 			iv := a.verifyVDFItem(item, idx, cfg, false)
-			view.KeepItems = append(view.KeepItems, iv)
+			p.KeepTotal++
+			key := pathSuffixKey(cfg, item.Path)
 			if iv.MatchStatus == "matched" {
-				preview.MatchedItems++
+				p.KeepMatched++
 				slugs[iv.SubscriptionSlug] = true
 				keepIDs[iv.VideoID] = true
+				keepVideoGroups[iv.VideoID] = append(keepVideoGroups[iv.VideoID], group.GroupID)
+				if key != "" {
+					keepPathGroups[key] = append(keepPathGroups[key], group.GroupID)
+				}
 			} else {
+				p.KeepMissing++
+				hasReject = true
+				if vid, ok := a.alreadyDoneRemoveVideo(cfg, excluded, item.Path); ok {
+					iv.MatchStatus = "already_removed"
+					iv.VideoID = vid
+					iv.Detail = "保留项对应媒体已被此前清理删除"
+					keepVideoGroups[vid] = append(keepVideoGroups[vid], group.GroupID)
+					if key != "" {
+						keepPathGroups[key] = append(keepPathGroups[key], group.GroupID)
+					}
+				}
 				view.Problems = append(view.Problems, "保留项无法安全匹配: "+item.Path+" ("+iv.MatchStatus+")")
 			}
+			view.KeepItems = append(view.KeepItems, iv)
 		}
+
 		if len(group.KeepItems) == 0 {
 			view.Problems = append(view.Problems, "VDF 组缺少 KeepItems")
+			hasReject = true
 		}
 		if len(group.RemoveItems) == 0 {
 			view.Problems = append(view.Problems, "VDF 组缺少 RemoveItems")
+			hasReject = true
 		}
 		if len(slugs) > 1 {
 			view.Problems = append(view.Problems, "删除项与保留项跨订阅，拒绝执行")
+			hasReject = true
 		}
 		for id := range removeIDs {
 			if keepIDs[id] {
 				view.Problems = append(view.Problems, "删除项与保留项指向同一 HWatch 媒体")
+				hasReject = true
 			}
 		}
 		if len(slugs) == 1 {
@@ -309,18 +453,95 @@ func (a *App) previewVDFGUI(export vdfGUIExport) vdfPreview {
 				view.SubscriptionSlug = s
 			}
 		}
-		if !preview.StorageAvailable {
+		if !p.StorageAvailable {
 			view.Problems = append(view.Problems, "媒体存储当前不可用")
+			hasReject = true
 		}
-		if len(view.Problems) > 0 {
-			view.Status = "rejected"
-			preview.RejectedGroups++
-		} else {
-			preview.ReadyGroups++
+		if hasReject {
+			rejectGroup[group.GroupID] = true
 		}
-		preview.Items = append(preview.Items, view)
+		views = append(views, view)
 	}
-	return preview
+
+	conflictGroups := map[string]bool{}
+	addConflict := func(kind, videoID, path string, groups []string, detail string) {
+		groups = uniqueStrings(groups)
+		p.Conflicts = append(p.Conflicts, vdfConflict{Kind: kind, VideoID: videoID, Path: path, Groups: groups, Detail: detail})
+		for _, gid := range groups {
+			conflictGroups[gid] = true
+		}
+	}
+	for vid, rg := range removeVideoGroups {
+		if kg, ok := keepVideoGroups[vid]; ok {
+			addConflict("keep_remove_video", vid, "", append(append([]string{}, rg...), kg...), "同一媒体既在 RemoveItems 又在 KeepItems")
+		}
+	}
+	for key, rg := range removePathGroups {
+		if kg, ok := keepPathGroups[key]; ok {
+			addConflict("keep_remove_path", removePathVideo[key], key, append(append([]string{}, rg...), kg...), "同一路径既在 RemoveItems 又在 KeepItems")
+		}
+	}
+	for vid, groups := range removeVideoGroups {
+		if len(uniqueStrings(groups)) > 1 {
+			addConflict("duplicate_remove", vid, "", groups, "同一媒体在多个组中被列为 RemoveItems")
+		}
+	}
+	for key, groups := range removePathGroups {
+		if len(uniqueStrings(groups)) > 1 {
+			addConflict("duplicate_remove_path", removePathVideo[key], key, groups, "同一路径在多个组中被列为 RemoveItems")
+		}
+	}
+	for key, set := range pathVideoIDs {
+		if len(set) > 1 {
+			addConflict("shared_path", "", key, removePathGroups[key], "不同 video_id 映射同一个物理媒体路径")
+		}
+	}
+	for _, h := range spHits {
+		addConflict("shared_path", h.vid, h.path, []string{h.gid}, "该物理文件被多条媒体记录引用")
+	}
+	for _, view := range views {
+		for _, it := range view.KeepItems {
+			switch it.MatchStatus {
+			case "already_removed":
+				addConflict("keep_already_removed", it.VideoID, it.Path, []string{view.GroupID}, "保留项对应媒体已被清理")
+			case "matched":
+				// ok
+			default:
+				addConflict("keep_missing", it.VideoID, it.Path, []string{view.GroupID}, "保留项文件缺失、不可访问或无法唯一匹配")
+			}
+		}
+	}
+
+	for i := range views {
+		v := &views[i]
+		switch {
+		case conflictGroups[v.GroupID]:
+			v.Status = vdfStatusConflict
+			p.ConflictGroups++
+		case rejectGroup[v.GroupID]:
+			v.Status = vdfStatusRejected
+			p.RejectedGroups++
+		default:
+			allDone := true
+			for _, it := range v.RemoveItems {
+				if it.MatchStatus != "already_done" {
+					allDone = false
+					break
+				}
+			}
+			if allDone && p.RemoveAlreadyDone > 0 {
+				v.Status = vdfStatusAlreadyDone
+				p.AlreadyDoneGroups++
+			} else {
+				v.Status = vdfStatusReady
+				p.ReadyGroups++
+			}
+		}
+		p.Items = append(p.Items, *v)
+	}
+	p.HasConflicts = len(p.Conflicts) > 0
+	p.CrossGroupConflicts = len(p.Conflicts)
+	return p
 }
 
 // executeVDFGUIGroups runs the ready groups through quarantine + transactional
@@ -333,6 +554,11 @@ func (a *App) executeVDFGUIGroups(export vdfGUIExport, confirm bool) (planExecut
 	if !confirm {
 		return result, nil
 	}
+	// Backend hard block: never execute a plan with any cross-group identity
+	// conflict (re-checked here, not only in the UI preview).
+	if preview.HasConflicts {
+		return result, fmt.Errorf("VDF 计划存在跨组身份冲突（%d 处），已阻止整个计划的执行，未做任何文件或数据库操作；请人工核对", preview.CrossGroupConflicts)
+	}
 	if !preview.StorageAvailable {
 		return result, fmt.Errorf("媒体存储当前不可用，已取消执行")
 	}
@@ -341,11 +567,15 @@ func (a *App) executeVDFGUIGroups(export vdfGUIExport, confirm bool) (planExecut
 	}
 	executed, skipped, failed, recovering := 0, 0, 0, 0
 	for _, group := range preview.Items {
-		if group.Status != "ready" {
+		if group.Status != vdfStatusReady {
 			skipped++
 			continue
 		}
 		for _, item := range group.RemoveItems {
+			if item.MatchStatus == "already_done" {
+				skipped++
+				continue
+			}
 			if item.VideoID == "" || (item.MatchStatus != "matched" && item.MatchStatus != "absent") {
 				skipped++
 				continue
@@ -355,7 +585,7 @@ func (a *App) executeVDFGUIGroups(export vdfGUIExport, confirm bool) (planExecut
 				failed++
 				continue
 			}
-			persist := store.DeletionPlanItem{PlanID: planIDValue, VideoID: v.ID, KeptVideoID: firstKeepID(group), ExpectedSize: item.SizeBytes, OriginalPath: item.DBPath, Status: itemPending}
+			persist := store.DeletionPlanItem{PlanID: planIDValue, GroupID: group.GroupID, VideoID: v.ID, KeptVideoID: firstKeepID(group), ExpectedSize: item.SizeBytes, OriginalPath: item.DBPath, Status: itemPending}
 			_ = a.store.SaveDeletionPlanItem(persist)
 			var status, qpath, detail string
 			if item.MatchStatus == "absent" {

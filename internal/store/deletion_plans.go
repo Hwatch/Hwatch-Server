@@ -17,6 +17,7 @@ type DeletionPlan struct {
 type DeletionPlanItem struct {
 	PlanID         string `json:"plan_id"`
 	VideoID        string `json:"video_id"`
+	GroupID        string `json:"group_id"`
 	KeptVideoID    string `json:"kept_video_id"`
 	ExpectedSize   int64  `json:"expected_size"`
 	ExpectedSHA256 string `json:"expected_sha256"`
@@ -34,8 +35,8 @@ func (s *Store) UpsertDeletionPlan(p DeletionPlan) error {
 }
 
 func (s *Store) SaveDeletionPlanItem(it DeletionPlanItem) error {
-	_, err := s.DB.Exec("INSERT INTO deletion_plan_items(plan_id,video_id,kept_video_id,expected_size,expected_sha256,original_path,quarantine_path,status,reason,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(plan_id,video_id) DO UPDATE SET kept_video_id=excluded.kept_video_id,expected_size=excluded.expected_size,expected_sha256=excluded.expected_sha256,original_path=excluded.original_path,quarantine_path=excluded.quarantine_path,status=excluded.status,reason=excluded.reason,updated_at=excluded.updated_at",
-		it.PlanID, it.VideoID, it.KeptVideoID, it.ExpectedSize, it.ExpectedSHA256, it.OriginalPath, it.QuarantinePath, it.Status, it.Reason, Now())
+	_, err := s.DB.Exec("INSERT INTO deletion_plan_items(plan_id,video_id,group_id,kept_video_id,expected_size,expected_sha256,original_path,quarantine_path,status,reason,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(plan_id,video_id) DO UPDATE SET group_id=excluded.group_id,kept_video_id=excluded.kept_video_id,expected_size=excluded.expected_size,expected_sha256=excluded.expected_sha256,original_path=excluded.original_path,quarantine_path=excluded.quarantine_path,status=excluded.status,reason=excluded.reason,updated_at=excluded.updated_at",
+		it.PlanID, it.VideoID, it.GroupID, it.KeptVideoID, it.ExpectedSize, it.ExpectedSHA256, it.OriginalPath, it.QuarantinePath, it.Status, it.Reason, Now())
 	return err
 }
 
@@ -68,7 +69,7 @@ func (s *Store) DeletionPlans(limit, offset int) ([]DeletionPlan, int64, error) 
 }
 
 func (s *Store) DeletionPlanItems(planID string) ([]DeletionPlanItem, error) {
-	rows, err := s.DB.Query("SELECT plan_id,video_id,kept_video_id,expected_size,expected_sha256,original_path,quarantine_path,status,reason,updated_at FROM deletion_plan_items WHERE plan_id=? ORDER BY video_id", planID)
+	rows, err := s.DB.Query("SELECT plan_id,video_id,group_id,kept_video_id,expected_size,expected_sha256,original_path,quarantine_path,status,reason,updated_at FROM deletion_plan_items WHERE plan_id=? ORDER BY video_id", planID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,26 @@ func (s *Store) DeletionPlanItems(planID string) ([]DeletionPlanItem, error) {
 	out := []DeletionPlanItem{}
 	for rows.Next() {
 		var it DeletionPlanItem
-		if err = rows.Scan(&it.PlanID, &it.VideoID, &it.KeptVideoID, &it.ExpectedSize, &it.ExpectedSHA256, &it.OriginalPath, &it.QuarantinePath, &it.Status, &it.Reason, &it.UpdatedAt); err != nil {
+		if err = rows.Scan(&it.PlanID, &it.VideoID, &it.GroupID, &it.KeptVideoID, &it.ExpectedSize, &it.ExpectedSHA256, &it.OriginalPath, &it.QuarantinePath, &it.Status, &it.Reason, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// DeletionPlanItemsByStatus returns all plan items with the given status across
+// every plan, used for idempotent "already done" evidence.
+func (s *Store) DeletionPlanItemsByStatus(status string) ([]DeletionPlanItem, error) {
+	rows, err := s.DB.Query("SELECT plan_id,video_id,group_id,kept_video_id,expected_size,expected_sha256,original_path,quarantine_path,status,reason,updated_at FROM deletion_plan_items WHERE status=? ORDER BY updated_at DESC", status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DeletionPlanItem{}
+	for rows.Next() {
+		var it DeletionPlanItem
+		if err = rows.Scan(&it.PlanID, &it.VideoID, &it.GroupID, &it.KeptVideoID, &it.ExpectedSize, &it.ExpectedSHA256, &it.OriginalPath, &it.QuarantinePath, &it.Status, &it.Reason, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

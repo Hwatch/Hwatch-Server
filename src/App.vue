@@ -430,15 +430,32 @@ type VdfGroupView = {
   keep_items: VdfItemView[];
   estimated_freed: number;
 };
+type VdfConflict = {
+  kind: string;
+  video_id?: string;
+  path?: string;
+  groups: string[];
+  detail: string;
+};
 type VdfPreview = {
   format: string;
   storage_available: boolean;
+  has_conflicts: boolean;
   groups: number;
   ready_groups: number;
+  already_done_groups: number;
+  conflict_groups: number;
   rejected_groups: number;
-  remove_items: number;
-  matched_items: number;
+  remove_total: number;
+  remove_matched: number;
+  remove_already_done: number;
+  remove_unmatched: number;
+  keep_total: number;
+  keep_matched: number;
+  keep_missing: number;
+  cross_group_conflicts: number;
   estimated_freed: number;
+  conflicts: VdfConflict[];
   items: VdfGroupView[];
 };
 const vdfPreviewData = ref<VdfPreview>();
@@ -526,6 +543,36 @@ const planStatusLabels: Record<string, string> = {
 };
 function planStatusLabel(status: string): string {
   return planStatusLabels[status] || status;
+}
+const vdfGroupStatusLabels: Record<string, string> = {
+  ready: "可执行",
+  already_done: "此前已处理",
+  conflict: "冲突",
+  rejected: "无法匹配",
+};
+function vdfGroupStatusLabel(status: string): string {
+  return vdfGroupStatusLabels[status] || status;
+}
+function vdfGroupBadgeClass(status: string): string {
+  if (status === "ready") return "verified";
+  if (status === "already_done") return "present";
+  if (status === "conflict") return "rejected";
+  return "needs_recovery";
+}
+const vdfItemStatusLabels: Record<string, string> = {
+  matched: "已匹配",
+  absent: "文件已不存在",
+  already_done: "此前已处理",
+  already_removed: "已被清理",
+  unmatched: "未匹配",
+  ambiguous: "歧义",
+  basename_only: "仅文件名",
+  not_completed: "非已完成",
+  missing_file: "文件缺失",
+  size_mismatch: "大小不符",
+};
+function vdfItemStatusLabel(status: string): string {
+  return vdfItemStatusLabels[status] || status;
 }
 const deleteTarget = ref<Video | undefined>(undefined);
 const deleteMode = ref<"delete_and_exclude" | "delete_only">("delete_and_exclude");
@@ -1975,10 +2022,31 @@ watch(
           </div>
           <div v-if="vdfPreviewData" class="stats" style="margin-top: 12px">
             <article><small>VDF 组</small><b>{{ vdfPreviewData.groups }}</b><span>原生导出</span></article>
-            <article><small>可清理组</small><b>{{ vdfPreviewData.ready_groups }}</b><span>已验证匹配</span></article>
-            <article><small>拒绝组</small><b>{{ vdfPreviewData.rejected_groups }}</b><span>需人工核对</span></article>
-            <article><small>已匹配媒体</small><b>{{ vdfPreviewData.matched_items }}</b><span>/ {{ vdfPreviewData.remove_items }} 删除项</span></article>
+            <article><small>可执行组</small><b>{{ vdfPreviewData.ready_groups }}</b><span>尚未执行</span></article>
+            <article><small>此前已处理</small><b>{{ vdfPreviewData.already_done_groups }}</b><span>已在排除中</span></article>
+            <article><small>冲突组</small><b>{{ vdfPreviewData.conflict_groups }}</b><span>已阻止执行</span></article>
+            <article><small>拒绝组</small><b>{{ vdfPreviewData.rejected_groups }}</b><span>无法安全匹配</span></article>
             <article><small>预计释放</small><b>{{ size(vdfPreviewData.estimated_freed) }}</b><span>可回收空间</span></article>
+          </div>
+          <div v-if="vdfPreviewData" class="stats" style="margin-top: 12px">
+            <article>
+              <small>删除项</small><b>{{ vdfPreviewData.remove_total }}</b>
+              <span>已匹配 {{ vdfPreviewData.remove_matched }} · 已处理 {{ vdfPreviewData.remove_already_done }} · 无法匹配 {{ vdfPreviewData.remove_unmatched }}</span>
+            </article>
+            <article>
+              <small>保留项</small><b>{{ vdfPreviewData.keep_total }}</b>
+              <span>正常 {{ vdfPreviewData.keep_matched }} · 缺失/已删 {{ vdfPreviewData.keep_missing }}</span>
+            </article>
+            <article>
+              <small>跨组冲突</small><b>{{ vdfPreviewData.cross_group_conflicts }}</b>
+              <span>{{ vdfPreviewData.has_conflicts ? "整个计划已阻止" : "无" }}</span>
+            </article>
+          </div>
+          <div v-if="vdfPreviewData && vdfPreviewData.conflicts.length" class="panel error" style="margin-top: 12px">
+            <b>检测到跨组安全冲突，计划不可执行：</b>
+            <p v-for="(cf, i) in vdfPreviewData.conflicts" :key="i">
+              [{{ cf.kind }}] {{ cf.video_id || cf.path }} · 组 {{ cf.groups.join(", ") }} — {{ cf.detail }}
+            </p>
           </div>
           <div v-if="vdfPreviewData" class="rows" style="margin-top: 12px">
             <article
@@ -1988,18 +2056,20 @@ watch(
             >
               <div class="vdf-group-head">
                 <b>{{ g.group_id }}</b>
-                <span class="integrity-badge" :class="'integrity-' + (g.status === 'ready' ? 'verified' : 'rejected')">{{
-                  g.status === "ready" ? "可清理" : "已拒绝"
-                }}</span>
+                <span
+                  class="integrity-badge"
+                  :class="'integrity-' + vdfGroupBadgeClass(g.status)"
+                  >{{ vdfGroupStatusLabel(g.status) }}</span
+                >
                 <span class="muted">{{ g.subscription_slug || "?" }} · 释放 {{ size(g.estimated_freed) }}</span>
               </div>
               <div class="vdf-items">
                 <div>
                   <small class="error">删除 ({{ g.remove_items.length }})</small>
                   <p v-for="it in g.remove_items" :key="it.path" class="muted">
-                    {{ it.match_status === "matched" ? "✓" : "✗" }} {{ it.path }}
-                    <em v-if="it.video_id">→ {{ it.video_id }} ({{ it.match_status }})</em>
-                    <em v-else>({{ it.match_status }})</em>
+                    {{ it.match_status === "matched" || it.match_status === "absent" || it.match_status === "already_done" ? "✓" : "✗" }} {{ it.path }}
+                    <em v-if="it.video_id">→ {{ it.video_id }} ({{ vdfItemStatusLabel(it.match_status) }})</em>
+                    <em v-else>({{ vdfItemStatusLabel(it.match_status) }})</em>
                   </p>
                 </div>
                 <div>
