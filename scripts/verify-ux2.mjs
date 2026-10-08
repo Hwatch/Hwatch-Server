@@ -27,6 +27,7 @@ check(app.includes("已提交下载任务"), "contextual action messages");
 check(app.includes("/api/audit"), "operation history must read the server audit log");
 check(app.includes("操作记录") && app.includes("notificationTab") && app.includes('"system" | "operations"'), "notifications page must add an operations tab");
 check(app.includes("auditResultLabel"), "operation history must show result status");
+check(app.includes("已受理") && app.includes("不代表后台任务已完成"), "operation history must not claim completion for accepted requests");
 check(!app.includes("localStorage.setItem(\"hwatch-op-history"), "operation history must not be frontend-only");
 
 if (failures.length) {
