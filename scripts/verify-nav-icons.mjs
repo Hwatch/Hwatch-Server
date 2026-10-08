@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const icon = read("../src/NavIcon.vue");
-const app = read("../src/App.vue");
+const app = read("../src/App.vue") + read("../src/useHWatchApp.ts");
 
 const failures = [];
 const check = (ok, message) => {
