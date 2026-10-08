@@ -1258,6 +1258,10 @@ export function useHWatchApp() {
     }
   }
   async function loadVideos() {
+    if (videoLoadTimer) {
+      clearTimeout(videoLoadTimer);
+      videoLoadTimer = undefined;
+    }
     const requestID = ++videoRequestID;
     videosLoading.value = true;
     videosError.value = "";
@@ -1358,6 +1362,10 @@ export function useHWatchApp() {
     }
   }
   async function changeView(next: string, updateHistory = true) {
+    if (videoLoadTimer) {
+      clearTimeout(videoLoadTimer);
+      videoLoadTimer = undefined;
+    }
     const request = ++pageRequestID;
     pageLoading.value = true;
     pageError.value = "";
@@ -1867,6 +1875,9 @@ export function useHWatchApp() {
     () => {
       page.value = 0;
       localStorage.setItem("r34watch-language", translationLanguage.value);
+      // Navigation resets these fields and explicitly loads once. Do not also
+      // schedule a debounced request against the next (possibly non-list) view.
+      if (pageLoading.value) return;
       if (["library", "undownloaded", "downloads"].includes(view.value)) {
         if (videoLoadTimer) clearTimeout(videoLoadTimer);
         videoLoadTimer = window.setTimeout(() => void loadVideos(), 300);
