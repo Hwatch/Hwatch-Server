@@ -1654,7 +1654,7 @@ const {
               <option value="zh-TW">繁体中文 zh-TW</option>
               <option value="en">英语 en</option>
               <option value="ja">日语 ja</option></select></label
-            ><button class="primary" @click="exportTranslation">
+            ><button class="primary" :disabled="actionPending('translation-export')" :aria-busy="actionPending('translation-export')" @click="exportTranslation">
               导出翻译 JSON</button
             ></div>
             <div class="translation-step">
