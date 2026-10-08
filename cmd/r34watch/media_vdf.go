@@ -206,7 +206,7 @@ type vdfPreview struct {
 	Items            []vdfGroupView `json:"items"`
 }
 
-func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Settings) vdfItemView {
+func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Settings, allowMissing bool) vdfItemView {
 	view := vdfItemView{Path: item.Path, SizeBytes: item.SizeBytes, Resolution: item.Resolution}
 	v, status := matchVideoPath(idx, cfg, item.Path)
 	if status != "matched" {
@@ -229,6 +229,13 @@ func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Setti
 	}
 	info, err := os.Stat(view.DBPath)
 	if err != nil {
+		if allowMissing && os.IsNotExist(err) {
+			// The remove file was already deleted externally; still a valid
+			// exclude-only candidate (no quarantine needed).
+			view.MatchStatus = "absent"
+			view.Detail = "文件已不在磁盘（外部删除）"
+			return view
+		}
 		view.MatchStatus = "missing_file"
 		view.Detail = "文件不存在或不可访问"
 		return view
@@ -253,13 +260,15 @@ func (a *App) previewVDFGUI(export vdfGUIExport) vdfPreview {
 		removeIDs := map[string]bool{}
 		keepIDs := map[string]bool{}
 		for _, item := range group.RemoveItems {
-			iv := a.verifyVDFItem(item, idx, cfg)
+			iv := a.verifyVDFItem(item, idx, cfg, true)
 			view.RemoveItems = append(view.RemoveItems, iv)
 			preview.RemoveItems++
-			if iv.MatchStatus == "matched" {
+			if iv.MatchStatus == "matched" || iv.MatchStatus == "absent" {
 				preview.MatchedItems++
-				preview.EstimatedFreed += iv.FileSize
-				view.EstimatedFreed += iv.FileSize
+				if iv.MatchStatus == "matched" {
+					preview.EstimatedFreed += iv.FileSize
+					view.EstimatedFreed += iv.FileSize
+				}
 				slugs[iv.SubscriptionSlug] = true
 				removeIDs[iv.VideoID] = true
 			} else {
@@ -267,7 +276,7 @@ func (a *App) previewVDFGUI(export vdfGUIExport) vdfPreview {
 			}
 		}
 		for _, item := range group.KeepItems {
-			iv := a.verifyVDFItem(item, idx, cfg)
+			iv := a.verifyVDFItem(item, idx, cfg, false)
 			view.KeepItems = append(view.KeepItems, iv)
 			if iv.MatchStatus == "matched" {
 				preview.MatchedItems++
@@ -333,7 +342,7 @@ func (a *App) executeVDFGUIGroups(export vdfGUIExport, confirm bool) (planExecut
 			continue
 		}
 		for _, item := range group.RemoveItems {
-			if item.MatchStatus != "matched" || item.VideoID == "" {
+			if item.VideoID == "" || (item.MatchStatus != "matched" && item.MatchStatus != "absent") {
 				skipped++
 				continue
 			}
@@ -344,7 +353,17 @@ func (a *App) executeVDFGUIGroups(export vdfGUIExport, confirm bool) (planExecut
 			}
 			persist := store.DeletionPlanItem{PlanID: planIDValue, VideoID: v.ID, KeptVideoID: firstKeepID(group), ExpectedSize: item.SizeBytes, OriginalPath: item.DBPath, Status: itemPending}
 			_ = a.store.SaveDeletionPlanItem(persist)
-			status, qpath, detail := a.quarantineExcludeOne(planIDValue, "vdf_gui_duplicate", v, item.DBPath)
+			var status, qpath, detail string
+			if item.MatchStatus == "absent" {
+				// Already deleted externally: exclude only, nothing to quarantine.
+				if err := a.excludeWithReason(v, "vdf_gui_duplicate"); err != nil {
+					status, detail = itemFailed, "数据库更新失败: "+err.Error()
+				} else {
+					status, detail = itemDBExcluded, "文件已不存在，仅写入排除"
+				}
+			} else {
+				status, qpath, detail = a.quarantineExcludeOne(planIDValue, "vdf_gui_duplicate", v, item.DBPath)
+			}
 			persist.Status, persist.QuarantinePath, persist.Reason = status, qpath, detail
 			_ = a.store.SaveDeletionPlanItem(persist)
 			switch status {
