@@ -781,6 +781,14 @@ export function useHWatchApp() {
     minHeight = ref(0),
     sortBy = ref("downloaded_at"),
     sortOrder = ref("desc");
+  // Random discovery: a small, non-blocking sample of the whole library.
+  const RANDOM_LIMIT = 6;
+  const RANDOM_HISTORY_MAX = 36;
+  const randomItems = ref<Video[]>([]);
+  const randomError = ref("");
+  const randomScope = ref<"all" | "current">("all");
+  const randomOpen = ref(true);
+  const randomHistory = ref<string[]>([]);
   const pages = computed(() => Math.max(1, Math.ceil(total.value / 48))),
     downloadTasks = computed(() => videos.value),
     unfinishedDownloadTasks = computed(() =>
@@ -1305,6 +1313,55 @@ export function useHWatchApp() {
       if (requestID === videoRequestID) videosLoading.value = false;
     }
   }
+  // Random discovery reuses the library filter semantics only when the user
+  // opts into "current filters"; by default it spans the entire library.
+  function randomParams(): URLSearchParams {
+    const p = new URLSearchParams({
+      limit: String(RANDOM_LIMIT),
+      language: translationLanguage.value,
+    });
+    if (randomScope.value === "current") {
+      if (query.value) p.set("q", query.value);
+      p.set("scope", searchScope.value);
+      p.set("tag_mode", tagMode.value);
+      if (selectedTags.value.length)
+        p.set("tags", selectedTags.value.join(","));
+      if (excludedTags.value.length)
+        p.set("exclude_tags", excludedTags.value.join(","));
+      if (creatorFilter.value) p.set("creator", creatorFilter.value);
+      if (codecFilter.value) p.set("codec", codecFilter.value);
+      if (minHeight.value) p.set("min_height", String(minHeight.value));
+    }
+    if (randomHistory.value.length)
+      p.set("exclude", randomHistory.value.join(","));
+    return p;
+  }
+  async function loadRandom(allowReset = true) {
+    // Keyed action: "换一批" shows loading immediately and rejects repeat clicks.
+    const result = await actions.run("library-random", () =>
+      api("/api/library/random?" + randomParams()),
+    );
+    if (result.duplicate) return;
+    if (!result.ok) {
+      // Keep the previous batch on screen and show a compact error.
+      randomError.value = result.error || "随机推荐加载失败";
+      return;
+    }
+    const items: Video[] = result.value?.items || [];
+    if (items.length === 0 && randomHistory.value.length && allowReset) {
+      // The recent-history exclusion consumed the whole candidate pool (small
+      // library). Reset history once and try again instead of showing empty.
+      randomHistory.value = [];
+      return loadRandom(false);
+    }
+    randomItems.value = items;
+    randomError.value = "";
+    const ids = items.map((v) => v.video_id);
+    randomHistory.value = [...ids, ...randomHistory.value].slice(
+      0,
+      RANDOM_HISTORY_MAX,
+    );
+  }
   async function loadFacets() {
     if (!facets.value.tags.length)
       facets.value = await api("/api/videos/facets");
@@ -1396,6 +1453,8 @@ export function useHWatchApp() {
       }
       if (["library", "undownloaded", "downloads"].includes(next))
         await loadVideos();
+      // Random discovery loads after the library so it never blocks first paint.
+      if (next === "library") void loadRandom(false);
       if (next === "settings") await loadSettings();
       if (next === "notifications") {
         await loadNotifications();
@@ -1854,6 +1913,9 @@ export function useHWatchApp() {
     },
     { flush: "sync" },
   );
+  watch(randomScope, () => {
+    if (view.value === "library") void loadRandom(false);
+  });
   watch(creatorQuery, () => {
     if (creatorTimer) clearTimeout(creatorTimer);
     creatorSearchID++;
@@ -1892,6 +1954,12 @@ export function useHWatchApp() {
         if (videoLoadTimer) clearTimeout(videoLoadTimer);
         videoLoadTimer = window.setTimeout(() => void loadVideos(), 300);
       }
+      if (
+        view.value === "library" &&
+        randomScope.value === "current" &&
+        randomOpen.value
+      )
+        void loadRandom(false);
       if (view.value === "home") refreshDashboard();
     },
   );
@@ -2010,6 +2078,11 @@ export function useHWatchApp() {
     minHeight,
     sortBy,
     sortOrder,
+    randomItems,
+    randomError,
+    randomScope,
+    randomOpen,
+    loadRandom,
     pages,
     unfinishedDownloadTasks,
     completedDownloadTasks,

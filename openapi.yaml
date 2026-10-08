@@ -102,6 +102,25 @@ paths:
       responses: {'200': {$ref: '#/components/responses/VideoPage'}, '400': {$ref: '#/components/responses/Error'}}
   /api/videos/facets:
     get: {tags: [Library], operationId: videoFacets, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/library/random:
+    get:
+      tags: [Library]
+      operationId: libraryRandom
+      description: 从整个已下载影视库中均匀随机抽取一小批正式媒体。只读，不触发下载或状态变更；只返回 status=completed 且媒体路径非空的媒体。
+      security: [{cookieAuth: []}, {integrationBearer: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 24, default: 6}}
+        - {name: exclude, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: scope, in: query, schema: {type: string, enum: [all, original, translated]}}
+        - {name: tags, in: query, schema: {type: string}}
+        - {name: exclude_tags, in: query, schema: {type: string}}
+        - {name: tag_mode, in: query, schema: {type: string, enum: [all, any]}}
+        - {name: creator, in: query, schema: {type: string}}
+        - {name: codec, in: query, schema: {type: string}}
+        - {name: min_height, in: query, schema: {type: integer}}
+        - {$ref: '#/components/parameters/Language'}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}
   /api/tasks:
     get: {tags: [Downloads], operationId: listTasks, parameters: [{$ref: '#/components/parameters/TaskLimit'}, {$ref: '#/components/parameters/Offset'}, {name: status, in: query, schema: {type: string}}, {$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/VideoPage'}}}
   /api/tasks/{id}/history:

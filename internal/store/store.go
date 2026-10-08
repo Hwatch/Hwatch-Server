@@ -629,6 +629,42 @@ func (s *Store) DownloadedVideos(platform string, limit, offset int) ([]Video, e
 	return scanVideos(rows, err)
 }
 
+// RandomVideos returns up to limit library media drawn uniformly at random,
+// optionally narrowed by the same filters as the library search. It always
+// constrains candidates to formally downloaded, on-disk media (status
+// "completed", non-empty file path, not a synthetic "test:" fixture) so it
+// never recommends removed, excluded, unfinished, download-task or
+// quarantined rows. excludeIDs lets the UI avoid repeating recent batches
+// without pulling the whole library into the browser.
+func (s *Store) RandomVideos(limit int, opts VideoSearch, excludeIDs []string) ([]Video, error) {
+	if limit <= 0 {
+		return []Video{}, nil
+	}
+	opts.Status = "completed"
+	where, args := videoSearchWhere(opts)
+	where += " AND v.file_path<>'' AND v.id NOT LIKE 'test:%'"
+	if len(excludeIDs) > 0 {
+		holders := make([]string, 0, len(excludeIDs))
+		for _, id := range excludeIDs {
+			if id == "" {
+				continue
+			}
+			holders = append(holders, "?")
+			args = append(args, id)
+		}
+		if len(holders) > 0 {
+			where += " AND v.id NOT IN (" + strings.Join(holders, ",") + ")"
+		}
+	}
+	// The translated-title join placeholder must precede the WHERE args, and
+	// is harmless for the original/all scope.
+	join := " LEFT JOIN translations tt ON tt.entity_id=v.id AND tt.field='title' AND tt.language=?"
+	queryArgs := append([]any{opts.Language}, args...)
+	queryArgs = append(queryArgs, limit)
+	rows, err := s.DB.Query("SELECT "+prefixedVideoColumns("v")+" FROM videos v"+join+where+" ORDER BY random() LIMIT ?", queryArgs...)
+	return scanVideos(rows, err)
+}
+
 func (s *Store) QueueDiscovered(subscriptionSlug string) (int64, error) {
 	query := "UPDATE videos SET status='queued',error='',updated_at=? WHERE status='discovered'"
 	args := []any{Now()}
