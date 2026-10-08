@@ -89,6 +89,20 @@ func TestParseCount(t *testing.T) {
 	}
 }
 
+func TestModelVideoCountUsesPageTotal(t *testing.T) {
+	page := `<h1>Theobrobine <span class="total_results">(147)</span></h1><div total="147" data-sort="post_date">`
+	if got := modelVideoCount(page, 829); got != 147 {
+		t.Fatalf("page total must win over models_json total, got %d", got)
+	}
+	if got := modelVideoCount(`<html>no count here</html>`, 829); got != 829 {
+		t.Fatalf("fallback to models_json total, got %d", got)
+	}
+	// A model page whose real count happens to be zero should not be ignored.
+	if got := modelVideoCount(`<span class="total_results">(0)</span>`, 5); got != 0 {
+		t.Fatalf("zero count must be honored, got %d", got)
+	}
+}
+
 func TestFirstImageRejectsLazyPlaceholder(t *testing.T) {
 	if got := firstImage(`<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">`); got != "" {
 		t.Fatalf("placeholder must be rejected, got %q", got)
