@@ -61,6 +61,35 @@ const check = (ok, message) => {
   check(order.join(",") === "first", "H: only the first response applies, got " + order.join(","));
 }
 
+// UX-3: different resources run independently; same resource conflicts dedupe.
+{
+  const a = createAsyncActions();
+  const a1 = a.run("video:A", async () => {
+    await sleep(60);
+    return "A";
+  });
+  const conflict = await a.run("video:A", async () => "A2"); // same resource
+  const a2 = a.run("video:B", async () => {
+    await sleep(10);
+    return "B";
+  });
+  check(conflict.duplicate === true, "UX-3: same-video conflicting action is rejected while pending");
+  const bResult = await a2;
+  check(bResult.ok && bResult.value === "B", "UX-3: different video runs independently");
+  check(a.pending("video:A") === true, "UX-3: video A still pending while B finished");
+  await a1;
+}
+
+// UX-3: failure keeps an error and restores the operability state (settings save).
+{
+  const a = createAsyncActions();
+  const r = await a.run("settings-save", async () => {
+    throw new Error("保存失败：请求超时");
+  });
+  check(r.ok === false && /请求超时/.test(a.error("settings-save")), "UX-3: settings save failure is captured");
+  check(a.pending("settings-save") === false, "UX-3: settings can be retried after failure");
+}
+
 // E: business/failure errors are captured with the message.
 {
   const a = createAsyncActions();
