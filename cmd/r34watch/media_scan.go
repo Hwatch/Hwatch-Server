@@ -108,8 +108,18 @@ func normalizeMediaPath(root, p string) string {
 	return filepath.ToSlash(filepath.Clean(p))
 }
 
-// locateMovedSibling detects a renamed-but-same-stem file beside the expected
-// path, so a moved file is not mistaken for an external deletion.
+// videoExtensions are the only sibling extensions that indicate a media file
+// was moved/renamed. Sidecar files (.jpg/.nfo/.srt/...) must never cause a
+// missing video to be classified as moved.
+var videoExtensions = map[string]bool{
+	".mkv": true, ".avi": true, ".mov": true, ".webm": true, ".ts": true,
+	".m4v": true, ".wmv": true, ".flv": true, ".mpg": true, ".mpeg": true,
+	".m2ts": true, ".vob": true, ".3gp": true, ".mp4": true,
+}
+
+// locateMovedSibling detects a renamed-but-same-stem *video* file beside the
+// expected path, so a moved file is not mistaken for an external deletion. A
+// same-stem poster (.jpg/png/webp), subtitle (.srt/ass/vtt) or NFO is ignored.
 func locateMovedSibling(path string) string {
 	dir := filepath.Dir(path)
 	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -123,6 +133,10 @@ func locateMovedSibling(path string) string {
 		}
 		name := entry.Name()
 		if name == filepath.Base(path) {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(name))
+		if !videoExtensions[ext] {
 			continue
 		}
 		if strings.TrimSuffix(name, filepath.Ext(name)) == stem {

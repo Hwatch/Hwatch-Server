@@ -180,6 +180,25 @@ func TestVDFGUIStorageUnavailableAndInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestVDFGUIBasenameOnlyIsNotExecutable(t *testing.T) {
+	root := t.TempDir()
+	a, s := newIntegrityApp(t, root, false)
+	dup := filepath.Join(root, "Show", "Season 01", "clip.mp4")
+	keep := filepath.Join(root, "Show", "Season 01", "keep.mp4")
+	seedCompletedMedia(t, s, "rule34video:d", "rule34video", dup, true)
+	seedCompletedMedia(t, s, "rule34video:k", "rule34video", keep, true)
+	// VDF path shares only the basename (no two-component suffix match).
+	export := vdfGUIExport{Groups: []vdfGUIGroup{{
+		GroupID:     "g",
+		RemoveItems: []vdfGUIItem{{Path: "/mac/Elsewhere/clip.mp4", SizeBytes: int64(len("payload"))}},
+		KeepItems:   []vdfGUIItem{{Path: keep, SizeBytes: int64(len("payload"))}},
+	}}}
+	preview := a.previewVDFGUI(export)
+	if preview.ReadyGroups != 0 || preview.Items[0].RemoveItems[0].MatchStatus != "basename_only" {
+		t.Fatalf("basename-only must not be executable: %+v", preview.Items[0])
+	}
+}
+
 func TestVDFGUIAlreadyDeletedExcludesOnly(t *testing.T) {
 	root := t.TempDir()
 	a, s := newIntegrityApp(t, root, false)
