@@ -406,6 +406,9 @@ components:
       properties:
         source: {type: string, description: 平台/适配器标识，例如 rule34video}
         host: {type: string, description: 触发限速的真实主机}
+        reason: {type: string, enum: [rate_limit, network], description: rate_limit=HTTP 429；network=连续连接级失败（TLS/EOF/reset）触发的来源恢复退避}
         backoff_until: {type: string, format: date-time}
         retry_after_seconds: {type: integer, description: 服务端 Retry-After（若提供）}
+        consecutive_429: {type: integer}
+        transient: {type: integer, description: 连续连接级失败次数}
         waiting: {type: integer, description: 该来源当前等待中的 queued 任务数}

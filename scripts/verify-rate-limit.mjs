@@ -21,12 +21,14 @@ check(app.includes("result.rate_limits"), "tasks response rate_limits not consum
 check(style.includes(".rate-limit-banner"), "missing .rate-limit-banner style");
 
 // i18n coverage for the new banner.
-for (const label of ["来源请求受限", "來源請求受限", "Source rate limited", "取得元がレート制限中"]) {
+for (const label of ["来源请求受限", "來源請求受限", "Source temporarily unavailable", "取得元が一時的に制限中"]) {
   check(app.includes(label), `missing i18n label: ${label}`);
 }
-for (const label of ["等待来源限速解除", "Waiting for source rate limit"]) {
+for (const label of ["等待来源限速解除", "Waiting for source rate limit", "等待来源连接恢复", "Waiting for source connection"]) {
   check(app.includes(label), `missing task-row i18n: ${label}`);
 }
+check(app.includes("rateLimitedReason"), "missing per-reason rate limit resolution");
+check(app.includes("last-error"), "stale queued errors must be shown as historical, not current");
 
 if (failures.length) {
   console.error("rate limit check failed:");

@@ -132,7 +132,7 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);" +
-	"CREATE TABLE IF NOT EXISTS rate_limits (source_key TEXT PRIMARY KEY,host TEXT NOT NULL DEFAULT '',consecutive_429 INTEGER NOT NULL DEFAULT 0,backoff_until TEXT NOT NULL DEFAULT '',last_429_at TEXT NOT NULL DEFAULT '',retry_after_seconds INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);" +
+	"CREATE TABLE IF NOT EXISTS rate_limits (source_key TEXT PRIMARY KEY,host TEXT NOT NULL DEFAULT '',consecutive_429 INTEGER NOT NULL DEFAULT 0,backoff_until TEXT NOT NULL DEFAULT '',last_429_at TEXT NOT NULL DEFAULT '',retry_after_seconds INTEGER NOT NULL DEFAULT 0,transient INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);" +
 	"CREATE TABLE IF NOT EXISTS task_rate_limits (video_id TEXT PRIMARY KEY,retries INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);"
 
 func Open(path string) (*Store, error) {
@@ -181,6 +181,7 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE duplicate_candidates ADD COLUMN backend TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE duplicate_candidates ADD COLUMN algorithm_version TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE duplicate_candidates ADD COLUMN metrics_json TEXT NOT NULL DEFAULT '{}'",
+		"ALTER TABLE rate_limits ADD COLUMN transient INTEGER NOT NULL DEFAULT 0",
 	} {
 		_, _ = db.Exec(statement)
 	}
@@ -696,15 +697,16 @@ type RateLimitState struct {
 	BackoffUntil      string
 	Last429At         string
 	RetryAfterSeconds int
+	Transient         int
 }
 
 func (s *Store) SaveRateLimit(x RateLimitState) error {
-	_, err := s.DB.Exec("INSERT INTO rate_limits(source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET host=excluded.host,consecutive_429=excluded.consecutive_429,backoff_until=excluded.backoff_until,last_429_at=excluded.last_429_at,retry_after_seconds=excluded.retry_after_seconds,updated_at=excluded.updated_at", x.SourceKey, x.Host, x.Consecutive, x.BackoffUntil, x.Last429At, x.RetryAfterSeconds, Now())
+	_, err := s.DB.Exec("INSERT INTO rate_limits(source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds,transient,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET host=excluded.host,consecutive_429=excluded.consecutive_429,backoff_until=excluded.backoff_until,last_429_at=excluded.last_429_at,retry_after_seconds=excluded.retry_after_seconds,transient=excluded.transient,updated_at=excluded.updated_at", x.SourceKey, x.Host, x.Consecutive, x.BackoffUntil, x.Last429At, x.RetryAfterSeconds, x.Transient, Now())
 	return err
 }
 
 func (s *Store) RateLimits() ([]RateLimitState, error) {
-	rows, err := s.DB.Query("SELECT source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds FROM rate_limits")
+	rows, err := s.DB.Query("SELECT source_key,host,consecutive_429,backoff_until,last_429_at,retry_after_seconds,transient FROM rate_limits")
 	if err != nil {
 		return nil, err
 	}
@@ -712,7 +714,7 @@ func (s *Store) RateLimits() ([]RateLimitState, error) {
 	out := []RateLimitState{}
 	for rows.Next() {
 		var x RateLimitState
-		if err = rows.Scan(&x.SourceKey, &x.Host, &x.Consecutive, &x.BackoffUntil, &x.Last429At, &x.RetryAfterSeconds); err != nil {
+		if err = rows.Scan(&x.SourceKey, &x.Host, &x.Consecutive, &x.BackoffUntil, &x.Last429At, &x.RetryAfterSeconds, &x.Transient); err != nil {
 			return nil, err
 		}
 		out = append(out, x)
