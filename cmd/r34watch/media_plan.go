@@ -263,10 +263,14 @@ func quarantineTarget(root, planID, originalPath string) string {
 }
 
 func (a *App) excludeQuarantined(v store.Video) error {
+	return a.excludeWithReason(v, "transrunner_duplicate")
+}
+
+func (a *App) excludeWithReason(v store.Video, reason string) error {
 	return a.store.RemoveAndExclude(v.ID, store.MediaExclusion{
 		VideoID:             v.ID,
 		Source:              v.Platform,
-		Reason:              "transrunner_duplicate",
+		Reason:              reason,
 		TitleSnapshot:       v.Title,
 		OriginalURLSnapshot: v.PageURL,
 		ThumbnailSnapshot:   v.ThumbnailURL,

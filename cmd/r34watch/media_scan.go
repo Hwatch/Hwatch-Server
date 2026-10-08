@@ -89,6 +89,7 @@ type cleanupPreviewItem struct {
 }
 
 type cleanupPreview struct {
+	Format           string               `json:"format,omitempty"`
 	StorageAvailable bool                 `json:"storage_available"`
 	Deletions        int                  `json:"deletions"`
 	Candidates       int                  `json:"candidates"`
@@ -213,7 +214,7 @@ func parseVDFDeletionList(raw []byte) ([]vdfDeletion, error) {
 // filesystem. It is a pure read: nothing is changed.
 func (a *App) previewMediaCleanup(deletions []vdfDeletion) cleanupPreview {
 	cfg, _ := a.store.Settings()
-	preview := cleanupPreview{Deletions: len(deletions), Items: []cleanupPreviewItem{}}
+	preview := cleanupPreview{Format: importFormatLegacy, Deletions: len(deletions), Items: []cleanupPreviewItem{}}
 	preview.StorageAvailable = storagePathAvailable(cfg.DownloadDir, cfg.StorageMountRequired)
 	for _, d := range deletions {
 		item := cleanupPreviewItem{VideoID: d.VideoID}
@@ -340,8 +341,9 @@ func (a *App) mediaIntegrityScan(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, a.scanMediaLibrary(limit))
 }
 
-// mediaIntegrityImportPreview parses an external deletion list and returns what
-// would happen. Body is the raw JSON list (array or {"deletions":[...]}).
+// mediaIntegrityImport detects the deletion JSON schema (external deleted list
+// or native VDF GUI export) and returns the matching preview. A pending
+// TransRunner plan is never treated as an already-deleted list.
 func (a *App) mediaIntegrityImport(w http.ResponseWriter, r *http.Request) {
 	raw := make([]byte, 0, 4096)
 	buf := make([]byte, 4096)
@@ -358,12 +360,28 @@ func (a *App) mediaIntegrityImport(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	deletions, err := parseVDFDeletionList(raw)
-	if err != nil {
-		fail(w, http.StatusUnprocessableEntity, err)
-		return
+	switch detectImportFormat(raw) {
+	case importFormatVDFGUI:
+		export, err := parseVDFGUIExport(raw)
+		if err != nil {
+			fail(w, http.StatusUnprocessableEntity, err)
+			return
+		}
+		respond(w, http.StatusOK, a.previewVDFGUI(export))
+	case importFormatTransRunner:
+		fail(w, http.StatusUnprocessableEntity, errors.New("这是 TransRunner 删除计划，请使用“模式二”导入"))
+	case importFormatLegacy:
+		deletions, err := parseVDFDeletionList(raw)
+		if err != nil {
+			fail(w, http.StatusUnprocessableEntity, err)
+			return
+		}
+		preview := a.previewMediaCleanup(deletions)
+		preview.Format = importFormatLegacy
+		respond(w, http.StatusOK, preview)
+	default:
+		fail(w, http.StatusUnprocessableEntity, errors.New("无法识别的删除清单格式"))
 	}
-	respond(w, http.StatusOK, a.previewMediaCleanup(deletions))
 }
 
 func (a *App) mediaIntegrityApply(w http.ResponseWriter, r *http.Request) {

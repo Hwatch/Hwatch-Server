@@ -151,10 +151,18 @@ paths:
     post:
       tags: [Library]
       operationId: mediaIntegrityImport
-      description: 解析外部 VDF 删除清单（数组或 {deletions:[...]}）并返回校验预览，不修改数据库。
+      description: 自动识别删除清单格式并返回校验预览，不修改数据库。支持：外部已删除清单（数组或 {deletions:[...]}）、VDF GUI 原生导出（{CreatedAt,EstimatedTotalSavingsBytes,Groups:[{GroupId,RemoveItems,KeepItems}]}）。TransRunner 删除计划请使用模式二 /plan/*。
       parameters: [{$ref: '#/components/parameters/CSRF'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}}
+  /api/media-integrity/vdf/execute:
+    post:
+      tags: [Library]
+      operationId: vdfGUIExecute
+      description: 执行 VDF GUI 原生删除导出：按路径匹配 HWatch 媒体（服务端路径→两段后缀→唯一 basename），校验同订阅/保留项存在/大小一致后，复用隔离区 + RemoveAndExclude。confirm=false 为 Dry Run；歧义或非受管路径拒绝执行。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [raw, confirm], properties: {raw: {type: string}, confirm: {type: boolean}}}}}}
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '422': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/media-integrity/apply:
     post:
       tags: [Library]

@@ -1954,6 +1954,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/media-integrity/plans", a.mediaIntegrityPlans)
 	mux.HandleFunc("GET /api/media-integrity/plan/{id}", a.mediaIntegrityPlanDetail)
 	mux.HandleFunc("POST /api/media-integrity/plan/{id}/recover", a.mediaIntegrityPlanRecover)
+	mux.HandleFunc("POST /api/media-integrity/vdf/execute", a.mediaIntegrityVDFExecute)
 	mux.HandleFunc("POST /api/import/html", a.importHTML)
 	mux.HandleFunc("GET /media/{id}", a.media)
 	mux.HandleFunc("GET /thumb/{id}", a.thumbnail)

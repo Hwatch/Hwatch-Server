@@ -29,7 +29,7 @@ func seedCompletedMedia(t *testing.T, s *store.Store, id, platform, path string,
 	t.Helper()
 	slug := platform + ":creator"
 	if _, err := s.DB.Exec("INSERT OR IGNORE INTO subscriptions(slug,name,url,platform,subscription_type,source_id,created_at,enabled) VALUES(?,?,?,?,?,?,?,1)",
-		slug, "c", "https://example.invalid/models/c/", platform, "creator", "c", store.Now()); err != nil {
+		slug, "c", "https://example.invalid/models/"+platform+"/c/", platform, "creator", "c", store.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DB.Exec("INSERT INTO videos(id,subscription_slug,platform,title,page_url,discovered_at,updated_at,status,file_path,plex_path,duration_seconds) VALUES(?,?,?,?,?,?,?,?,?,?,?)",

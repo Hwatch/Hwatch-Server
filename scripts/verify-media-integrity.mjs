@@ -25,6 +25,10 @@ check(app.includes("/api/media-integrity/plan/execute"), "missing TransRunner pl
 check(app.includes("二次确认并执行清理"), "missing double-confirm execute");
 check(app.includes("planStatusLabel"), "missing plan status labels");
 check(app.includes("recoverPlan"), "missing plan recovery entry");
+check(app.includes("/api/media-integrity/vdf/execute"), "missing native VDF GUI execute");
+check(app.includes("vdfPreviewData"), "missing VDF GUI preview state");
+check(app.includes("二次确认并执行 VDF 清理"), "missing VDF double-confirm execute");
+check(style.includes(".vdf-group"), "missing VDF group style");
 check(style.includes(".integrity-badge"), "missing integrity badge style");
 
 if (failures.length) {
