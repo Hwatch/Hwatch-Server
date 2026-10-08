@@ -4,6 +4,7 @@ import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import { requestJSON } from "./api-client";
 import { createAsyncActions } from "./asyncAction";
+import { createToasts } from "./toast";
 type Link = { Name?: string; URL?: string; Image?: string };
 type Creator = {
   platform: string;
@@ -106,6 +107,15 @@ type Notification = {
   message: string;
   created_at: string;
   read_at: string;
+};
+type AuditLogRow = {
+  id: number;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  result: string;
+  created_at: string;
 };
 type Exclusion = {
   video_id: string;
@@ -233,6 +243,21 @@ const data = ref<Dashboard>(empty),
   searchingCreators = ref(false),
   downloadExisting = ref(false);
 const actions = createAsyncActions();
+const toasts = createToasts({ max: 3 });
+function toastType(message: string): "success" | "info" | "error" {
+  if (/失败|错误|error|invalid|无效/i.test(message)) return "error";
+  if (/正在|已提交|已请求|后台|处理中/.test(message)) return "info";
+  return "success";
+}
+// Legacy `notice` assignments become lifecycle-managed toasts.
+watch(notice, (value) => {
+  if (!value) return;
+  toasts.push({ type: toastType(value), message: value });
+  notice.value = "";
+});
+function notify(message: string, type: "success" | "info" | "error") {
+  toasts.push({ type, message });
+}
 const subscribePending = computed(() => actions.pending("subscribe"));
 const subscribeStatus = computed(() =>
   subscribePending.value ? "正在保存订阅，请稍候…" : "",
@@ -388,6 +413,24 @@ const backups = ref<Backup[]>([]),
   backupDirectory = ref(""),
   backupSensitive = ref(false);
 const notifications = ref<Notification[]>([]);
+const notificationTab = ref<"system" | "operations">("system");
+const auditLogs = ref<AuditLogRow[]>([]);
+async function loadAuditLogs() {
+  const result = await api("/api/audit?limit=100");
+  auditLogs.value = result.items || [];
+}
+function auditResultLabel(result: string): string {
+  if (result === "success") return "成功";
+  if (result === "failed") return "失败";
+  return result || "未知";
+}
+async function switchNotificationTab(tab: "system" | "operations") {
+  notificationTab.value = tab;
+  if (tab === "operations") {
+    const result = await actions.run("audit-load", () => loadAuditLogs());
+    if (!result.ok && !result.duplicate) notice.value = result.error || "操作记录加载失败";
+  }
+}
 const exclusions = ref<Exclusion[]>([]);
 const mediaExclusionTotal = ref(0);
 type MediaScanItem = {
@@ -1161,7 +1204,10 @@ async function changeView(next: string, updateHistory = true) {
   if (["library", "undownloaded", "downloads"].includes(next))
     await loadVideos();
   if (next === "settings") await loadSettings();
-  if (next === "notifications") await loadNotifications();
+  if (next === "notifications") {
+    await loadNotifications();
+    if (notificationTab.value === "operations") await loadAuditLogs();
+  }
   if (next === "excluded") await loadExclusions();
   if (next === "integrity") await loadIntegrity();
 }
@@ -1279,7 +1325,15 @@ async function videoAction(v: Video, action: string) {
     return;
   await act(async () => {
     await api("/api/videos/" + v.video_id + "/" + action, { method: "POST" });
-    notice.value = "操作已提交";
+    const labels: Record<string, string> = {
+      download: "已提交下载任务",
+      retry: "已提交重试",
+      pause: "已请求暂停",
+      resume: "已请求恢复",
+      delete: "已提交删除任务",
+    };
+    notice.value =
+      (labels[action] || "操作已提交") + "：" + displayTitle(v);
     await loadVideos();
   });
 }
@@ -1521,6 +1575,7 @@ onBeforeUnmount(() => {
   if (creatorTimer) clearTimeout(creatorTimer);
   if (videoLoadTimer) clearTimeout(videoLoadTimer);
   videoAbort?.abort();
+  toasts.clearAll();
 });
 watch(creatorQuery, () => {
   if (creatorTimer) clearTimeout(creatorTimer);
@@ -1756,7 +1811,25 @@ watch(
           检查更新
         </button>
       </header>
-      <button v-if="notice" class="notice" role="status" @click="notice = ''">{{ notice }}</button>
+      <div v-if="toasts.list.length" class="toasts" aria-live="polite">
+        <div
+          v-for="t in toasts.list"
+          :key="t.id"
+          class="toast"
+          :class="'toast--' + t.type"
+          :role="t.type === 'error' ? 'alert' : 'status'"
+        >
+          <span class="toast__message">{{ t.message }}</span>
+          <button
+            type="button"
+            class="toast__close"
+            aria-label="关闭通知"
+            @click="toasts.dismiss(t.id)"
+          >
+            ×
+          </button>
+        </div>
+      </div>
       <div v-if="data.health_warnings.length" class="health-alert">
         <b>系统运行提醒</b
         ><span
@@ -2296,28 +2369,67 @@ watch(
         </div>
       </section>
       <section v-else-if="view === 'notifications'">
-        <div class="toolbar">
+        <div class="tabs">
           <button
-            :disabled="!data.unread_notifications"
-            @click="markNotificationsRead"
+            :class="{ active: notificationTab === 'system' }"
+            @click="switchNotificationTab('system')"
           >
-            全部标为已读</button
-          ><span>{{ data.unread_notifications }} 条未读</span>
-        </div>
-        <div class="rows notification-list">
-          <article
-            v-for="item in notifications"
-            :key="item.id"
-            :class="{ unread: !item.read_at }"
+            系统通知</button
+          ><button
+            :class="{ active: notificationTab === 'operations' }"
+            @click="switchNotificationTab('operations')"
           >
-            <div class="notification-dot" :class="item.severity"></div>
-            <div>
-              <b>{{ item.message }}</b
-              ><small>{{ localTime(item.created_at) }} · {{ item.code }}</small>
-            </div>
-          </article>
-          <div v-if="!notifications.length" class="empty">暂无系统通知</div>
+            操作记录
+          </button>
         </div>
+        <template v-if="notificationTab === 'system'">
+          <div class="toolbar">
+            <button
+              :disabled="!data.unread_notifications"
+              @click="markNotificationsRead"
+            >
+              全部标为已读</button
+            ><span>{{ data.unread_notifications }} 条未读</span>
+          </div>
+          <div class="rows notification-list">
+            <article
+              v-for="item in notifications"
+              :key="item.id"
+              :class="{ unread: !item.read_at }"
+            >
+              <div class="notification-dot" :class="item.severity"></div>
+              <div>
+                <b>{{ item.message }}</b
+                ><small>{{ localTime(item.created_at) }} · {{ item.code }}</small>
+              </div>
+            </article>
+            <div v-if="!notifications.length" class="empty">暂无系统通知</div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="rows notification-list">
+            <article v-for="item in auditLogs" :key="item.id">
+              <div
+                class="notification-dot"
+                :class="item.result === 'success' ? 'info' : 'error'"
+              ></div>
+              <div>
+                <b>{{ item.action }}</b>
+                <small>
+                  {{ auditResultLabel(item.result) }}
+                  <template v-if="item.target_type"
+                    >· {{ item.target_type }}
+                    <template v-if="item.target_id"
+                      >#{{ item.target_id }}</template
+                    ></template
+                  >
+                  · {{ localTime(item.created_at) }}
+                </small>
+              </div>
+            </article>
+            <div v-if="!auditLogs.length" class="empty">暂无操作记录</div>
+          </div>
+        </template>
       </section>
       <section v-else-if="view === 'downloads'">
         <div class="transfer-total">
