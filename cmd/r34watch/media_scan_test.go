@@ -79,6 +79,47 @@ func TestMediaScanRefusesWhenStorageUnavailable(t *testing.T) {
 	}
 }
 
+func TestMediaScanSidecarIsNotMoved(t *testing.T) {
+	root := t.TempDir()
+	a, s := newIntegrityApp(t, root, false)
+	path := filepath.Join(root, "A", "video.mp4")
+	seedCompletedMedia(t, s, "rule34video:1", "rule34video", path, false)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", ".vtt", ".aria2"} {
+		if err := os.WriteFile(filepath.Join(root, "A", "video"+ext), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := a.scanMediaLibrary(1000)
+	if result.Moved != 0 || result.Missing != 1 {
+		t.Fatalf("sidecar files must not be classified as moved: %+v", result)
+	}
+	for _, ext := range []string{".jpg", ".nfo"} {
+		if _, err := os.Stat(filepath.Join(root, "A", "video"+ext)); err != nil {
+			t.Fatal("scan must not delete sidecar files")
+		}
+	}
+}
+
+func TestMediaScanVideoSiblingIsMoved(t *testing.T) {
+	root := t.TempDir()
+	a, s := newIntegrityApp(t, root, false)
+	path := filepath.Join(root, "A", "video.mp4")
+	seedCompletedMedia(t, s, "rule34video:1", "rule34video", path, false)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "A", "video.mkv"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := a.scanMediaLibrary(1000)
+	if result.Moved != 1 || result.Missing != 0 {
+		t.Fatalf("a same-stem video file should be moved: %+v", result)
+	}
+}
+
 func TestMediaScanDetectsMovedFile(t *testing.T) {
 	root := t.TempDir()
 	a, s := newIntegrityApp(t, root, false)

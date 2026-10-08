@@ -145,30 +145,30 @@ func (a *App) buildMediaPathIndex(cfg store.Settings) mediaPathIndex {
 	return idx
 }
 
-// matchVideoPath resolves a VDF path to a single managed media row. It tolerates
-// a macOS path prefix via a two-component suffix and a unique basename, but
-// never accepts an ambiguous result.
-func matchVideoPath(idx mediaPathIndex, cfg store.Settings, rawPath string) (store.Video, string) {
+// matchVideoPath resolves a VDF path to a single managed media row and reports
+// how it matched. A basename-only match is returned distinctly so callers can
+// refuse to act on it.
+func matchVideoPath(idx mediaPathIndex, cfg store.Settings, rawPath string) (store.Video, string, string) {
 	norm := normalizeMediaPath(cfg.DownloadDir, filepath.FromSlash(rawPath))
 	if norm == "" {
-		return store.Video{}, "unmatched"
+		return store.Video{}, "unmatched", ""
 	}
 	if v, ok := idx.byNorm[norm]; ok {
-		return v, "matched"
+		return v, "matched", "exact"
 	}
 	tail := strings.ToLower(strings.Join(lastComponents(norm, 2), "/"))
 	if vs := idx.byTail[tail]; len(vs) == 1 {
-		return vs[0], "matched"
+		return vs[0], "matched", "suffix"
 	} else if len(vs) > 1 {
-		return store.Video{}, "ambiguous"
+		return store.Video{}, "ambiguous", ""
 	}
 	base := strings.ToLower(filepath.Base(norm))
 	if vs := idx.byBase[base]; len(vs) == 1 {
-		return vs[0], "matched"
+		return vs[0], "basename_only", "basename"
 	} else if len(vs) > 1 {
-		return store.Video{}, "ambiguous"
+		return store.Video{}, "ambiguous", ""
 	}
-	return store.Video{}, "unmatched"
+	return store.Video{}, "unmatched", ""
 }
 
 type vdfItemView struct {
@@ -208,12 +208,16 @@ type vdfPreview struct {
 
 func (a *App) verifyVDFItem(item vdfGUIItem, idx mediaPathIndex, cfg store.Settings, allowMissing bool) vdfItemView {
 	view := vdfItemView{Path: item.Path, SizeBytes: item.SizeBytes, Resolution: item.Resolution}
-	v, status := matchVideoPath(idx, cfg, item.Path)
+	v, status, _ := matchVideoPath(idx, cfg, item.Path)
 	if status != "matched" {
 		view.MatchStatus = status
-		if status == "ambiguous" {
+		switch status {
+		case "ambiguous":
 			view.Detail = "同名/同后缀存在多个媒体记录，无法唯一匹配"
-		} else {
+		case "basename_only":
+			view.MatchStatus = "basename_only"
+			view.Detail = "仅文件名匹配（无路径后缀证据），需人工确认"
+		default:
 			view.Detail = "未在已完成的 HWatch 媒体中找到"
 		}
 		return view
