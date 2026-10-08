@@ -1924,6 +1924,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /api/transrunner/v1/media/{video_id}/dedupe-candidates", a.requireIntegrationScope("read_dedupe_candidates", a.trDedupeCandidates))
 	mux.HandleFunc("POST /api/transrunner/v1/duplicate-results", a.requireIntegrationScope("write_duplicate_results", a.trDuplicateResults))
 	mux.HandleFunc("POST /api/transrunner/v1/transcode-results", a.requireIntegrationScope("write_transcode_results", a.trTranscodeResults))
+	mux.HandleFunc("GET /api/transrunner/v1/transcode-results/{runner_job_id}", a.requireIntegrationScope("read_media", a.trTranscodeResultGet))
 	mux.HandleFunc("GET /api/videos", a.listVideos)
 	mux.HandleFunc("GET /api/videos/facets", a.videoFacets)
 	mux.HandleFunc("GET /api/tasks", a.listTasks)

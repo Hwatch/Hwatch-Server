@@ -658,6 +658,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 - `GET /api/transrunner/v1/media/{video_id}`：scope `read_media`，返回相对媒体路径与媒体元数据，不含绝对路径或凭据。
 - `GET /api/transrunner/v1/media/{video_id}/dedupe-candidates`：scope `read_dedupe_candidates`，候选由 HWatch 服务端筛选，`?limit=` 默认 20、上限 100。
 - `POST /api/transrunner/v1/duplicate-results`：scope `write_duplicate_results`，只写重复候选，绝不删除/替换媒体。
-- `POST /api/transrunner/v1/transcode-results`：scope `write_transcode_results`，接收 `.transrunner/` 暂存产物，由 HWatch 自己 `ffprobe` 校验。默认仅记录 `pending`；当 `apply_mode="replace_source"` 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、`source_sha256` 一致）时，HWatch 原子替换源文件并刷新元数据，状态记为 `applied`。
+- `POST /api/transrunner/v1/transcode-results`：scope `write_transcode_results`，接收 `.transrunner/` 暂存产物，由 HWatch 自己 `ffprobe` 校验。默认仅记录 `pending`；当 `apply_mode="replace_source"` 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、`source_sha256` 一致）时，HWatch 原子替换源文件并刷新元数据，状态记为 `applied`。**幂等**：以 `runner_job_id` 或 `Idempotency-Key` 头/`idempotency_key` 字段作为持久化操作身份（记录于 `transcode_apply_ops`）：已成功应用的重复请求直接返回此前结果（`idempotent=true`），不会重复替换；相同键但 `source_sha256`/输出路径/profile 不同返回 `409 idempotency_conflict`；已有进行中操作返回 `409 apply_in_progress`；状态不确定返回 `409 apply_state_uncertain`。源文件替换与 SQLite 写入非原子：先写 `applying`、替换后再写 `applied`，崩溃后按文件哈希核对（`applied`/`failed`/`uncertain`），不会盲目二次替换。
+- `GET /api/transrunner/v1/transcode-results/{runner_job_id}`：scope `read_media`，只读查询该任务是否已应用。返回 `{runner_job_id,status,applied,source_sha256,output_sha256,applied_at,legacy}`；`status` ∈ `applied`/`not_applied`/`in_progress`/`uncertain`/`not_found`。遇到 `applying` 会按文件身份自动核对。`not_found` 不代表可安全重复提交，旧版无幂等记录的任务返回 `legacy=true` 且不虚构成功状态，留待人工核查。
 
 令牌缺失/无效/已撤销返回 `401`；缺少所需 scope 返回 `403`。OpenAPI 描述全部接口，但 Service Token 只按 scope 获得最小权限：不能删除媒体、改设置、管理用户/订阅或执行任何 admin 操作。

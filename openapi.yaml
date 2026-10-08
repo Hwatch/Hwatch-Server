@@ -280,6 +280,14 @@ paths:
       description: 需要 write_transcode_results。接收暂存产物并由 HWatch 自己 ffprobe 验证。默认只记录 pending 结果，不替换源文件；仅当 apply_mode=replace_source 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、source_sha256 一致）时才由 HWatch 原子替换源文件并刷新元数据。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TransRunnerTranscodeResult'}}}}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '202': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /api/transrunner/v1/transcode-results/{runner_job_id}:
+    get:
+      tags: [TransRunner]
+      security: [{integrationBearer: []}]
+      operationId: transRunnerTranscodeResultGet
+      description: 需要 read_media。只读查询某 runner_job_id 是否已应用。返回 status（applied/not_applied/in_progress/uncertain/not_found）、applied、source_sha256、output_sha256、applied_at。not_found 不代表可以安全重复提交，尤其旧版任务需人工核查。
+      parameters: [{name: runner_job_id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {$ref: '#/components/responses/JSON'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}}
   /media/{id}:
     get: {tags: [Library], operationId: streamMedia, parameters: [{$ref: '#/components/parameters/VideoID'}], responses: {'200': {description: 支持 Range 的媒体流}}}
   /thumb/{id}:
@@ -371,6 +379,7 @@ components:
         output_relative_path: {type: string, description: 必须位于暂存目录 .transrunner/ 内。}
         profile: {type: string, example: hevc-1080p}
         apply_mode: {type: string, enum: [replace_source], description: 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。}
+        idempotency_key: {type: string, description: 可选幂等键；也可用 Idempotency-Key 头。相同键但请求内容不同返回 409 idempotency_conflict；已成功应用的重复请求返回此前结果（idempotent=true），不会重复替换。}
     RecoveryStatus:
       type: object
       required: [available]
