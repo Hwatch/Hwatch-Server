@@ -94,7 +94,7 @@ HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任�
 - [x] 为 Android 客户端补充分页、SSE 重连和错误码约定。
 - [x] 为数据库状态查询、队列并发抢占、429 指数退避和全局暂停补充自动化测试。
 - [x] 支持 iOS Safari 通过 HTTP 添加到主屏幕：提供 Web App Manifest、Apple Touch Icon、独立窗口元信息与安全区域适配；离线 Service Worker 待 HTTPS 部署后启用。
-- [ ] 正式公开仓库前由维护者选择并加入 LICENSE；许可证属于项目发布策略，不能由实现代码自动决定。
+- [x] 采用 MIT 许可证并加入 LICENSE（Copyright (c) 2026 Hwatch）。
 
 ## 长远计划
 

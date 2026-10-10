@@ -4,6 +4,10 @@
 
 Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体库管理服务。
 
+## 界面预览
+
+![HWatch 概览界面（演示模式）](docs/screenshots/dashboard.png)
+
 ## 功能
 
 - 创作者页面全分页订阅，首次建立完整基线，后续新作品自动下载
@@ -120,4 +124,8 @@ SQLite 和 aria2 会话位于 data 目录。Plex 将同一个宿主机媒体目�
 
 审计见 [FRONTEND_AUDIT.md](FRONTEND_AUDIT.md)，交付、性能与测试限制见 [FRONTEND_V2_DELIVERY.md](FRONTEND_V2_DELIVERY.md)。截图对比入口为 `acceptance/index.html`。
 
-当前仍处于快速开发阶段。未完成事项与长期规划见 [TODO.md](TODO.md)。正式公开仓库前还需要由维护者选择并添加 LICENSE。
+当前仍处于快速开发阶段。未完成事项与长期规划见 [TODO.md](TODO.md)。
+
+## License
+
+MIT License. 详见 [LICENSE](LICENSE)。
