@@ -61,6 +61,14 @@ Source pages can change. Adapters ship snapshot and contract tests and never del
 
 Open the "Translations" page, pick a target language and export JSON. The export contains only platform identifiers, titles, tags and source hashes — no proxy config, RPC secrets, cookies, download URLs or file paths. WebAI must keep `key`, `source_hash` and `fields` and only fill in `translations`. On import, entries whose source hash does not match are skipped; translations are stored in a separate table and never overwrite the originals.
 
+## One-line install (Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/install.sh | sudo bash
+```
+
+Debian/Ubuntu first, with generic fallbacks for other distros. It installs to `/opt/hwatch`, sets up a `hwatch` systemd service on `:8787` and pulls the latest release. Configure via env: `HWATCH_VERSION=v1.0.0`, `HWATCH_DIR`, `HWATCH_PORT`, `HWATCH_MEDIA_ROOT`; flags `--no-deps`, `--no-service`.
+
 ## Prebuilt binaries
 
 Every tagged release (`v*`) is built by GitHub Actions into static Linux binaries for `amd64` and `arm64` — see [Releases](https://github.com/Hwatch/Hwatch-Server/releases).

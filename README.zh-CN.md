@@ -61,6 +61,14 @@
 
 在“翻译管理”页面选择目标语言后导出 JSON。导出包只包含平台标识、标题、标签和原文哈希，不包含代理配置、RPC 密钥、Cookie、下载源或文件路径。WebAI 应保留 `key`、`source_hash` 和 `fields`，仅填写 `translations`。回导时原文哈希不一致的条目会被跳过，翻译保存在独立表中，不覆盖原文。
 
+## 一行安装（Linux）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/install.sh | sudo bash
+```
+
+优先适配 Debian/Ubuntu，并对其他发行版做了通用回退。默认安装到 `/opt/hwatch`，创建 `hwatch` systemd 服务并监听 `:8787`，拉取最新 release。可用环境变量配置：`HWATCH_VERSION=v1.0.0`、`HWATCH_DIR`、`HWATCH_PORT`、`HWATCH_MEDIA_ROOT`；参数 `--no-deps`、`--no-service`。
+
 ## 预编译二进制
 
 每次打 `v*` 标签时，GitHub Actions 会为 `amd64` 与 `arm64` 构建静态 Linux 二进制 —— 见 [Releases](https://github.com/Hwatch/Hwatch-Server/releases)。
