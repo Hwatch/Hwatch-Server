@@ -88,9 +88,9 @@ HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任�
 
 ## P2：运维与体验
 
-- [x] Frontend 2.0 已成为默认前端：统一主题、组件整理、视口布局、Loading/Toast/错误反馈与隔离 Chromium 核心回归；详见 FRONTEND_V2_DELIVERY.md。
+- [x] Frontend 2.0 已成为默认前端：统一主题、组件整理、视口布局、Loading/Toast/错误反馈与隔离 Chromium 核心回归。
 - [x] Frontend 2.0 已合入 main 并部署为默认前端：核对生产版本、Chromium/WebKit 多视口与隔离后端验收。真实 iPhone/Safari 与大规模真机性能仍建议后续复测。
-- [x] Frontend 2.0 Chromium/WebKit 四视口功能回归、隔离 Classic/V2 与 3400 条 Mock 规模对比；详见 FRONTEND_V2_ACCEPTANCE.md。真实 SQLite/NAS 性能和真机验收不计入已完成范围。
+- [x] Frontend 2.0 Chromium/WebKit 四视口功能回归、隔离 Classic/V2 与 3400 条 Mock 规模对比。真实 SQLite/NAS 性能和真机验收不计入已完成范围。
 
 - [x] 增加任务状态历史和结构化审计日志，审计层不记录请求体、查询串、代理密码、令牌及签名 URL。
 - [x] 健康检查已覆盖数据库、NFS/媒体空间、aria2/wget 与持久下载队列；外部计算（TransRunner）和独立指标在其集成后补充。
