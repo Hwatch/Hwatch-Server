@@ -1,0 +1,12 @@
+# Netlify configuration for the HWatch landing site.
+# The static site lives in ./site and is imported from this GitHub repo.
+[build]
+  command = "echo 'static site — no build step'"
+  publish = "site"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"

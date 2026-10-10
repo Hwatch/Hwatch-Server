@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HWatch — NAS media subscription &amp; Plex library manager</title>
+    <meta
+      name="description"
+      content="Self-hosted NAS media subscription, downloader and Plex TV library manager built with Go, SQLite, aria2 and Vue/TypeScript."
+    />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="HWatch" />
+    <meta
+      property="og:description"
+      content="Self-hosted NAS media subscription, downloader and Plex TV library manager."
+    />
+    <meta property="og:image" content="assets/dashboard.png" />
+    <style>
+      :root {
+        --bg: #17191f;
+        --surface: #1f2229;
+        --surface-2: #242833;
+        --border: #2b2f38;
+        --text: #e6e8ec;
+        --muted: #9aa1ad;
+        --accent: #e6b455;
+        --accent-2: #f0c878;
+        --radius: 14px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { color: var(--accent-2); }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+      header.nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-inner { display: flex; align-items: center; gap: 14px; height: 62px; }
+      .nav-inner img { width: 30px; height: 30px; border-radius: 8px; }
+      .nav-inner b { font-size: 17px; letter-spacing: 0.3px; }
+      .nav-inner .spacer { flex: 1; }
+      .nav-inner a.link { color: var(--muted); font-size: 14px; }
+      .nav-inner a.link:hover { color: var(--text); }
+
+      .hero { text-align: center; padding: 72px 0 40px; }
+      .hero .logo { width: 84px; height: 84px; border-radius: 22px; }
+      .hero h1 { font-size: 42px; margin: 22px 0 8px; letter-spacing: -0.5px; }
+      .hero p.tag { color: var(--muted); font-size: 18px; max-width: 640px; margin: 0 auto; }
+      .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 15px;
+        border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      }
+      .btn:hover { border-color: var(--accent); color: var(--text); }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1a1a; }
+      .btn.primary:hover { background: var(--accent-2); }
+
+      .shot { margin: 40px auto 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+      .shot img { display: block; width: 100%; }
+
+      section { padding: 56px 0; }
+      h2 { font-size: 26px; margin: 0 0 22px; }
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+      .card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 20px;
+      }
+      .card .ico { font-size: 22px; }
+      .card h3 { margin: 10px 0 6px; font-size: 16px; }
+      .card p { margin: 0; color: var(--muted); font-size: 14px; }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+      .badges img { height: 20px; }
+
+      pre {
+        background: #101216; border: 1px solid var(--border); border-radius: 12px;
+        padding: 16px 18px; overflow: auto; font-size: 13.5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #d7dae0;
+      }
+      pre .c { color: #6f7683; }
+
+      .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      ul.checks { list-style: none; padding: 0; margin: 0; }
+      ul.checks li { padding-left: 26px; position: relative; margin: 8px 0; color: var(--muted); }
+      ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+
+      footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--muted); font-size: 14px; }
+      footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+      footer .spacer { flex: 1; }
+
+      @media (max-width: 860px) {
+        .grid { grid-template-columns: 1fr 1fr; }
+        .cols { grid-template-columns: 1fr; }
+        .hero h1 { font-size: 34px; }
+      }
+      @media (max-width: 560px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <img src="assets/logo.png" alt="HWatch" />
+        <b>HWatch</b>
+        <span class="spacer"></span>
+        <a class="link" href="#features">Features</a>
+        <a class="link" href="#start">Quick start</a>
+        <a class="link" href="https://github.com/Hwatch/Hwatch-Server">GitHub</a>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <section class="hero">
+        <img class="logo" src="assets/logo.png" alt="HWatch logo" />
+        <h1>HWatch</h1>
+        <p class="tag">
+          Self-hosted NAS media subscription, downloader and Plex TV library
+          manager — powered by Go, SQLite, aria2 and Vue/TypeScript.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/Hwatch/Hwatch-Server">View on GitHub</a>
+          <a class="btn" href="#start">Quick start</a>
+        </div>
+        <div class="badges">
+          <a href="https://github.com/Hwatch/Hwatch-Server/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Hwatch/Hwatch-Server" alt="License" /></a>
+          <a href="https://github.com/Hwatch/Hwatch-Server/commits/main"><img src="https://img.shields.io/github/last-commit/Hwatch/Hwatch-Server" alt="Last commit" /></a>
+          <a href="https://github.com/Hwatch/Hwatch-Server"><img src="https://img.shields.io/github/languages/top/Hwatch/Hwatch-Server" alt="Top language" /></a>
+          <a href="https://github.com/Hwatch/Hwatch-Server/stargazers"><img src="https://img.shields.io/github/stars/Hwatch/Hwatch-Server?color=%23ED8936" alt="Stars" /></a>
+        </div>
+        <div class="shot">
+          <img src="assets/dashboard.png" alt="HWatch overview (demo mode)" />
+        </div>
+      </section>
+
+      <section id="features">
+        <h2>Features</h2>
+        <div class="grid">
+          <div class="card"><div class="ico">📡</div><h3>Creator subscriptions</h3><p>Full-pagination subscriptions build a complete baseline, then auto-download new works.</p></div>
+          <div class="card"><div class="ico">⬇️</div><h3>Persistent downloads</h3><p>aria2 / wget engines, pause &amp; resume, resumable transfers, 429 backoff with live speed.</p></div>
+          <div class="card"><div class="ico">🎬</div><h3>Plex TV library</h3><p>tvshow.nfo, per-episode NFO, posters and thumbnails written into your existing media root.</p></div>
+          <div class="card"><div class="ico">🧩</div><h3>Platform adapters</h3><p>Rule34Video and Hanime1 today, behind a unified adapter interface for new sources.</p></div>
+          <div class="card"><div class="ico">🔐</div><h3>Auth &amp; audit</h3><p>Admin sessions with CSRF, structured audit log, task history, notifications and health checks.</p></div>
+          <div class="card"><div class="ico">🌐</div><h3>WebAI translation</h3><p>Safe JSON export of titles/tags with source-hash verification and re-import.</p></div>
+        </div>
+      </section>
+
+      <section id="start">
+        <h2>Quick start</h2>
+        <div class="cols">
+          <div>
+            <p>Replace the NAS path in <code>compose.yaml</code> with your Plex media directory, then:</p>
+            <pre><span class="c"># docker compose</span>
+/path/on/nas/Plex-TV:/media
+docker compose up -d --build
+<span class="c"># open</span>
+http://NAS-IP:8787</pre>
+          </div>
+          <div>
+            <p>Or run from source (Go 1.24, Node.js, aria2, FFmpeg):</p>
+            <pre>npm install &amp;&amp; npm run build
+aria2c --enable-rpc=true --daemon=true
+go run ./cmd/r34watch</pre>
+            <ul class="checks">
+              <li>SQLite + aria2 session in the <code>data</code> directory</li>
+              <li>Plex and HWatch read the same video files — no duplicate copy</li>
+              <li>Create an admin account on first visit</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="docs">
+        <h2>Documentation</h2>
+        <div class="grid">
+          <a class="card" href="https://github.com/Hwatch/Hwatch-Server/blob/main/README.md"><h3>README</h3><p>Overview, configuration and development.</p></a>
+          <a class="card" href="https://github.com/Hwatch/Hwatch-Server/blob/main/API_V1.md"><h3>HTTP API V1</h3><p>Human-readable API guide.</p></a>
+          <a class="card" href="https://github.com/Hwatch/Hwatch-Server/blob/main/openapi.yaml"><h3>OpenAPI 3.1</h3><p>Machine-readable contract.</p></a>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>MIT License · © 2026 Hwatch</span>
+        <span class="spacer"></span>
+        <a href="https://github.com/Hwatch/Hwatch-Server">GitHub</a>
+        <a href="https://github.com/Hwatch/Hwatch-Server/blob/main/README.zh-CN.md">简体中文</a>
+      </div>
+    </footer>
+  </body>
+</html>
