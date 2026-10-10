@@ -1,10 +1,18 @@
-# HWatch NAS 媒体订阅器
-
-[English](README.md) · 简体中文
+<div align="center">
+  <a href="https://github.com/Hwatch/Hwatch-Server"><img width="100" alt="HWatch logo" src="https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/public/pwa-192.png"/></a>
+  <p><em>🗂️ 自托管的 NAS 媒体订阅、下载与 Plex 电视库管理服务 — 基于 Go、SQLite、aria2 与 Vue/TypeScript。</em></p>
+  <p><a href="README.md">English</a> · 简体中文</p>
+  <div>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/Hwatch/Hwatch-Server" alt="License" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/commits/main"><img src="https://img.shields.io/github/last-commit/Hwatch/Hwatch-Server" alt="Last commit" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server"><img src="https://img.shields.io/github/languages/top/Hwatch/Hwatch-Server" alt="Top language" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server"><img src="https://img.shields.io/github/repo-size/Hwatch/Hwatch-Server" alt="Repo size" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/stargazers"><img src="https://img.shields.io/github/stars/Hwatch/Hwatch-Server?color=%23ED8936" alt="Stars" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/issues"><img src="https://img.shields.io/github/issues/Hwatch/Hwatch-Server" alt="Issues" /></a>
+  </div>
+</div>
 
 开发文档：[HTTP API V1](API_V1.md) · [OpenAPI 3.1](openapi.yaml) · [开发计划](TODO.md) · [Agent 开发指南](AGENTS.md)
-
-Go + SQLite + aria2 + Vue/TypeScript 构建的 NAS 视频订阅与 Plex 媒体库管理服务。
 
 ## 界面预览
 

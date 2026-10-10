@@ -1,10 +1,18 @@
-# HWatch — NAS Media Subscription & Plex Library Manager
-
-English · [简体中文](README.zh-CN.md)
+<div align="center">
+  <a href="https://github.com/Hwatch/Hwatch-Server"><img width="100" alt="HWatch logo" src="https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/public/pwa-192.png"/></a>
+  <p><em>🗂️ Self-hosted NAS media subscription, downloader and Plex TV library manager — powered by Go, SQLite, aria2 and Vue/TypeScript.</em></p>
+  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <div>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/Hwatch/Hwatch-Server" alt="License" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/commits/main"><img src="https://img.shields.io/github/last-commit/Hwatch/Hwatch-Server" alt="Last commit" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server"><img src="https://img.shields.io/github/languages/top/Hwatch/Hwatch-Server" alt="Top language" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server"><img src="https://img.shields.io/github/repo-size/Hwatch/Hwatch-Server" alt="Repo size" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/stargazers"><img src="https://img.shields.io/github/stars/Hwatch/Hwatch-Server?color=%23ED8936" alt="Stars" /></a>
+    <a href="https://github.com/Hwatch/Hwatch-Server/issues"><img src="https://img.shields.io/github/issues/Hwatch/Hwatch-Server" alt="Issues" /></a>
+  </div>
+</div>
 
 Docs: [HTTP API V1](API_V1.md) · [OpenAPI 3.1](openapi.yaml) · [Roadmap](TODO.md) · [Agent guide](AGENTS.md)
-
-Self-hosted NAS video subscription and Plex TV library manager built with Go + SQLite + aria2 + Vue/TypeScript.
 
 ## Preview
 
