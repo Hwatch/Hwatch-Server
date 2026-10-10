@@ -18,6 +18,61 @@ import (
 )
 
 type Collector struct{}
+
+// TemplateError reports that a source page was fetched successfully but its
+// structure no longer matches the scraping template. It is deliberately loud:
+// a silent frontend/模板 change must surface as an explicit subscription error
+// instead of an empty or partially wrong result.
+type TemplateError struct {
+	Platform string
+	Reason   string
+}
+
+func (e *TemplateError) Error() string {
+	return fmt.Sprintf("%s 抓取模板检测失败：%s（页面结构可能已变更，请检查抓取模板）", e.Platform, e.Reason)
+}
+
+// antiBotMarkers are fragments that indicate the source answered with a bot
+// challenge / interstitial instead of the real listing.
+var antiBotMarkers = []string{
+	"just a moment",
+	"cf-challenge",
+	"challenge-platform",
+	"cf-browser-verification",
+	"attention required",
+	"captcha-container",
+	"enable javascript and cookies to continue",
+}
+
+func LooksLikeAntiBot(page string) bool {
+	lower := strings.ToLower(page)
+	for _, m := range antiBotMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// rule34ListingMarkers are structure markers that any valid rule34video model
+// listing page is expected to contain. If none are present the template moved.
+var rule34ListingMarkers = []string{
+	`data-video-card-id`,
+	`class="thumbs"`,
+	`class="item `,
+	`id="list_videos"`,
+	`class="video-card`,
+}
+
+func rule34ListingRecognized(page string) bool {
+	for _, m := range rule34ListingMarkers {
+		if strings.Contains(page, m) {
+			return true
+		}
+	}
+	return false
+}
+
 type Link struct{ Name, URL, Image string }
 type ModelResult struct {
 	ID, Name, URL, AvatarURL string
@@ -391,6 +446,7 @@ func (Collector) List(modelURL, proxy string) ([]store.Video, error) {
 	seen := map[string]bool{}
 	out := []store.Video{}
 	pageCount := 1
+	firstPage := ""
 	httpClient := client(proxy, 45*time.Second)
 	for pageNumber := 1; pageNumber <= pageCount; pageNumber++ {
 		pageURL, err := paginationURL(modelURL, pageNumber)
@@ -402,6 +458,7 @@ func (Collector) List(modelURL, proxy string) ([]store.Video, error) {
 			return nil, fmt.Errorf("page %d: %w", pageNumber, err)
 		}
 		if pageNumber == 1 {
+			firstPage = page
 			for _, p := range pageRE.FindAllStringSubmatch(page, -1) {
 				n, _ := strconv.Atoi(p[1])
 				if n > pageCount && n <= 500 {
@@ -410,6 +467,16 @@ func (Collector) List(modelURL, proxy string) ([]store.Video, error) {
 			}
 		}
 		appendListing(page, seen, &out)
+	}
+	if len(out) == 0 {
+		switch {
+		case LooksLikeAntiBot(firstPage):
+			return nil, &TemplateError{Platform: "rule34video", Reason: "来源返回人机校验/反爬页面，未获得真实列表"}
+		case rule34ListingRecognized(firstPage):
+			return nil, &TemplateError{Platform: "rule34video", Reason: "已识别列表容器但未解析出任何视频卡片（卡片结构可能改变）"}
+		default:
+			return nil, &TemplateError{Platform: "rule34video", Reason: "未找到已知列表标记（data-video-card-id / thumbs / item）"}
+		}
 	}
 	return out, nil
 }
