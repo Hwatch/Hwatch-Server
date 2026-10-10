@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"r34watch/internal/collector"
@@ -81,5 +82,35 @@ func TestHanime1ListingTemplateChange(t *testing.T) {
 		if !errors.As(err, &te) {
 			t.Fatalf("expected TemplateError for %q, got %v", page, err)
 		}
+	}
+}
+
+func TestHanime1DirectMP4ChoosesBestAndUnescapes(t *testing.T) {
+	page := `<a class="download" data-url="https://cdne-mobile.youjizz.com/videos/a/9/9/6/3/x-240-360-865-h264.mp4?validfrom=1&amp;hash=AAA%3D" download="t">240</a>` +
+		`<a class="download" data-url="https://cdne-mobile.youjizz.com/videos/a/9/9/6/3/x-1080-1620-4637-h264.mp4?validfrom=1&amp;hash=BBB%3D" download="t">1080</a>`
+	src, ok := hanimeDirectMP4(page, "https://hanime1.me/download?v=1")
+	if !ok {
+		t.Fatal("expected a direct MP4 to be found")
+	}
+	if src.Quality != 1620 {
+		t.Fatalf("quality=%d want 1620", src.Quality)
+	}
+	if !strings.Contains(src.URL, "-1080-1620-4637-h264.mp4") || !strings.Contains(src.URL, "&hash=BBB%3D") {
+		t.Fatalf("picked/unescaped URL wrong: %s", src.URL)
+	}
+	if src.Headers["Referer"] != "https://hanime1.me/download?v=1" {
+		t.Fatalf("referer not set: %v", src.Headers)
+	}
+}
+
+func TestHanime1NumericID(t *testing.T) {
+	if got := hanimeNumericID(store.Video{SourceID: "39837"}); got != "39837" {
+		t.Fatalf("SourceID id=%q", got)
+	}
+	if got := hanimeNumericID(store.Video{PageURL: "https://hanime1.me/watch?v=39915"}); got != "39915" {
+		t.Fatalf("URL id=%q", got)
+	}
+	if got := hanimeNumericID(store.Video{PageURL: "https://hanime1.me/playlist?list=1"}); got != "" {
+		t.Fatalf("expected empty id, got %q", got)
 	}
 }

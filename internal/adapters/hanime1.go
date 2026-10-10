@@ -50,6 +50,9 @@ var (
 	hanimeH3RE            = regexp.MustCompile(`(?is)<h3[^>]*>(.*?)</h3>`)
 	hanimeProfileAvatarRE = regexp.MustCompile(`(?is)<div[^>]+class=["'][^"']*profile-avatar-wrapper[^"']*["'][^>]*>.*?<img[^>]+src=["']([^"']+)["']`)
 	hanimeSourceRE        = regexp.MustCompile(`(?is)<source[^>]+src=["']([^"']+)["'][^>]*size=["']?([0-9]+)["']?`)
+	hanimeDownloadURLRE   = regexp.MustCompile(`(?is)data-url=["'](https?://[^"']+\.mp4\?[^"']*)["']`)
+	hanimeQualityRE       = regexp.MustCompile(`-(\d{2,5})-(\d{2,5})-\d+-h264\.mp4`)
+	hanimeHLSRE           = regexp.MustCompile(`(?is)source\s*=\s*["'][^"']*\.m3u8`)
 	hanimePosterRE        = regexp.MustCompile(`(?is)<video[^>]+(?:data-poster|poster)=["']([^"']+)["']`)
 	hanimeMetaRE          = regexp.MustCompile(`(?is)<meta[^>]+(?:name|property)=["']([^"']+)["'][^>]+content=["']([^"']*)["']`)
 	hanimeUserRE          = regexp.MustCompile(`(?is)<a[^>]+href=["'](?:https?://hanime1\.me)?(/user/([0-9]+))/?["'][^>]*>(.*?)</a>`)
@@ -213,12 +216,28 @@ func (Hanime1) FetchDetails(ctx context.Context, video store.Video, proxy string
 }
 
 func (Hanime1) ResolveDownload(ctx context.Context, video store.Video, proxy string) (DownloadSource, error) {
+	// Hanime1's dedicated download page exposes signed direct MP4 URLs
+	// (data-url="...-<w>-<h>-<kbps>-h264.mp4?...") for each quality, while the
+	// watch page now only carries an HLS master.m3u8. Prefer the MP4 page.
+	id := hanimeNumericID(video)
+	if id != "" {
+		downloadURL := "https://hanime1.me/download?v=" + id
+		if page, err := hanimeFetch(ctx, downloadURL, proxy); err == nil {
+			if src, ok := hanimeDirectMP4(page, downloadURL); ok {
+				return src, nil
+			}
+		}
+	}
+	// Fallback: legacy watch pages still expose <source src=... size=...>.
 	page, err := hanimeFetch(ctx, video.PageURL, proxy)
 	if err != nil {
 		return DownloadSource{}, err
 	}
 	sources := hanimeSourceRE.FindAllStringSubmatch(page, -1)
 	if len(sources) == 0 {
+		if hanimeHLSRE.MatchString(page) {
+			return DownloadSource{}, errors.New("Hanime1 该视频下载页未提供直链 MP4（仅 HLS 流），页面可能已变更")
+		}
 		return DownloadSource{}, errors.New("Hanime1 播放页没有可用 MP4 下载源")
 	}
 	type choice struct {
@@ -232,6 +251,45 @@ func (Hanime1) ResolveDownload(ctx context.Context, video store.Video, proxy str
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].quality > items[j].quality })
 	return DownloadSource{URL: items[0].raw, Quality: items[0].quality, Headers: map[string]string{"Referer": video.PageURL}}, nil
+}
+
+// hanimeNumericID returns the hanime1 video id for a record, from SourceID or
+// the watch URL.
+func hanimeNumericID(video store.Video) string {
+	if video.SourceID != "" {
+		return video.SourceID
+	}
+	if m := regexp.MustCompile(`[?&]v=(\d+)`).FindStringSubmatch(video.PageURL); len(m) == 2 {
+		return m[1]
+	}
+	return ""
+}
+
+// hanimeDirectMP4 extracts the best signed direct MP4 URL from a /download
+// page, choosing the highest resolution variant advertised via data-url.
+func hanimeDirectMP4(page, referer string) (DownloadSource, bool) {
+	matches := hanimeDownloadURLRE.FindAllStringSubmatch(page, -1)
+	if len(matches) == 0 {
+		return DownloadSource{}, false
+	}
+	var bestURL string
+	var bestArea, bestHeight int64
+	for _, m := range matches {
+		raw := html.UnescapeString(m[1])
+		area, height := int64(0), int64(0)
+		if qm := hanimeQualityRE.FindStringSubmatch(raw); len(qm) == 3 {
+			w, _ := strconv.ParseInt(qm[1], 10, 64)
+			h, _ := strconv.ParseInt(qm[2], 10, 64)
+			area, height = w*h, h
+		}
+		if bestURL == "" || area > bestArea {
+			bestURL, bestArea, bestHeight = raw, area, height
+		}
+	}
+	if bestURL == "" {
+		return DownloadSource{}, false
+	}
+	return DownloadSource{URL: bestURL, Quality: bestHeight, Headers: map[string]string{"Referer": referer}}, true
 }
 
 func (Hanime1) ParseImported(string) (store.Video, error) {
