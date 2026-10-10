@@ -4,6 +4,14 @@ import './style.css'
 import './health.css'
 import './auth.css'
 import './privacy.css'
+import './frontend-v2.css'
+const savedTheme=localStorage.getItem('hwatch-theme');
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (event) => {
+  if (localStorage.getItem('hwatch-theme') === 'system') {
+    document.documentElement.dataset.theme = event.matches ? 'dark' : 'light';
+  }
+});
+document.documentElement.dataset.theme=savedTheme==='light'?'light':savedTheme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):'dark';
 
 const standalone = window.matchMedia('(display-mode: standalone)').matches ||
   ('standalone' in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true)

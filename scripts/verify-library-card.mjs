@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const app = read("../src/App.vue");
+const app = read("../src/App.vue") + read("../src/components/MediaCard.vue") + read("../src/useHWatchApp.ts");
 const style = read("../src/style.css");
 const privacy = read("../src/privacy.css");
 
