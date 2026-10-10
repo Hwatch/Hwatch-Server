@@ -61,6 +61,21 @@
 
 在“翻译管理”页面选择目标语言后导出 JSON。导出包只包含平台标识、标题、标签和原文哈希，不包含代理配置、RPC 密钥、Cookie、下载源或文件路径。WebAI 应保留 `key`、`source_hash` 和 `fields`，仅填写 `translations`。回导时原文哈希不一致的条目会被跳过，翻译保存在独立表中，不覆盖原文。
 
+## 预编译二进制
+
+每次打 `v*` 标签时，GitHub Actions 会为 `amd64` 与 `arm64` 构建静态 Linux 二进制 —— 见 [Releases](https://github.com/Hwatch/Hwatch-Server/releases)。
+
+```bash
+tar xzf hwatch-v1.0.0-linux-amd64.tar.gz
+cd hwatch-v1.0.0-linux-amd64
+sudo install -m755 r34watch /usr/local/bin/r34watch
+sudo mkdir -p /opt/hwatch/web && sudo cp -r web/dist /opt/hwatch/web/dist
+sudo cp hwatch.service /etc/systemd/system/   # 先按需修改其中路径
+sudo systemctl enable --now hwatch
+```
+
+二进制通过 `R34WATCH_WEB`（默认 `web/dist`）提供前端，请保持 `r34watch` 与 `web/dist` 在一起（或把 `R34WATCH_WEB` 指向解压目录）。主机需安装 `aria2`、`wget`、`ffmpeg`（含 ffprobe）。
+
 ## Docker Compose
 
 先将 compose.yaml 中的 NAS 路径替换为真实 Plex 媒体目录：

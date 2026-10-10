@@ -32,6 +32,9 @@ import (
 
 const userAgent = "Mozilla/5.0 (compatible; r34watch/2.0; NAS media manager)"
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 type App struct {
 	store          *store.Store
 	adapters       *adapters.Registry
@@ -2103,6 +2106,10 @@ func main() {
 	}
 	defer s.Close()
 	_ = s.CleanupAutomaticRaw()
+	if len(os.Args) > 1 && os.Args[1] == "version" {
+		fmt.Println("HWatch", version)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "maintenance" {
 		if err := runMaintenance(s, os.Args[2:]); err != nil {
 			log.Fatal(err)
@@ -2168,7 +2175,7 @@ func main() {
 	app.startQueueWorker()
 	server := &http.Server{Addr: addr, Handler: app.router(dist), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, WriteTimeout: 0}
 	go func() {
-		log.Printf("R34Watch listening on %s", addr)
+		log.Printf("HWatch %s listening on %s", version, addr)
 		if e := server.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
 			log.Fatal(e)
 		}

@@ -61,6 +61,21 @@ Source pages can change. Adapters ship snapshot and contract tests and never del
 
 Open the "Translations" page, pick a target language and export JSON. The export contains only platform identifiers, titles, tags and source hashes — no proxy config, RPC secrets, cookies, download URLs or file paths. WebAI must keep `key`, `source_hash` and `fields` and only fill in `translations`. On import, entries whose source hash does not match are skipped; translations are stored in a separate table and never overwrite the originals.
 
+## Prebuilt binaries
+
+Every tagged release (`v*`) is built by GitHub Actions into static Linux binaries for `amd64` and `arm64` — see [Releases](https://github.com/Hwatch/Hwatch-Server/releases).
+
+```bash
+tar xzf hwatch-v1.0.0-linux-amd64.tar.gz
+cd hwatch-v1.0.0-linux-amd64
+sudo install -m755 r34watch /usr/local/bin/r34watch
+sudo mkdir -p /opt/hwatch/web && sudo cp -r web/dist /opt/hwatch/web/dist
+sudo cp hwatch.service /etc/systemd/system/   # edit paths inside first
+sudo systemctl enable --now hwatch
+```
+
+The binary serves the frontend from `R34WATCH_WEB` (default `web/dist`), so keep `r34watch` and `web/dist` together (or point `R34WATCH_WEB` at the extracted directory). The host needs `aria2`, `wget` and `ffmpeg` (ffprobe).
+
 ## Docker Compose
 
 First replace the NAS path in `compose.yaml` with your real Plex media directory:

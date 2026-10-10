@@ -1,0 +1,20 @@
+[Unit]
+Description=HWatch media subscription and Plex library service
+Documentation=https://github.com/Hwatch/Hwatch-Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hwatch
+Group=hwatch
+Environment=R34WATCH_ADDR=:8787
+Environment=R34WATCH_DB=/opt/hwatch/data/r34watch.db
+Environment=R34WATCH_WEB=/opt/hwatch/web/dist
+Environment=R34WATCH_MEDIA_ROOT=/mnt/media
+ExecStart=/usr/local/bin/r34watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
