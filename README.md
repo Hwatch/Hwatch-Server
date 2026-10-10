@@ -125,15 +125,7 @@ After changing the API:
 
 ## Project status
 
-### Frontend 2.0 standalone experience
-
-`feature/frontend-v2` is developed on top of the TransRunner integration branch, keeps the existing API and security flow, and does not auto-deploy or merge into main.
-
-Run `npm ci`, `npm run build`, `npm run preview:v2` to try it at `http://127.0.0.1:5189` with a temporary SQLite and media directory. Browser acceptance uses `npm run test:e2e`; full acceptance with a real isolated backend uses `HWATCH_LIVE_TEST=1 npm run test:e2e` (start the standalone preview first).
-
-See [FRONTEND_AUDIT.md](FRONTEND_AUDIT.md) for the audit and [FRONTEND_V2_DELIVERY.md](FRONTEND_V2_DELIVERY.md) for delivery, performance and testing limits. The screenshot comparison entry is `acceptance/index.html`.
-
-HWatch is under active development; see [TODO.md](TODO.md) for open items and the long-term plan.
+Frontend 2.0 is the default UI in this repository. HWatch is under active development; see [TODO.md](TODO.md) for open items and the long-term plan.
 
 ## License
 
