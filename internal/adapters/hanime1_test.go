@@ -3,8 +3,10 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
+	"r34watch/internal/collector"
 	"r34watch/internal/store"
 )
 
@@ -63,5 +65,21 @@ func TestHanime1ParseListing(t *testing.T) {
 	}
 	if items[0].SourceRelationJSON == "" {
 		t.Fatal("source relation is empty")
+	}
+}
+
+// TestHanime1ListingTemplateChange ensures a changed or anti-bot page yields a
+// loud TemplateError rather than a silent empty listing.
+func TestHanime1ListingTemplateChange(t *testing.T) {
+	sub := store.Subscription{Slug: "hanime1:playlist:1", Platform: "hanime1", Type: "playlist", SourceID: "1"}
+	for _, page := range []string{
+		`<html><body><h1>Something new</h1><div class="totally-different-card"></div></body></html>`,
+		`<html><head><title>Just a moment...</title></head><body><div id="cf-challenge-running"></div></body></html>`,
+	} {
+		_, err := hanimeParseListing(page, sub)
+		var te *collector.TemplateError
+		if !errors.As(err, &te) {
+			t.Fatalf("expected TemplateError for %q, got %v", page, err)
+		}
 	}
 }

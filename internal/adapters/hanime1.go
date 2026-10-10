@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"r34watch/internal/collector"
 	"r34watch/internal/store"
 )
 
@@ -152,7 +153,10 @@ func hanimeParseListing(page string, sub store.Subscription) ([]store.Video, err
 		out = append(out, store.Video{ID: "hanime1:" + wm[1], Platform: "hanime1", SourceID: wm[1], SubscriptionSlug: sub.Slug, Title: title, PageURL: "https://hanime1.me/watch?v=" + wm[1], ThumbnailURL: thumbnail, DurationSeconds: duration, Views: views, SourceRelationJSON: string(relation)})
 	}
 	if len(out) == 0 {
-		return nil, errors.New("Hanime1 页面中未找到视频卡片，页面结构或访问验证可能已变化")
+		if collector.LooksLikeAntiBot(page) {
+			return nil, &collector.TemplateError{Platform: "hanime1", Reason: "来源返回人机校验/反爬页面，未获得真实列表"}
+		}
+		return nil, &collector.TemplateError{Platform: "hanime1", Reason: "未解析出任何视频卡片（playlist-video-card / video-item-container 结构可能改变）"}
 	}
 	return out, nil
 }

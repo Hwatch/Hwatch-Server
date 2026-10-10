@@ -238,6 +238,8 @@ paths:
     post: {tags: [Subscriptions], operationId: checkAll, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
   /api/check/{slug}:
     post: {tags: [Subscriptions], operationId: checkSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
+  /api/check/status:
+    get: {tags: [Subscriptions], operationId: checkStatus, description: 订阅检查进度（queued/active/running），供前端在批量检查完成后自动刷新。检查在服务端有并发上限（默认 3）。, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/settings:
     get: {tags: [Settings], operationId: getSettings, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     put: {tags: [Settings], operationId: updateSettings, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}

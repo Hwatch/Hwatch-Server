@@ -318,3 +318,38 @@ func TestHighestPreservesSignedQuery(t *testing.T) {
 		t.Fatalf("signed query not preserved: %q", u)
 	}
 }
+
+// TestListDetectsTemplateChange ensures a structurally changed or anti-bot
+// page surfaces a loud TemplateError instead of a silent empty listing.
+func TestListDetectsTemplateChange(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"recognized-container-no-cards", `<div class="thumbs"><div class="item "></div></div>`},
+		{"anti-bot-challenge", `<html><head><title>Just a moment...</title></head><body><div id="cf-challenge-running"></div></body></html>`},
+		{"unknown-layout", `<html><body><h1>Something else</h1><p>no listing here</p></body></html>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			_, err := (Collector{}).List(server.URL+"/models/x/", "")
+			var te *TemplateError
+			if !errors.As(err, &te) {
+				t.Fatalf("expected TemplateError, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "抓取模板检测失败") {
+				t.Fatalf("template error message not explicit: %v", err)
+			}
+		})
+	}
+}
+
+func TestLooksLikeAntiBot(t *testing.T) {
+	if !LooksLikeAntiBot(`<title>Just a moment...</title>`) {
+		t.Fatal("should detect Cloudflare interstitial")
+	}
+	if LooksLikeAntiBot(`<div data-video-card-id="1"></div>`) {
+		t.Fatal("normal listing must not be flagged as anti-bot")
+	}
+}

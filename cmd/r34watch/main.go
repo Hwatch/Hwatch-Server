@@ -55,13 +55,17 @@ type App struct {
 	authMu         sync.Mutex
 	loginAttempts  map[string][]time.Time
 	checking       map[string]bool
+	checkQueue     chan string
+	checkActive    atomic.Int64
+	checkStart     sync.Once
+	checkOverride  func(string)
 	lastSchedule   string
 	lastBackupRun  string
 	startedAt      time.Time
 }
 
 func New(s *store.Store) *App {
-	a := &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}, adapters.Hanime1{}), wget: downloader.NewWget(), checking: map[string]bool{}, thumbWait: map[string]chan struct{}{}, queueWake: make(chan struct{}, 1), hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
+	a := &App{store: s, adapters: adapters.NewRegistry(adapters.Rule34Video{}, adapters.Hanime1{}), wget: downloader.NewWget(), checking: map[string]bool{}, checkQueue: make(chan string, 1024), thumbWait: map[string]chan struct{}{}, queueWake: make(chan struct{}, 1), hashRunning: map[string]bool{}, loginAttempts: map[string][]time.Time{}, startedAt: time.Now()}
 	a.rateLimits = newRateLimiter(s)
 	return a
 }
@@ -1127,6 +1131,11 @@ func (a *App) subscriptionAction(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, map[string]bool{"deleted": true})
 	}
 }
+
+// maxConcurrentChecks bounds how many subscriptions are fetched at once so a
+// batch check never hammers a source and self-inflicts rate limiting/timeouts.
+const maxConcurrentChecks = 3
+
 func (a *App) triggerCheck(slug string) {
 	if a.maintenance.Load() {
 		return
@@ -1138,7 +1147,45 @@ func (a *App) triggerCheck(slug string) {
 	}
 	a.checking[slug] = true
 	a.mu.Unlock()
-	go func() { defer func() { a.mu.Lock(); delete(a.checking, slug); a.mu.Unlock() }(); a.check(slug) }()
+	// Start the bounded worker pool on first use (lazily, so tests that only
+	// construct an App do not spawn idle goroutines).
+	a.checkStart.Do(func() {
+		for i := 0; i < maxConcurrentChecks; i++ {
+			go a.checkWorker()
+		}
+	})
+	select {
+	case a.checkQueue <- slug:
+	default:
+		// Queue saturated (pathological): drop the marker so a later trigger
+		// can retry instead of leaving the slug stuck as "checking".
+		a.mu.Lock()
+		delete(a.checking, slug)
+		a.mu.Unlock()
+	}
+}
+
+func (a *App) checkWorker() {
+	for slug := range a.checkQueue {
+		a.checkActive.Add(1)
+		if a.checkOverride != nil {
+			a.checkOverride(slug)
+		} else {
+			a.check(slug)
+		}
+		a.checkActive.Add(-1)
+		a.mu.Lock()
+		delete(a.checking, slug)
+		a.mu.Unlock()
+	}
+}
+
+// checkStatus reports how many subscription checks are queued or running so
+// the UI can refresh subscription state once a batch finishes.
+func (a *App) checkStatus(w http.ResponseWriter, r *http.Request) {
+	queued := len(a.checkQueue)
+	active := int(a.checkActive.Load())
+	respond(w, 200, map[string]any{"queued": queued, "active": active, "running": queued + active})
 }
 func (a *App) check(slug string) {
 	if a.maintenance.Load() {
@@ -2008,6 +2055,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("DELETE /api/subscriptions/{slug}", a.subscriptionAction)
 	mux.HandleFunc("POST /api/check", a.checkHandler)
 	mux.HandleFunc("POST /api/check/{slug}", a.checkHandler)
+	mux.HandleFunc("GET /api/check/status", a.checkStatus)
 	mux.HandleFunc("POST /api/videos/{id}/{action}", a.videoAction)
 	mux.HandleFunc("POST /api/videos/{id}/refresh-thumbnail", a.refreshThumbnailHandler)
 	mux.HandleFunc("POST /api/videos/{id}/delete", a.deleteVideo)
