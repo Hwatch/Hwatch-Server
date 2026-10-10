@@ -1533,14 +1533,45 @@ export function useHWatchApp() {
     selectedCreator.value = creator;
     modelURL.value = creator.url;
   }
+  let checkWatchActive = false;
+  async function watchCheckCompletion() {
+    if (checkWatchActive) return;
+    checkWatchActive = true;
+    try {
+      const deadline = Date.now() + 10 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => window.setTimeout(r, 2500));
+        let status: { running?: number } | undefined;
+        try {
+          status = await api("/api/check/status");
+        } catch {
+          break;
+        }
+        if (!status) break;
+        if ((status.running ?? 0) === 0) {
+          await refreshDashboard();
+          if (["downloads", "undownloaded", "library"].includes(view.value))
+            await loadVideos();
+          notify("订阅检查已完成，状态已刷新", "success");
+          return;
+        }
+      }
+      // Timed out watching; refresh once anyway so the latest state shows.
+      await refreshDashboard();
+    } finally {
+      checkWatchActive = false;
+    }
+  }
   async function check(slug = "") {
     const result = await actions.run("check:" + (slug || "all"), () =>
       api("/api/check" + (slug ? "/" + slug : ""), { method: "POST" }),
     );
     if (result.duplicate) return;
     if (result.ok) {
-      await changeView("downloads");
-      notice.value = "检查任务已开始";
+      // Stay on the current view; refresh subscription status when the
+      // background checks finish (they are throttled server-side).
+      notify(slug ? "已开始检查该订阅" : "已开始检查全部订阅", "info");
+      void watchCheckCompletion();
     } else {
       notice.value = "检查失败：" + (result.error || "");
     }
