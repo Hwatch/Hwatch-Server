@@ -17,9 +17,9 @@
 - [x] 恢复完成后执行数据库与媒体协调检查、重新探测必要的媒体信息，并展示订阅、媒体和任务恢复摘要。
 - [x] 增加任务异常退出恢复测试，确保服务重启后不会丢失下载状态。
 
-## Future：TransRunner Integration
+## TransRunner Integration
 
-HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任务调度。去重分析与转码将由独立的 TransRunner 服务提供，集成在后续版本实现：
+HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任务调度；去重分析与转码由独立运行的 TransRunner 服务提供。基础集成已完成，剩余项如下：
 
 - [x] HWatch → TransRunner：使用 TransRunner Bearer API 提交转码任务（保存 `transrunner_url`、API Token 与默认 profile；只发送相对路径输入，不镜像进度/队列）。
 - [x] HWatch → TransRunner：以 `kind=media_duplicate` + `input.type="hwatch"` 提交内容去重任务（不发送候选，TransRunner 自行拉取候选并回写）；仅显式提交，不做自动/全库调度。
@@ -84,8 +84,8 @@ HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任�
 
 ## P2：运维与体验
 
-- [x] Frontend 2.0 独立体验分支：统一主题、组件整理、四视口布局、Loading/Toast/错误反馈与隔离 Chromium 核心回归；详见 FRONTEND_V2_DELIVERY.md。
-- [ ] Frontend 2.0 合并前人工验收：核对生产部署版本、真实 iPhone/Safari、真实媒体播放和大规模列表性能；当前独立分支不部署、不合并。
+- [x] Frontend 2.0 已成为默认前端：统一主题、组件整理、视口布局、Loading/Toast/错误反馈与隔离 Chromium 核心回归；详见 FRONTEND_V2_DELIVERY.md。
+- [x] Frontend 2.0 已合入 main 并部署为默认前端：核对生产版本、Chromium/WebKit 多视口与隔离后端验收。真实 iPhone/Safari 与大规模真机性能仍建议后续复测。
 - [x] Frontend 2.0 Chromium/WebKit 四视口功能回归、隔离 Classic/V2 与 3400 条 Mock 规模对比；详见 FRONTEND_V2_ACCEPTANCE.md。真实 SQLite/NAS 性能和真机验收不计入已完成范围。
 
 - [x] 增加任务状态历史和结构化审计日志，审计层不记录请求体、查询串、代理密码、令牌及签名 URL。
@@ -110,7 +110,7 @@ HWatch 不再内置外部计算节点的注册、令牌、心跳、租约或任�
 - [ ] 支持多音轨、内嵌字幕、HDR、色深和 Dolby Vision 等高级媒体信息展示。
 - [ ] 同文件系统可选硬链接节省重复媒体空间；跨文件系统或 NFS 环境不得假定硬链接可用。
 - [ ] TransRunner 无法访问共享 NFS 时，支持媒体分块传输、断点续传和传输完整性校验。
-- [x] 接入 Hanime1 第二平台适配器，支持用户上传页与播放清单订阅，并在下载前刷新时效 MP4 地址。
+- [x] 接入 Hanime1 第二平台适配器，支持用户上传页与播放清单订阅；下载前通过 `/download` 页面刷新时效直链 MP4（保留旧 `<source>` 回退，HLS-only 页面显式报错）。
 - [ ] 增加下载、转码和媒体扫描任务的优先级、夜间执行窗口及带宽时段策略。
 - [ ] 完善电视浏览器、遥控器焦点导航和大屏播放器交互。
 - [ ] 支持新部署仅挂载原媒体目录后扫描视频、NFO 和海报，重建订阅、媒体索引及 `completed` 状态；导入前提供预览并避免覆盖现有数据库记录。
