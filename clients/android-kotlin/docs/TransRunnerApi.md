@@ -10,6 +10,7 @@ All URIs are relative to *http://localhost*
 | [**transRunnerDedupeCandidates**](TransRunnerApi.md#transRunnerDedupeCandidates) | **GET** api/transrunner/v1/media/{video_id}/dedupe-candidates |  |
 | [**transRunnerDuplicateResults**](TransRunnerApi.md#transRunnerDuplicateResults) | **POST** api/transrunner/v1/duplicate-results |  |
 | [**transRunnerMedia**](TransRunnerApi.md#transRunnerMedia) | **GET** api/transrunner/v1/media/{video_id} |  |
+| [**transRunnerTranscodeResultGet**](TransRunnerApi.md#transRunnerTranscodeResultGet) | **GET** api/transrunner/v1/transcode-results/{runner_job_id} |  |
 | [**transRunnerTranscodeResults**](TransRunnerApi.md#transRunnerTranscodeResults) | **POST** api/transrunner/v1/transcode-results |  |
 
 
@@ -227,6 +228,46 @@ val result : TransRunnerMedia = webService.transRunnerMedia(videoId)
 ### Return type
 
 [**TransRunnerMedia**](TransRunnerMedia.md)
+
+### Authorization
+
+
+Configure integrationBearer:
+    ApiClient().setBearerToken("TOKEN")
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+需要 read_media。只读查询某 runner_job_id 是否已应用。返回 status（applied/not_applied/in_progress/uncertain/not_found）、applied、source_sha256、output_sha256、applied_at。not_found 不代表可以安全重复提交，尤其旧版任务需人工核查。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+apiClient.setBearerToken("TOKEN")
+val webService = apiClient.createWebservice(TransRunnerApi::class.java)
+val runnerJobId : kotlin.String = runnerJobId_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.transRunnerTranscodeResultGet(runnerJobId)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **runnerJobId** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
 
 ### Authorization
 

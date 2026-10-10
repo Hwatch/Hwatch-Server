@@ -262,6 +262,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/random": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 从整个已下载影视库中均匀随机抽取一小批正式媒体。只读，不触发下载或状态变更；只返回 status=completed 且 file_path 非空的数据库记录（不代表物理存在）。 */
+        get: operations["libraryRandom"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -359,6 +376,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/videos/{id}/refresh-thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 重新抓取指定视频当前来源页面的封面，仅更新 thumbnail_url；不修改媒体文件、路径、编码、哈希、生命周期状态、排除或下载器状态。需要普通管理会话（CSRF），TransRunner Service Token 无权调用。返回 status（updated/unchanged/missing/failed）及 before/after。 */
+        post: operations["refreshVideoThumbnail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media-exclusions": {
         parameters: {
             query?: never;
@@ -387,6 +421,156 @@ export interface paths {
         post?: never;
         /** @description 删除指定 video_id 的排除 tombstone（恢复允许下载）；不会自动创建下载任务。 */
         delete: operations["removeMediaExclusion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 只读扫描已完成媒体的文件完整性；存储不可用时不会判定缺失。 */
+        get: operations["mediaIntegrityScan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 自动识别删除清单格式并返回校验预览，不修改数据库。支持：外部已删除清单（数组或 {deletions:[...]}）、VDF GUI 原生导出（{CreatedAt,EstimatedTotalSavingsBytes,Groups:[{GroupId,RemoveItems,KeepItems}]}）。TransRunner 删除计划请使用模式二 /plan/*。 */
+        post: operations["mediaIntegrityImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/vdf/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 执行 VDF GUI 原生删除导出：按路径匹配 HWatch 媒体（服务端路径→两段后缀→唯一 basename），校验同订阅/保留项存在；删除文件仍在则移入隔离区，已被外部删除则仅写入排除（复用 RemoveAndExclude）。confirm=false 为 Dry Run；歧义或非受管路径拒绝执行。 */
+        post: operations["vdfGUIExecute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 对已确认缺失且由删除清单匹配的媒体执行“移除记录并加入已排除”；confirm=false 为 Dry Run。每个视频独立事务，失败不影响其它条目。 */
+        post: operations["mediaIntegrityApply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/plan/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 解析并服务端重新校验 TransRunner 删除计划（kind=transrunner-duplicate-deletion-plan, plan_version=1），返回逐条校验结果；只读，不写库、不动文件。 */
+        post: operations["transRunnerDeletionPlanPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/plan/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description confirm=false 为 Dry Run；confirm=true 时对已验证条目把文件移入隔离区（同文件系统）并事务性写入排除，执行状态持久化，可重复执行与恢复。 */
+        post: operations["transRunnerDeletionPlanExecute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDeletionPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/plan/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDeletionPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media-integrity/plan/{id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recoverDeletionPlan"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -498,6 +682,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["checkSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/check/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 订阅检查进度（queued/active/running），供前端在批量检查完成后自动刷新。检查在服务端有并发上限（默认 3）。 */
+        get: operations["checkStatus"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -733,6 +934,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/transrunner/v1/transcode-results/{runner_job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 需要 read_media。只读查询某 runner_job_id 是否已应用。返回 status（applied/not_applied/in_progress/uncertain/not_found）、applied、source_sha256、output_sha256、applied_at。not_found 不代表可以安全重复提交，尤其旧版任务需人工核查。 */
+        get: operations["transRunnerTranscodeResultGet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}": {
         parameters: {
             query?: never;
@@ -843,6 +1061,8 @@ export interface components {
              * @enum {string}
              */
             apply_mode?: "replace_source";
+            /** @description 可选幂等键；也可用 Idempotency-Key 头。相同键但请求内容不同返回 409 idempotency_conflict；已成功应用的重复请求返回此前结果（idempotent=true），不会重复替换。 */
+            idempotency_key?: string;
         };
         RecoveryStatus: {
             available: boolean;
@@ -866,6 +1086,8 @@ export interface components {
         Video: {
             video_id: string;
             subscription_slug: string;
+            /** @description 平台/适配器标识 */
+            platform?: string;
             title: string;
             description?: string;
             translated_title?: string;
@@ -950,6 +1172,28 @@ export interface components {
             total: number;
             limit: number;
             offset: number;
+            /** @description 仅 /api/tasks 返回。按来源分别记录的 HTTP 429 退避状态。 */
+            rate_limits?: components["schemas"]["RateLimit"][];
+        };
+        RateLimit: {
+            /** @description 平台/适配器标识，例如 rule34video */
+            source: string;
+            /** @description 触发限速的真实主机 */
+            host?: string;
+            /**
+             * @description rate_limit=HTTP 429；network=连续连接级失败（TLS/EOF/reset）触发的来源恢复退避
+             * @enum {string}
+             */
+            reason?: "rate_limit" | "network";
+            /** Format: date-time */
+            backoff_until: string;
+            /** @description 服务端 Retry-After（若提供） */
+            retry_after_seconds?: number;
+            consecutive_429?: number;
+            /** @description 连续连接级失败次数 */
+            transient?: number;
+            /** @description 该来源当前等待中的 queued 任务数 */
+            waiting: number;
         };
     };
     responses: {
@@ -1268,6 +1512,31 @@ export interface operations {
             200: components["responses"]["JSON"];
         };
     };
+    libraryRandom: {
+        parameters: {
+            query?: {
+                limit?: number;
+                exclude?: string;
+                q?: string;
+                scope?: "all" | "original" | "translated";
+                tags?: string;
+                exclude_tags?: string;
+                tag_mode?: "all" | "any";
+                creator?: string;
+                codec?: string;
+                min_height?: number;
+                language?: components["parameters"]["Language"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            400: components["responses"]["Error"];
+        };
+    };
     listTasks: {
         parameters: {
             query?: {
@@ -1382,6 +1651,23 @@ export interface operations {
             503: components["responses"]["Error"];
         };
     };
+    refreshVideoThumbnail: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["VideoID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            404: components["responses"]["Error"];
+        };
+    };
     listMediaExclusions: {
         parameters: {
             query?: {
@@ -1413,6 +1699,185 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+        };
+    };
+    mediaIntegrityScan: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    mediaIntegrityImport: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+        };
+    };
+    vdfGUIExecute: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    raw: string;
+                    confirm: boolean;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    mediaIntegrityApply: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description 必须为 true 才执行写入 */
+                    confirm: boolean;
+                    /** @description 原始删除清单 JSON（可选，替代 deletions） */
+                    raw?: string;
+                    deletions?: {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    transRunnerDeletionPlanPreview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    raw: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+        };
+    };
+    transRunnerDeletionPlanExecute: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    raw: string;
+                    confirm: boolean;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    listDeletionPlans: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    getDeletionPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            404: components["responses"]["Error"];
+        };
+    };
+    recoverDeletionPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            503: components["responses"]["Error"];
         };
     };
     listSubscriptions: {
@@ -1579,6 +2044,18 @@ export interface operations {
         requestBody?: never;
         responses: {
             202: components["responses"]["JSON"];
+        };
+    };
+    checkStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
         };
     };
     getSettings: {
@@ -1904,6 +2381,22 @@ export interface operations {
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+        };
+    };
+    transRunnerTranscodeResultGet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runner_job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
     streamMedia: {

@@ -21,18 +21,14 @@ import com.google.gson.annotations.SerializedName
 /**
  * 
  *
- * @param videoId 
- * @param force 
+ * @param raw 
  */
 
 
-data class SubmitDedupeToTransRunnerRequest (
+data class TransRunnerDeletionPlanPreviewRequest (
 
-    @SerializedName("video_id")
-    val videoId: kotlin.String,
-
-    @SerializedName("force")
-    val force: kotlin.Boolean? = false
+    @SerializedName("raw")
+    val raw: kotlin.String
 
 ) {
 

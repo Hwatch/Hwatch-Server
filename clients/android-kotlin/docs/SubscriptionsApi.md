@@ -5,6 +5,7 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 | ------------- | ------------- | ------------- |
 | [**checkAll**](SubscriptionsApi.md#checkAll) | **POST** api/check |  |
+| [**checkStatus**](SubscriptionsApi.md#checkStatus) | **GET** api/check/status |  |
 | [**checkSubscription**](SubscriptionsApi.md#checkSubscription) | **POST** api/check/{slug} |  |
 | [**createSubscription**](SubscriptionsApi.md#createSubscription) | **POST** api/subscriptions |  |
 | [**deleteSubscription**](SubscriptionsApi.md#deleteSubscription) | **DELETE** api/subscriptions/{slug} |  |
@@ -36,6 +37,40 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.chec
 | Name | Type | Description  | Notes |
 | ------------- | ------------- | ------------- | ------------- |
 | **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+订阅检查进度（queued/active/running），供前端在批量检查完成后自动刷新。检查在服务端有并发上限（默认 3）。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.checkStatus()
+```
+
+### Parameters
+This endpoint does not need any parameter.
 
 ### Return type
 

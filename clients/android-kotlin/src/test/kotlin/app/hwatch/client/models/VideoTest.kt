@@ -49,6 +49,12 @@ class VideoTest : ShouldSpec() {
             //modelInstance.status shouldBe ("TODO")
         }
 
+        // to test the property `platform` - 平台/适配器标识
+        should("test platform") {
+            // uncomment below to test the property
+            //modelInstance.platform shouldBe ("TODO")
+        }
+
         // to test the property `description`
         should("test description") {
             // uncomment below to test the property

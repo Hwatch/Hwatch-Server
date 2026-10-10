@@ -55,6 +55,14 @@ class DownloadsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test taskHistory
+        should("test taskHistory") {
+            // uncomment below to test taskHistory
+            //val id : kotlin.String = id_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.taskHistory(id)
+            //result shouldBe ("TODO")
+        }
+
         // to test toggleDownloads
         should("test toggleDownloads") {
             // uncomment below to test toggleDownloads

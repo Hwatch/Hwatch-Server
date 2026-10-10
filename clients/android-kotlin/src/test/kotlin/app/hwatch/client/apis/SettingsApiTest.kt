@@ -52,6 +52,15 @@ class SettingsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test listAuditLogs
+        should("test listAuditLogs") {
+            // uncomment below to test listAuditLogs
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val offset : kotlin.Int = 56 // kotlin.Int | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listAuditLogs(limit, offset)
+            //result shouldBe ("TODO")
+        }
+
         // to test listBackups
         should("test listBackups") {
             // uncomment below to test listBackups
@@ -72,6 +81,15 @@ class SettingsApiTest : ShouldSpec() {
             // uncomment below to test markNotificationsRead
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.markNotificationsRead(xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test previewExclusions
+        should("test previewExclusions") {
+            // uncomment below to test previewExclusions
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val requestBody : kotlin.collections.Map<kotlin.String, kotlin.Any> = Object // kotlin.collections.Map<kotlin.String, kotlin.Any> | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.previewExclusions(xCSRFToken, requestBody)
             //result shouldBe ("TODO")
         }
 

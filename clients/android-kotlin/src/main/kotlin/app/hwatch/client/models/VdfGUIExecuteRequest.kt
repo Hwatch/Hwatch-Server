@@ -21,22 +21,18 @@ import com.google.gson.annotations.SerializedName
 /**
  * 
  *
- * @param videoId 
- * @param profile 
- * @param force 
+ * @param raw 
+ * @param confirm 
  */
 
 
-data class SubmitTranscodeToTransRunnerRequest (
+data class VdfGUIExecuteRequest (
 
-    @SerializedName("video_id")
-    val videoId: kotlin.String,
+    @SerializedName("raw")
+    val raw: kotlin.String,
 
-    @SerializedName("profile")
-    val profile: kotlin.String? = null,
-
-    @SerializedName("force")
-    val force: kotlin.Boolean? = false
+    @SerializedName("confirm")
+    val confirm: kotlin.Boolean
 
 ) {
 

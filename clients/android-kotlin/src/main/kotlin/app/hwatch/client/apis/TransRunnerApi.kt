@@ -106,6 +106,21 @@ interface TransRunnerApi {
     fun transRunnerMedia(@Path("video_id") videoId: kotlin.String): Call<TransRunnerMedia>
 
     /**
+     * GET api/transrunner/v1/transcode-results/{runner_job_id}
+     * 
+     * 需要 read_media。只读查询某 runner_job_id 是否已应用。返回 status（applied/not_applied/in_progress/uncertain/not_found）、applied、source_sha256、output_sha256、applied_at。not_found 不代表可以安全重复提交，尤其旧版任务需人工核查。
+     * Responses:
+     *  - 200: 成功
+     *  - 401: 请求失败
+     *  - 403: 请求失败
+     *
+     * @param runnerJobId 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/transrunner/v1/transcode-results/{runner_job_id}")
+    fun transRunnerTranscodeResultGet(@Path("runner_job_id") runnerJobId: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
      * POST api/transrunner/v1/transcode-results
      * 
      * 需要 write_transcode_results。接收暂存产物并由 HWatch 自己 ffprobe 验证。默认只记录 pending 结果，不替换源文件；仅当 apply_mode&#x3D;replace_source 且校验通过（HEVC、分辨率/帧率/时长/位深/色彩保持、source_sha256 一致）时才由 HWatch 原子替换源文件并刷新元数据。

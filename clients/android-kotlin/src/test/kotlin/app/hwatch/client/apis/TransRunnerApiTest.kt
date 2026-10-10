@@ -80,6 +80,14 @@ class TransRunnerApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test transRunnerTranscodeResultGet
+        should("test transRunnerTranscodeResultGet") {
+            // uncomment below to test transRunnerTranscodeResultGet
+            //val runnerJobId : kotlin.String = runnerJobId_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.transRunnerTranscodeResultGet(runnerJobId)
+            //result shouldBe ("TODO")
+        }
+
         // to test transRunnerTranscodeResults
         should("test transRunnerTranscodeResults") {
             // uncomment below to test transRunnerTranscodeResults

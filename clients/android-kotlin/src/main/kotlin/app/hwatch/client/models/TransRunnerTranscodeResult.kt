@@ -27,6 +27,7 @@ import com.google.gson.annotations.SerializedName
  * @param sourceSha256 提交源文件的 SHA-256；与当前不一致时返回 409 source_changed。
  * @param profile 
  * @param applyMode 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。
+ * @param idempotencyKey 可选幂等键；也可用 Idempotency-Key 头。相同键但请求内容不同返回 409 idempotency_conflict；已成功应用的重复请求返回此前结果（idempotent=true），不会重复替换。
  */
 
 
@@ -51,7 +52,11 @@ data class TransRunnerTranscodeResult (
 
     /* 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。 */
     @SerializedName("apply_mode")
-    val applyMode: TransRunnerTranscodeResult.ApplyMode? = null
+    val applyMode: TransRunnerTranscodeResult.ApplyMode? = null,
+
+    /* 可选幂等键；也可用 Idempotency-Key 头。相同键但请求内容不同返回 409 idempotency_conflict；已成功应用的重复请求返回此前结果（idempotent=true），不会重复替换。 */
+    @SerializedName("idempotency_key")
+    val idempotencyKey: kotlin.String? = null
 
 ) {
 

@@ -25,6 +25,18 @@ interface SubscriptionsApi {
     fun checkAll(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
+     * GET api/check/status
+     * 
+     * 订阅检查进度（queued/active/running），供前端在批量检查完成后自动刷新。检查在服务端有并发上限（默认 3）。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/check/status")
+    fun checkStatus(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
      * POST api/check/{slug}
      * 
      * 

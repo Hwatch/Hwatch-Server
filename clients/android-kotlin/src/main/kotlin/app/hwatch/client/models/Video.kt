@@ -25,6 +25,7 @@ import com.google.gson.annotations.SerializedName
  * @param subscriptionSlug 
  * @param title 
  * @param status 
+ * @param platform 平台/适配器标识
  * @param description 
  * @param translatedTitle 
  * @param views 
@@ -56,6 +57,10 @@ data class Video (
 
     @SerializedName("status")
     val status: Video.Status,
+
+    /* 平台/适配器标识 */
+    @SerializedName("platform")
+    val platform: kotlin.String? = null,
 
     @SerializedName("description")
     val description: kotlin.String? = null,

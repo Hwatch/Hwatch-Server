@@ -8,6 +8,7 @@
 | **subscriptionSlug** | **kotlin.String** |  |  |
 | **title** | **kotlin.String** |  |  |
 | **status** | [**inline**](#Status) |  |  |
+| **platform** | **kotlin.String** | 平台/适配器标识 |  [optional] |
 | **description** | **kotlin.String** |  |  [optional] |
 | **translatedTitle** | **kotlin.String** |  |  [optional] |
 | **views** | **kotlin.Long** |  |  [optional] |

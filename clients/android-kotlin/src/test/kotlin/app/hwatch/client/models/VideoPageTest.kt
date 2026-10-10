@@ -19,6 +19,7 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 
 import app.hwatch.client.models.VideoPage
+import app.hwatch.client.models.RateLimit
 import app.hwatch.client.models.Video
 
 class VideoPageTest : ShouldSpec() {
@@ -48,6 +49,12 @@ class VideoPageTest : ShouldSpec() {
         should("test offset") {
             // uncomment below to test the property
             //modelInstance.offset shouldBe ("TODO")
+        }
+
+        // to test the property `rateLimits` - 仅 /api/tasks 返回。按来源分别记录的 HTTP 429 退避状态。
+        should("test rateLimits") {
+            // uncomment below to test the property
+            //modelInstance.rateLimits shouldBe ("TODO")
         }
 
     }

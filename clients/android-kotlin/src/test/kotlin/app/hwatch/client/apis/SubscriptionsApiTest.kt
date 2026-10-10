@@ -36,6 +36,13 @@ class SubscriptionsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test checkStatus
+        should("test checkStatus") {
+            // uncomment below to test checkStatus
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.checkStatus()
+            //result shouldBe ("TODO")
+        }
+
         // to test checkSubscription
         should("test checkSubscription") {
             // uncomment below to test checkSubscription

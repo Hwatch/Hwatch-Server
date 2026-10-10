@@ -55,5 +55,17 @@ class TransRunnerTranscodeResultTest : ShouldSpec() {
             //modelInstance.profile shouldBe ("TODO")
         }
 
+        // to test the property `applyMode` - 省略时仅记录 pending；为 replace_source 时在校验通过后原子替换源文件。
+        should("test applyMode") {
+            // uncomment below to test the property
+            //modelInstance.applyMode shouldBe ("TODO")
+        }
+
+        // to test the property `idempotencyKey` - 可选幂等键；也可用 Idempotency-Key 头。相同键但请求内容不同返回 409 idempotency_conflict；已成功应用的重复请求返回此前结果（idempotent=true），不会重复替换。
+        should("test idempotencyKey") {
+            // uncomment below to test the property
+            //modelInstance.idempotencyKey shouldBe ("TODO")
+        }
+
     }
 }

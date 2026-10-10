@@ -19,7 +19,12 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 
 import app.hwatch.client.apis.LibraryApi
+import app.hwatch.client.models.DeleteVideoRequest
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.MediaIntegrityApplyRequest
+import app.hwatch.client.models.ReviewDuplicateCandidatesBatchRequest
+import app.hwatch.client.models.TransRunnerDeletionPlanPreviewRequest
+import app.hwatch.client.models.VdfGUIExecuteRequest
 import app.hwatch.client.models.VideoPage
 
 class LibraryApiTest : ShouldSpec() {
@@ -35,6 +40,24 @@ class LibraryApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test deleteVideo
+        should("test deleteVideo") {
+            // uncomment below to test deleteVideo
+            //val id : kotlin.String = id_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val deleteVideoRequest : DeleteVideoRequest =  // DeleteVideoRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteVideo(id, xCSRFToken, deleteVideoRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test getDeletionPlan
+        should("test getDeletionPlan") {
+            // uncomment below to test getDeletionPlan
+            //val id : kotlin.String = id_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.getDeletionPlan(id)
+            //result shouldBe ("TODO")
+        }
+
         // to test importHTML
         should("test importHTML") {
             // uncomment below to test importHTML
@@ -44,10 +67,48 @@ class LibraryApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test libraryRandom
+        should("test libraryRandom") {
+            // uncomment below to test libraryRandom
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val exclude : kotlin.String = exclude_example // kotlin.String | 
+            //val q : kotlin.String = q_example // kotlin.String | 
+            //val scope : kotlin.String = scope_example // kotlin.String | 
+            //val tags : kotlin.String = tags_example // kotlin.String | 
+            //val excludeTags : kotlin.String = excludeTags_example // kotlin.String | 
+            //val tagMode : kotlin.String = tagMode_example // kotlin.String | 
+            //val creator : kotlin.String = creator_example // kotlin.String | 
+            //val codec : kotlin.String = codec_example // kotlin.String | 
+            //val minHeight : kotlin.Int = 56 // kotlin.Int | 
+            //val language : kotlin.String = language_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.libraryRandom(limit, exclude, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, language)
+            //result shouldBe ("TODO")
+        }
+
+        // to test listDeletionPlans
+        should("test listDeletionPlans") {
+            // uncomment below to test listDeletionPlans
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val offset : kotlin.Int = 56 // kotlin.Int | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listDeletionPlans(limit, offset)
+            //result shouldBe ("TODO")
+        }
+
         // to test listDuplicateCandidates
         should("test listDuplicateCandidates") {
             // uncomment below to test listDuplicateCandidates
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listDuplicateCandidates()
+            //result shouldBe ("TODO")
+        }
+
+        // to test listMediaExclusions
+        should("test listMediaExclusions") {
+            // uncomment below to test listMediaExclusions
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val offset : kotlin.Int = 56 // kotlin.Int | 
+            //val q : kotlin.String = q_example // kotlin.String | 
+            //val source : kotlin.String = source_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listMediaExclusions(limit, offset, q, source)
             //result shouldBe ("TODO")
         }
 
@@ -72,6 +133,60 @@ class LibraryApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test mediaIntegrityApply
+        should("test mediaIntegrityApply") {
+            // uncomment below to test mediaIntegrityApply
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val mediaIntegrityApplyRequest : MediaIntegrityApplyRequest =  // MediaIntegrityApplyRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.mediaIntegrityApply(xCSRFToken, mediaIntegrityApplyRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test mediaIntegrityImport
+        should("test mediaIntegrityImport") {
+            // uncomment below to test mediaIntegrityImport
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val requestBody : kotlin.collections.Map<kotlin.String, kotlin.Any> = Object // kotlin.collections.Map<kotlin.String, kotlin.Any> | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.mediaIntegrityImport(xCSRFToken, requestBody)
+            //result shouldBe ("TODO")
+        }
+
+        // to test mediaIntegrityScan
+        should("test mediaIntegrityScan") {
+            // uncomment below to test mediaIntegrityScan
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.mediaIntegrityScan(xCSRFToken, limit)
+            //result shouldBe ("TODO")
+        }
+
+        // to test recoverDeletionPlan
+        should("test recoverDeletionPlan") {
+            // uncomment below to test recoverDeletionPlan
+            //val id : kotlin.String = id_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.recoverDeletionPlan(id, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test refreshVideoThumbnail
+        should("test refreshVideoThumbnail") {
+            // uncomment below to test refreshVideoThumbnail
+            //val id : kotlin.String = id_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.refreshVideoThumbnail(id, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test removeMediaExclusion
+        should("test removeMediaExclusion") {
+            // uncomment below to test removeMediaExclusion
+            //val videoId : kotlin.String = videoId_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.removeMediaExclusion(videoId, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
         // to test reviewDuplicateCandidate
         should("test reviewDuplicateCandidate") {
             // uncomment below to test reviewDuplicateCandidate
@@ -82,11 +197,47 @@ class LibraryApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test reviewDuplicateCandidatesBatch
+        should("test reviewDuplicateCandidatesBatch") {
+            // uncomment below to test reviewDuplicateCandidatesBatch
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val reviewDuplicateCandidatesBatchRequest : ReviewDuplicateCandidatesBatchRequest =  // ReviewDuplicateCandidatesBatchRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.reviewDuplicateCandidatesBatch(xCSRFToken, reviewDuplicateCandidatesBatchRequest)
+            //result shouldBe ("TODO")
+        }
+
         // to test streamMedia
         should("test streamMedia") {
             // uncomment below to test streamMedia
             //val id : kotlin.String = id_example // kotlin.String | 
             //apiInstance.streamMedia(id)
+        }
+
+        // to test transRunnerDeletionPlanExecute
+        should("test transRunnerDeletionPlanExecute") {
+            // uncomment below to test transRunnerDeletionPlanExecute
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val vdfGUIExecuteRequest : VdfGUIExecuteRequest =  // VdfGUIExecuteRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.transRunnerDeletionPlanExecute(xCSRFToken, vdfGUIExecuteRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test transRunnerDeletionPlanPreview
+        should("test transRunnerDeletionPlanPreview") {
+            // uncomment below to test transRunnerDeletionPlanPreview
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val transRunnerDeletionPlanPreviewRequest : TransRunnerDeletionPlanPreviewRequest =  // TransRunnerDeletionPlanPreviewRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.transRunnerDeletionPlanPreview(xCSRFToken, transRunnerDeletionPlanPreviewRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test vdfGUIExecute
+        should("test vdfGUIExecute") {
+            // uncomment below to test vdfGUIExecute
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val vdfGUIExecuteRequest : VdfGUIExecuteRequest =  // VdfGUIExecuteRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.vdfGUIExecute(xCSRFToken, vdfGUIExecuteRequest)
+            //result shouldBe ("TODO")
         }
 
         // to test videoFacets

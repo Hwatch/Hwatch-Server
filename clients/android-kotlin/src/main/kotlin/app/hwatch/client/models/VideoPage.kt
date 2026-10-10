@@ -15,6 +15,7 @@
 
 package app.hwatch.client.models
 
+import app.hwatch.client.models.RateLimit
 import app.hwatch.client.models.Video
 
 import com.google.gson.annotations.SerializedName
@@ -26,6 +27,7 @@ import com.google.gson.annotations.SerializedName
  * @param total 
  * @param limit 
  * @param offset 
+ * @param rateLimits 仅 /api/tasks 返回。按来源分别记录的 HTTP 429 退避状态。
  */
 
 
@@ -41,7 +43,11 @@ data class VideoPage (
     val limit: kotlin.Int,
 
     @SerializedName("offset")
-    val offset: kotlin.Int
+    val offset: kotlin.Int,
+
+    /* 仅 /api/tasks 返回。按来源分别记录的 HTTP 429 退避状态。 */
+    @SerializedName("rate_limits")
+    val rateLimits: kotlin.collections.List<RateLimit>? = null
 
 ) {
 
