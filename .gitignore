@@ -12,8 +12,4 @@ media/
 downloads/
 *.part
 *.aria2
-/acceptance/before/
-/acceptance/after/
-/acceptance/report/
-/acceptance/scale/
 /test-results/
