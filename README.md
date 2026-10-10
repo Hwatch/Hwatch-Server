@@ -127,6 +127,15 @@ After changing the API:
 
 Frontend 2.0 is the default UI in this repository. HWatch is under active development; see [TODO.md](TODO.md) for open items and the long-term plan.
 
+## Disclaimer
+
+- HWatch is an open-source, self-hosted tool for **personal** media management. It does **not** host, bundle, mirror or distribute any media or third-party content.
+- It talks to third-party platforms only to fetch metadata and download links for the content **you** choose. You are solely responsible for complying with all applicable laws and the terms of service of those platforms.
+- This project is **not affiliated with, endorsed by, or sponsored by** any content source or platform.
+- Intended for **adults only**. Do not use it to access, store or share content that is illegal in your jurisdiction or that infringes copyright.
+- The software is provided **"as is"**, without warranty of any kind. The authors and contributors are not liable for any misuse, data loss or damages.
+- Do not expose your instance to the public internet without authentication, HTTPS and network restrictions.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
