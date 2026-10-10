@@ -61,13 +61,17 @@ Source pages can change. Adapters ship snapshot and contract tests and never del
 
 Open the "Translations" page, pick a target language and export JSON. The export contains only platform identifiers, titles, tags and source hashes — no proxy config, RPC secrets, cookies, download URLs or file paths. WebAI must keep `key`, `source_hash` and `fields` and only fill in `translations`. On import, entries whose source hash does not match are skipped; translations are stored in a separate table and never overwrite the originals.
 
-## One-line install (Linux)
+## One-line install (systemd Linux)
+
+For **systemd-based** Linux only (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/install.sh | sudo bash
 ```
 
-Debian/Ubuntu first, with generic fallbacks for other distros. It installs to `/opt/hwatch`, sets up a `hwatch` systemd service on `:8787` and pulls the latest release. Configure via env: `HWATCH_VERSION=v1.0.0`, `HWATCH_DIR`, `HWATCH_PORT`, `HWATCH_MEDIA_ROOT`; flags `--no-deps`, `--no-service`.
+It installs to `/opt/hwatch`, creates a `hwatch` systemd service on `:8787` and pulls the latest release. Configure via env: `HWATCH_VERSION=v1.0.0`, `HWATCH_DIR`, `HWATCH_PORT`, `HWATCH_MEDIA_ROOT`; flags `--no-deps`, `--no-service`.
+
+On non-systemd systems (Alpine/OpenRC, Void/runit, …) pass `--no-service` and run the binary manually (see [Prebuilt binaries](#prebuilt-binaries)).
 
 ## Prebuilt binaries
 

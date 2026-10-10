@@ -121,6 +121,7 @@
         <b>HWatch</b>
         <span class="spacer"></span>
         <a class="link" href="#features">Features</a>
+        <a class="link" href="#install">Install</a>
         <a class="link" href="#start">Quick start</a>
         <a class="link" href="https://github.com/Hwatch/Hwatch-Server">GitHub</a>
       </div>
@@ -184,6 +185,13 @@ go run ./cmd/r34watch</pre>
             </ul>
           </div>
         </div>
+      </section>
+
+      <section id="install">
+        <h2>Install</h2>
+        <p>One-line install for <b>systemd-based Linux</b> (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE):</p>
+        <pre>curl -fsSL https://raw.githubusercontent.com/Hwatch/Hwatch-Server/main/install.sh | sudo bash</pre>
+        <p>Installs to <code>/opt/hwatch</code>, creates a <code>hwatch</code> systemd service on <code>:8787</code> and pulls the latest release. Options are documented in the <a href="https://github.com/Hwatch/Hwatch-Server#one-line-install-systemd-linux">README</a>; on non-systemd systems pass <code>--no-service</code>.</p>
       </section>
 
       <section id="docs">
