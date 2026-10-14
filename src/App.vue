@@ -245,7 +245,6 @@ const timelineGroups = computed(() => {
   }
   return Object.keys(map).map((date) => ({ date, items: map[date] }));
 });
-const TIMELINE_ROW_LIMIT = 8;
 const TIMELINE_PAGE_SIZE = 24;
 const TIMELINE_DAYS_PAGE = 20;
 const timelineDaysShown = ref(TIMELINE_DAYS_PAGE);
@@ -406,6 +405,7 @@ const isNarrow = ref(
 function syncNarrow() {
   isNarrow.value = window.matchMedia("(max-width: 680px)").matches;
 }
+const timelineRowLimit = computed(() => (isNarrow.value ? 3 : 8));
 function onShortKey(e: KeyboardEvent) {
   if (e.key === "Escape") shortsRotated.value = false;
 }
@@ -1668,7 +1668,7 @@ async function copyLog(log: any) {
                 {{ g.date }} <small>{{ g.items.length }} 条</small>
               </h3>
               <button
-                v-if="g.items.length > TIMELINE_ROW_LIMIT"
+                v-if="g.items.length > timelineRowLimit"
                 class="timeline-all"
                 @click="openTimelineDay(g.date)"
               >
@@ -1677,7 +1677,7 @@ async function copyLog(log: any) {
             </div>
             <div class="library timeline-strip">
               <MediaCard
-                v-for="v in g.items.slice(0, TIMELINE_ROW_LIMIT)"
+                v-for="v in g.items.slice(0, timelineRowLimit)"
                 :key="v.watched_at + v.video_id"
                 :title="displayTitle(v)"
                 :subtitle="
@@ -1700,11 +1700,11 @@ async function copyLog(log: any) {
                 @play="selected = v"
               />
               <button
-                v-if="g.items.length > TIMELINE_ROW_LIMIT"
+                v-if="g.items.length > timelineRowLimit"
                 class="timeline-more"
                 @click="openTimelineDay(g.date)"
               >
-                <span>+{{ g.items.length - TIMELINE_ROW_LIMIT }}</span>
+                <span>+{{ g.items.length - timelineRowLimit }}</span>
                 查看全部
               </button>
             </div>
