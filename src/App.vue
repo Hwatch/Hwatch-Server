@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
@@ -194,7 +195,7 @@ const {
   updateSidebarItem,
 } = useHWatchApp();
 
-// Advanced management pages, tucked under Settings instead of the sidebar.
+// Advanced management pages, shown in the sidebar instead of the main nav.
 const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "subscriptions", label: "订阅管理", desc: "创作者 / 来源订阅与检查" },
   { id: "downloads", label: "下载中心", desc: "进行中与历史下载任务" },
@@ -203,6 +204,16 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "integrity", label: "媒体完整性", desc: "扫描、删除清单核对与 VDF" },
   { id: "translations", label: "翻译管理", desc: "WebAI 翻译导出 / 回导" },
 ];
+const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
+const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
+// Remember the last normal page so the sidebar "back" returns there.
+const lastNormalView = ref("home");
+watch(view, (next) => {
+  if (!ADVANCED_VIEWS.includes(next)) lastNormalView.value = next;
+});
+function exitAdvanced() {
+  changeView(lastNormalView.value || "home");
+}
 </script>
 <template>
   <a v-if="auth.authenticated" href="#main-content" class="skip-link"
@@ -290,6 +301,9 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
       :show-original="showOriginal"
       :demo-mode="demoMode"
       :auth="auth"
+      :advanced="advanced"
+      :management-entries="managementEntries"
+      :exit-advanced="exitAdvanced"
       :toggle-group="toggleGroup"
       :change-view="changeView"
       :toggle-original="toggleOriginal"
@@ -1715,27 +1729,6 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
         </div>
       </section>
       <section v-else>
-        <div v-if="view === 'settings'" class="panel management-hub">
-          <h2>高级管理</h2>
-          <p class="management-sub">
-            订阅、下载、排除、完整性与翻译等管理页面集中于此。
-          </p>
-          <div class="management-grid">
-            <button
-              v-for="m in managementEntries"
-              :key="m.id"
-              type="button"
-              class="management-card"
-              @click="changeView(m.id)"
-            >
-              <span class="management-symbol"><NavIcon :name="m.id" /></span>
-              <span class="management-body"
-                ><b>{{ m.label }}</b><small>{{ m.desc }}</small></span
-              >
-              <i class="management-arrow" aria-hidden="true">›</i>
-            </button>
-          </div>
-        </div>
         <div v-if="view === 'translations'" class="panel translation-workspace">
           <h2>WebAI 翻译交换</h2>
           <p>

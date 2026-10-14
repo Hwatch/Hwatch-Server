@@ -1032,3 +1032,15 @@ h2 {
 .management-body b { font-size: 14px; font-weight: 600; }
 .management-body small { color: var(--muted); font-size: 12px; }
 .management-arrow { color: var(--muted); font-style: normal; font-size: 18px; line-height: 1; }
+
+/* Sidebar advanced mode (management hub lives in the sidebar) */
+.brand--advanced { gap: 10px; }
+.brand--advanced b { letter-spacing: 0.02em; }
+.brand-back { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 9px; background: var(--surface-raised); color: var(--text); }
+.brand-back:hover { color: var(--accent); }
+.side-hub { display: grid; gap: 8px; }
+.side-hub .management-card { padding: 10px 12px; gap: 10px; }
+.side-hub .management-symbol { width: 32px; height: 32px; }
+.side-hub .management-body small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-hub .management-card.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.side-hub .management-card.active .management-symbol { color: var(--accent); }

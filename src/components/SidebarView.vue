@@ -23,6 +23,9 @@ defineProps<{
   showOriginal: boolean;
   demoMode: number;
   auth: { username?: string };
+  advanced: boolean;
+  managementEntries: { id: string; label: string; desc: string }[];
+  exitAdvanced: () => void;
   toggleGroup: (id: string) => void;
   changeView: (id: string) => void;
   toggleOriginal: () => void;
@@ -33,8 +36,50 @@ defineProps<{
 </script>
 <template>
   <aside aria-label="应用导航">
-    <div class="brand"><span>H</span><b>HWatch</b></div>
-    <nav>
+    <div class="brand" :class="{ 'brand--advanced': advanced }">
+      <template v-if="advanced">
+        <button
+          type="button"
+          class="brand-back"
+          aria-label="返回正常页面"
+          title="返回正常页面"
+          @click="exitAdvanced()"
+        >
+          <svg
+            class="nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6"></path>
+          </svg>
+        </button>
+        <b>高级设置</b>
+      </template>
+      <template v-else><span>H</span><b>HWatch</b></template>
+    </div>
+    <nav v-if="advanced" class="side-hub" aria-label="高级管理">
+      <button
+        v-for="m in managementEntries"
+        :key="m.id"
+        type="button"
+        class="management-card"
+        :class="{ active: view === m.id }"
+        :aria-current="view === m.id ? 'page' : undefined"
+        @click="changeView(m.id)"
+      >
+        <span class="management-symbol"><NavIcon :name="m.id" /></span>
+        <span class="management-body"
+          ><b>{{ m.label }}</b><small>{{ m.desc }}</small></span
+        >
+        <i class="management-arrow" aria-hidden="true">›</i>
+      </button>
+    </nav>
+    <nav v-else>
       <template v-for="group in navGroups" :key="group.id">
         <div
           v-if="group.label"
