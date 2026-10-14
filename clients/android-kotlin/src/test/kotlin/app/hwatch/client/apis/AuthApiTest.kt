@@ -19,8 +19,12 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 
 import app.hwatch.client.apis.AuthApi
+import app.hwatch.client.models.ChangeOwnPasswordRequest
+import app.hwatch.client.models.CreateUserRequest
 import app.hwatch.client.models.Credentials
 import app.hwatch.client.models.Error
+import app.hwatch.client.models.SetUserPasswordRequest
+import app.hwatch.client.models.UpdateUserRoleRequest
 
 class AuthApiTest : ShouldSpec() {
     init {
@@ -41,6 +45,40 @@ class AuthApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test changeOwnPassword
+        should("test changeOwnPassword") {
+            // uncomment below to test changeOwnPassword
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val changeOwnPasswordRequest : ChangeOwnPasswordRequest =  // ChangeOwnPasswordRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.changeOwnPassword(xCSRFToken, changeOwnPasswordRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test createUser
+        should("test createUser") {
+            // uncomment below to test createUser
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val createUserRequest : CreateUserRequest =  // CreateUserRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.createUser(xCSRFToken, createUserRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test deleteUser
+        should("test deleteUser") {
+            // uncomment below to test deleteUser
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteUser(id, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test listUsers
+        should("test listUsers") {
+            // uncomment below to test listUsers
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listUsers()
+            //result shouldBe ("TODO")
+        }
+
         // to test login
         should("test login") {
             // uncomment below to test login
@@ -57,11 +95,31 @@ class AuthApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test setUserPassword
+        should("test setUserPassword") {
+            // uncomment below to test setUserPassword
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val setUserPasswordRequest : SetUserPasswordRequest =  // SetUserPasswordRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.setUserPassword(id, xCSRFToken, setUserPasswordRequest)
+            //result shouldBe ("TODO")
+        }
+
         // to test setupAdmin
         should("test setupAdmin") {
             // uncomment below to test setupAdmin
             //val credentials : Credentials =  // Credentials | 
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.setupAdmin(credentials)
+            //result shouldBe ("TODO")
+        }
+
+        // to test updateUserRole
+        should("test updateUserRole") {
+            // uncomment below to test updateUserRole
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val updateUserRoleRequest : UpdateUserRoleRequest =  // UpdateUserRoleRequest | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.updateUserRole(id, xCSRFToken, updateUserRoleRequest)
             //result shouldBe ("TODO")
         }
 

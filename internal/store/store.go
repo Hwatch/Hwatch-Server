@@ -197,6 +197,7 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE subscription_logs ADD COLUMN created_count INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE subscription_logs ADD COLUMN queued_count INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE subscription_logs ADD COLUMN events_json TEXT NOT NULL DEFAULT '[]'",
+		"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
 	} {
 		_, _ = db.Exec(statement)
 	}

@@ -26,6 +26,16 @@ paths:
     post: {tags: [Auth], operationId: logout, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/auth/me:
     get: {tags: [Auth], operationId: authMe, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/auth/password:
+    post: {tags: [Auth], operationId: changeOwnPassword, description: 修改当前登录账号的密码（任意已登录用户）。, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [current_password, new_password], properties: {current_password: {type: string}, new_password: {type: string}}}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+  /api/users:
+    get: {tags: [Auth], operationId: listUsers, description: 列出用户（仅管理员）。, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+    post: {tags: [Auth], operationId: createUser, description: 创建用户（仅管理员）。role 为 admin 或 viewer，默认 viewer。, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [username, password], properties: {username: {type: string}, password: {type: string}, role: {type: string, enum: [admin, viewer]}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}}}
+  /api/users/{id}:
+    patch: {tags: [Auth], operationId: updateUserRole, description: 修改用户角色（仅管理员，不能降级最后一个管理员）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}, {$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [role], properties: {role: {type: string, enum: [admin, viewer]}}}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [Auth], operationId: deleteUser, description: 删除用户（仅管理员，不能删除自己或最后一个管理员）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}, '409': {$ref: '#/components/responses/Error'}}}
+  /api/users/{id}/password:
+    post: {tags: [Auth], operationId: setUserPassword, description: 重置指定用户密码（仅管理员）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}, {$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [password], properties: {password: {type: string}}}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
   /api/dashboard:
     get: {tags: [Library], operationId: dashboard, parameters: [{$ref: '#/components/parameters/Language'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/health:

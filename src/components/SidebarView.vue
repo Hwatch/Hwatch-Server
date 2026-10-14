@@ -26,6 +26,8 @@ const props = defineProps<{
   demoMode: number;
   auth: { username?: string };
   advanced: boolean;
+  canAdmin: boolean;
+  openChangePassword: () => void;
   managementEntries: { id: string; label: string; desc: string }[];
   exitAdvanced: () => void;
   toggleGroup: (id: string) => void;
@@ -94,7 +96,7 @@ const quickItems = computed(() =>
           </button>
       </template>
       <button
-        v-for="m in advanced ? [] : quickItems"
+        v-for="m in advanced || !canAdmin ? [] : quickItems"
         :key="'quick-' + m.id"
         :class="{ active: view === m.id }"
         :aria-current="view === m.id ? 'page' : undefined"
@@ -161,7 +163,7 @@ const quickItems = computed(() =>
         <span>返回</span>
       </button>
       <button
-        v-else
+        v-else-if="canAdmin"
         :class="{ active: view === 'settings' }"
         :aria-current="view === 'settings' ? 'page' : undefined"
         v-on:click="changeView('settings')"
@@ -179,7 +181,9 @@ const quickItems = computed(() =>
             ><small>当前账户</small><b>{{ auth.username }}</b></span
           ><span class="account-menu-caret">⌄</span>
         </summary>
-        <button
+        <button class="sidebar-logout" aria-label="修改密码" title="修改密码" @click="openChangePassword()">
+          <NavIcon name="privacy" /><span>修改密码</span></button
+        ><button
           class="sidebar-logout"
           aria-label="退出登录"
           title="退出登录"

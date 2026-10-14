@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -58,6 +59,7 @@ func (a *App) authStatus(w http.ResponseWriter, r *http.Request) {
 	if session, err := a.currentSession(r); err == nil {
 		response["authenticated"] = true
 		response["username"] = session.Username
+		response["role"] = session.Role
 		response["csrf_token"] = session.CSRFToken
 	}
 	respond(w, http.StatusOK, response)
@@ -193,7 +195,7 @@ func (a *App) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) authMe(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(authContextKey{}).(store.Session)
-	respond(w, http.StatusOK, map[string]any{"authenticated": true, "username": session.Username, "csrf_token": session.CSRFToken})
+	respond(w, http.StatusOK, map[string]any{"authenticated": true, "username": session.Username, "role": session.Role, "csrf_token": session.CSRFToken})
 }
 
 func (a *App) requireAuth(next http.Handler) http.Handler {
@@ -214,6 +216,10 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 				return
 			}
 			fail(w, http.StatusUnauthorized, errors.New("请先登录"))
+			return
+		}
+		if session.Role != "admin" && !viewerAllowed(r.Method, r.URL.Path) {
+			fail(w, http.StatusForbidden, errors.New("仅观看账号无权执行该操作"))
 			return
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
@@ -248,4 +254,208 @@ type auditResponseWriter struct {
 func (w *auditResponseWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+// viewerAllowed reports whether a non-admin ("viewer") account may call a
+// route. Viewers get read-only access, except for a few self-service writes.
+func viewerAllowed(method, path string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return !adminOnlyRead(path)
+	}
+	switch {
+	case method == http.MethodPost && path == "/api/auth/logout":
+		return true
+	case method == http.MethodPost && path == "/api/auth/password":
+		return true
+	case method == http.MethodPost && path == "/api/notifications/read-all":
+		return true
+	}
+	return false
+}
+
+// adminOnlyRead lists read endpoints that expose secrets, credentials, local
+// paths or destructive tooling and must stay admin-only.
+func adminOnlyRead(path string) bool {
+	switch {
+	case path == "/api/settings":
+		return true
+	case path == "/api/backups", strings.HasPrefix(path, "/api/backups/"):
+		return true
+	case path == "/api/audit":
+		return true
+	case strings.HasPrefix(path, "/api/integrations/"):
+		return true
+	case path == "/api/recovery/latest":
+		return true
+	case strings.HasPrefix(path, "/api/media-integrity/"):
+		return true
+	case path == "/api/duplicates":
+		return true
+	case path == "/api/logs":
+		return true
+	case path == "/api/creators/search":
+		return true
+	case path == "/api/translations/export":
+		return true
+	case path == "/api/health":
+		return true
+	}
+	return false
+}
+
+func (a *App) listUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := a.store.Users()
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]any{"items": users})
+}
+
+func (a *App) createUser(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if decode(r, &input) != nil {
+		fail(w, 400, errors.New("请求格式错误"))
+		return
+	}
+	if err := validateCredentials(authInput{Username: input.Username, Password: input.Password}); err != nil {
+		fail(w, 400, err)
+		return
+	}
+	role := input.Role
+	if role != "admin" {
+		role = "viewer"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	id, err := a.store.CreateUser(strings.TrimSpace(input.Username), string(hash), role)
+	if err != nil {
+		if strings.Contains(strings.ToUpper(err.Error()), "UNIQUE") {
+			fail(w, 409, errors.New("用户名已存在"))
+			return
+		}
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 201, map[string]any{"id": id, "username": strings.TrimSpace(input.Username), "role": role})
+}
+
+func (a *App) updateUser(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	var input struct {
+		Role string `json:"role"`
+	}
+	if decode(r, &input) != nil || (input.Role != "admin" && input.Role != "viewer") {
+		fail(w, 400, errors.New("无效的角色"))
+		return
+	}
+	user, err := a.store.UserByID(id)
+	if err != nil {
+		fail(w, 404, errors.New("用户不存在"))
+		return
+	}
+	if user.Role == "admin" && input.Role != "admin" {
+		if n, _ := a.store.CountAdmins(); n <= 1 {
+			fail(w, 409, errors.New("不能降级最后一个管理员"))
+			return
+		}
+	}
+	if err := a.store.SetUserRole(id, input.Role); err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]any{"id": id, "role": input.Role})
+}
+
+func (a *App) setUserPassword(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	var input struct {
+		Password string `json:"password"`
+	}
+	if decode(r, &input) != nil {
+		fail(w, 400, errors.New("请求格式错误"))
+		return
+	}
+	if err := validateCredentials(authInput{Username: "placeholder", Password: input.Password}); err != nil {
+		fail(w, 400, err)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	if err := a.store.UpdateUserPassword(id, string(hash)); err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"updated": true})
+}
+
+func (a *App) deleteUser(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value(authContextKey{}).(store.Session)
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if id == session.UserID {
+		fail(w, 409, errors.New("不能删除当前登录账号"))
+		return
+	}
+	user, err := a.store.UserByID(id)
+	if err != nil {
+		fail(w, 404, errors.New("用户不存在"))
+		return
+	}
+	if user.Role == "admin" {
+		if n, _ := a.store.CountAdmins(); n <= 1 {
+			fail(w, 409, errors.New("不能删除最后一个管理员"))
+			return
+		}
+	}
+	if err := a.store.DeleteUser(id); err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"deleted": true})
+}
+
+func (a *App) changePassword(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value(authContextKey{}).(store.Session)
+	var input struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if decode(r, &input) != nil {
+		fail(w, 400, errors.New("请求格式错误"))
+		return
+	}
+	user, err := a.store.UserByID(session.UserID)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.CurrentPassword)) != nil {
+		fail(w, 400, errors.New("当前密码错误"))
+		return
+	}
+	if err := validateCredentials(authInput{Username: user.Username, Password: input.NewPassword}); err != nil {
+		fail(w, 400, err)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	if err := a.store.UpdateUserPassword(session.UserID, string(hash)); err != nil {
+		fail(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"updated": true})
 }

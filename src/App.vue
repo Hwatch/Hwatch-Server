@@ -162,6 +162,15 @@ const {
   logsLevel,
   logsError,
   loadLogs,
+  isAdmin,
+  users,
+  usersError,
+  loadUsers,
+  createUser,
+  updateUserRole,
+  deleteUser,
+  resetUserPassword,
+  changeOwnPassword,
   timeline,
   timelineTotal,
   timelineError,
@@ -212,6 +221,7 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "integrity", label: "媒体完整性", desc: "扫描、删除清单核对与 VDF" },
   { id: "translations", label: "翻译管理", desc: "WebAI 翻译导出 / 回导" },
   { id: "logs", label: "日志中心", desc: "订阅检查与任务日志" },
+  { id: "users", label: "用户管理", desc: "账号与角色（管理员 / 仅观看）" },
 ];
 const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
 const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
@@ -230,6 +240,64 @@ watch(view, (next) => {
 });
 function exitAdvanced() {
   changeView(lastNormalView.value || "home");
+}
+const newUser = ref({ username: "", password: "", role: "viewer" });
+const changePasswordOpen = ref(false);
+const changePw = ref({ current: "", next: "", confirm: "" });
+async function submitCreateUser() {
+  const result = await createUser({ ...newUser.value });
+  if (result.duplicate) return;
+  if (result.ok) {
+    notice.value = "已创建用户：" + newUser.value.username;
+    newUser.value = { username: "", password: "", role: "viewer" };
+    await loadUsers();
+  } else {
+    notice.value = "创建失败：" + (result.error || "");
+  }
+}
+async function toggleRole(u: any) {
+  const role = u.role === "admin" ? "viewer" : "admin";
+  const result = await updateUserRole(u.id, role);
+  if (result.duplicate) return;
+  if (result.ok) {
+    await loadUsers();
+    notice.value = "已更新角色";
+  } else {
+    notice.value = "更新失败：" + (result.error || "");
+  }
+}
+async function promptResetPassword(u: any) {
+  const pw = prompt("为 " + u.username + " 设置新密码（至少 10 位）：");
+  if (!pw) return;
+  const result = await resetUserPassword(u.id, pw);
+  if (result.duplicate) return;
+  notice.value = result.ok ? "密码已重置" : "重置失败：" + (result.error || "");
+}
+async function removeUser(u: any) {
+  if (!confirm("删除用户 " + u.username + "？其登录会话将立即失效。")) return;
+  const result = await deleteUser(u.id);
+  if (result.duplicate) return;
+  if (result.ok) {
+    await loadUsers();
+    notice.value = "已删除用户";
+  } else {
+    notice.value = "删除失败：" + (result.error || "");
+  }
+}
+async function submitChangePassword() {
+  if (changePw.value.next !== changePw.value.confirm) {
+    notice.value = "两次输入的新密码不一致";
+    return;
+  }
+  const result = await changeOwnPassword(changePw.value.current, changePw.value.next);
+  if (result.duplicate) return;
+  if (result.ok) {
+    notice.value = "密码已修改";
+    changePasswordOpen.value = false;
+    changePw.value = { current: "", next: "", confirm: "" };
+  } else {
+    notice.value = "修改失败：" + (result.error || "");
+  }
 }
 const logDetail = ref<any>(null);
 function subscriptionName(slug: string): string {
@@ -339,6 +407,8 @@ async function copyLog(log: any) {
       :demo-mode="demoMode"
       :auth="auth"
       :advanced="advanced"
+      :can-admin="isAdmin"
+      :open-change-password="() => (changePasswordOpen = true)"
       :management-entries="managementEntries"
       :exit-advanced="exitAdvanced"
       :toggle-group="toggleGroup"
@@ -380,6 +450,7 @@ async function copyLog(log: any) {
           }}</button
         ><button
           v-else-if="
+            isAdmin &&
             ![
               'settings',
               'translations',
@@ -1296,6 +1367,45 @@ async function copyLog(log: any) {
           />
         </div>
       </section>
+      <section v-else-if="view === 'users'">
+        <div class="panel">
+          <h2>创建用户</h2>
+          <div class="setting-grid">
+            <label>用户名<input v-model="newUser.username" autocomplete="off"></label>
+            <label>初始密码<input v-model="newUser.password" type="password" autocomplete="new-password"><small>至少 10 位</small></label>
+            <label>角色<select v-model="newUser.role"><option value="viewer">仅观看</option><option value="admin">管理员</option></select></label>
+          </div>
+          <div class="actions">
+            <button class="primary" :disabled="actionPending('user-create') || !newUser.username || !newUser.password" @click="submitCreateUser">{{ actionPending("user-create") ? "创建中…" : "创建用户" }}</button>
+            <button :disabled="actionPending('users-load')" @click="loadUsers()">{{ actionPending("users-load") ? "刷新中…" : "刷新" }}</button>
+          </div>
+          <p v-if="usersError" class="error">{{ usersError }}</p>
+          <small>“仅观看”账号只能浏览、播放和查看时间线，无法修改任何设置或触发下载/删除。</small>
+        </div>
+        <div class="rows">
+          <article v-for="u in users" :key="u.id">
+            <div class="account-avatar">{{ u.username.slice(0, 1).toUpperCase() }}</div>
+            <div>
+              <b>{{ u.username }}</b>
+              <small>{{ u.role === "admin" ? "管理员" : "仅观看" }} · 创建于 {{ localTime(u.created_at) }}</small>
+            </div>
+            <div class="actions">
+              <button :disabled="actionPending('user-role:' + u.id)" @click="toggleRole(u)">{{ u.role === "admin" ? "设为仅观看" : "设为管理员" }}</button>
+              <button @click="promptResetPassword(u)">重置密码</button>
+              <button class="danger" :disabled="actionPending('user-del:' + u.id)" @click="removeUser(u)">删除</button>
+            </div>
+          </article>
+        </div>
+      </section>
+      <div v-if="changePasswordOpen" class="modal" @click.self="changePasswordOpen = false">
+        <div class="log-detail" role="dialog" aria-modal="true" aria-label="修改密码">
+          <div class="log-detail-head"><h2>修改密码</h2><button class="close" @click="changePasswordOpen = false">关闭</button></div>
+          <label class="pw-field">当前密码<input v-model="changePw.current" type="password" autocomplete="current-password"></label>
+          <label class="pw-field">新密码<input v-model="changePw.next" type="password" autocomplete="new-password"><small>至少 10 位</small></label>
+          <label class="pw-field">确认新密码<input v-model="changePw.confirm" type="password" autocomplete="new-password"></label>
+          <div class="actions"><button class="primary" :disabled="actionPending('change-password')" @click="submitChangePassword">{{ actionPending("change-password") ? "提交中…" : "提交" }}</button></div>
+        </div>
+      </div>
       <section v-else-if="view === 'logs'">
         <div class="toolbar log-toolbar">
           <select v-model="logsLevel" @change="loadLogs()">
@@ -1994,7 +2104,7 @@ async function copyLog(log: any) {
       :aria-label="displayTitle(selected)"
     >
       <div class="player-top-actions">
-        <button class="danger" @click="openDelete(selected)">删除</button>
+        <button v-if="isAdmin" class="danger" @click="openDelete(selected)">删除</button>
         <button class="close" @click="selected = undefined">关闭</button>
       </div>
       <h2>{{ displayTitle(selected) }}</h2>

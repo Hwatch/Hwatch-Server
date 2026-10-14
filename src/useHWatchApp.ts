@@ -189,6 +189,7 @@ export function useHWatchApp() {
     configured: boolean;
     authenticated: boolean;
     username?: string;
+    role?: string;
     csrf_token?: string;
   };
   const auth = ref<AuthState>({ configured: true, authenticated: false }),
@@ -296,6 +297,7 @@ export function useHWatchApp() {
     translations: "/translations",
     notifications: "/notifications",
     logs: "/logs",
+    users: "/users",
     settings: "/settings",
   };
   const viewTitles: Record<string, string> = {
@@ -310,6 +312,7 @@ export function useHWatchApp() {
     translations: "翻译管理",
     notifications: "通知",
     logs: "日志中心",
+    users: "用户管理",
     settings: "设置",
   };
   const pageDescriptions: Record<string, string> = {
@@ -324,6 +327,7 @@ export function useHWatchApp() {
     translations: "导出与回导翻译，刷新 Plex 元数据",
     notifications: "系统提醒与请求级操作记录",
     logs: "订阅检查与任务日志",
+    users: "账号与角色管理",
     settings: "下载、存储、备份与界面偏好",
   };
   const subscriptionQuery = ref(""),
@@ -1405,6 +1409,61 @@ export function useHWatchApp() {
   watch(randomMode, (on) => {
     if (on && view.value === "library") void loadRandom(false);
   });
+  const isAdmin = computed(() => auth.value?.role === "admin");
+  const ADMIN_ONLY_VIEWS = [
+    "settings",
+    "subscriptions",
+    "downloads",
+    "undownloaded",
+    "excluded",
+    "integrity",
+    "translations",
+    "logs",
+    "users",
+  ];
+  const users = ref<any[]>([]);
+  const usersError = ref("");
+  async function loadUsers() {
+    const result = await actions.run("users-load", () => api("/api/users"));
+    if (result.duplicate) return;
+    if (result.ok && result.value) {
+      users.value = result.value.items;
+      usersError.value = "";
+    } else if (!result.ok) {
+      usersError.value = result.error || "用户列表加载失败";
+    }
+  }
+  function createUser(input: { username: string; password: string; role: string }) {
+    return actions.run("user-create", () =>
+      api("/api/users", { method: "POST", body: JSON.stringify(input) }),
+    );
+  }
+  function updateUserRole(id: number, role: string) {
+    return actions.run("user-role:" + id, () =>
+      api("/api/users/" + id, { method: "PATCH", body: JSON.stringify({ role }) }),
+    );
+  }
+  function deleteUser(id: number) {
+    return actions.run("user-del:" + id, () =>
+      api("/api/users/" + id, { method: "DELETE" }),
+    );
+  }
+  function resetUserPassword(id: number, password: string) {
+    return actions.run("user-pw:" + id, () =>
+      api("/api/users/" + id + "/password", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }),
+    );
+  }
+  function changeOwnPassword(current_password: string, new_password: string) {
+    return actions.run("change-password", () =>
+      api("/api/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password, new_password }),
+      }),
+    );
+  }
   async function loadFacets() {
     if (!facets.value.tags.length)
       facets.value = await api("/api/videos/facets");
@@ -1471,6 +1530,7 @@ export function useHWatchApp() {
     pageError.value = "";
     try {
       if (!viewRoutes[next]) next = "home";
+      if (!isAdmin.value && ADMIN_ONLY_VIEWS.includes(next)) next = "home";
       // Clear transient feedback so stale messages/errors do not leak across views.
       notice.value = "";
       subscribeError.value = "";
@@ -1500,6 +1560,7 @@ export function useHWatchApp() {
       if (next === "library" && randomMode.value) void loadRandom(false);
       if (next === "settings") await loadSettings();
       if (next === "logs") await loadLogs();
+      if (next === "users") await loadUsers();
       if (next === "timeline") await loadTimeline();
       if (next === "notifications") {
         await loadNotifications();
@@ -2177,6 +2238,15 @@ export function useHWatchApp() {
     markNotificationsRead,
     restoreExclusion,
     loadIntegrity,
+    isAdmin,
+    users,
+    usersError,
+    loadUsers,
+    createUser,
+    updateUserRole,
+    deleteUser,
+    resetUserPassword,
+    changeOwnPassword,
     timeline,
     timelineTotal,
     timelineError,

@@ -138,6 +138,19 @@ source:3144962 -> source%3A3144962
 
 ## 3. 概览
 
+### 用户与角色（多用户）
+
+账号分两种角色：`admin`（全部能力）与 `viewer`（仅观看：只读 + 播放，不能做任何写操作，也看不到设置/备份/审计/日志/完整性/翻译导入等敏感页面）。
+
+- `GET /api/users`：列出用户（仅 admin）。
+- `POST /api/users`：创建用户，body `{username,password,role}`（`role` 缺省 `viewer`，仅 admin）。
+- `PATCH /api/users/{id}`：修改角色 `{role}`（仅 admin；不能降级最后一个管理员）。
+- `DELETE /api/users/{id}`：删除用户（仅 admin；不能删除自己或最后一个管理员）。
+- `POST /api/users/{id}/password`：重置他人密码 `{password}`（仅 admin）。
+- `POST /api/auth/password`：修改**自己**的密码 `{current_password,new_password}`（任意已登录用户）。
+
+`/api/auth/status` 与 `/api/auth/me` 的响应新增 `role` 字段（向后兼容）。`viewer` 调用未授权的读端点或任何写端点会得到 `403`。首个账号仍通过 `POST /api/auth/setup` 创建，角色为 `admin`。
+
 ### `GET /api/dashboard`
 
 查询参数：
