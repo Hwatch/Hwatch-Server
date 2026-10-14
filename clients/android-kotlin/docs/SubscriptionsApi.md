@@ -10,6 +10,7 @@ All URIs are relative to *http://localhost*
 | [**createSubscription**](SubscriptionsApi.md#createSubscription) | **POST** api/subscriptions |  |
 | [**deleteSubscription**](SubscriptionsApi.md#deleteSubscription) | **DELETE** api/subscriptions/{slug} |  |
 | [**listPlatforms**](SubscriptionsApi.md#listPlatforms) | **GET** api/platforms |  |
+| [**listSubscriptionLogs**](SubscriptionsApi.md#listSubscriptionLogs) | **GET** api/logs |  |
 | [**listSubscriptions**](SubscriptionsApi.md#listSubscriptions) | **GET** api/subscriptions |  |
 | [**searchCreators**](SubscriptionsApi.md#searchCreators) | **GET** api/creators/search |  |
 | [**subscriptionAvatar**](SubscriptionsApi.md#subscriptionAvatar) | **GET** avatar/{slug} |  |
@@ -214,6 +215,49 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.list
 
 ### Parameters
 This endpoint does not need any parameter.
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+订阅检查日志中心（只读）。记录每次检查的结果：发现/新增/入队数量或错误原因。按 id 倒序，最多保留最近 5000 条。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
+val limit : kotlin.Int = 56 // kotlin.Int | 
+val offset : kotlin.Int = 56 // kotlin.Int | 
+val slug : kotlin.String = slug_example // kotlin.String | 
+val level : kotlin.String = level_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.listSubscriptionLogs(limit, offset, slug, level)
+```
+
+### Parameters
+| **limit** | **kotlin.Int**|  | [optional] [default to 200] |
+| **offset** | **kotlin.Int**|  | [optional] |
+| **slug** | **kotlin.String**|  | [optional] |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **level** | **kotlin.String**|  | [optional] [enum: info, error] |
 
 ### Return type
 

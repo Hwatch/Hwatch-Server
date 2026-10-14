@@ -240,6 +240,8 @@ paths:
     post: {tags: [Subscriptions], operationId: checkSubscription, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
   /api/check/status:
     get: {tags: [Subscriptions], operationId: checkStatus, description: 订阅检查进度（queued/active/running），供前端在批量检查完成后自动刷新。检查在服务端有并发上限（默认 3）。, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/logs:
+    get: {tags: [Subscriptions], operationId: listSubscriptionLogs, description: 订阅检查日志中心（只读）。记录每次检查的结果：发现/新增/入队数量或错误原因。按 id 倒序，最多保留最近 5000 条。, parameters: [{name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}, {name: offset, in: query, schema: {type: integer}}, {name: slug, in: query, schema: {type: string}}, {name: level, in: query, schema: {type: string, enum: [info, error]}}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/settings:
     get: {tags: [Settings], operationId: getSettings, responses: {'200': {$ref: '#/components/responses/JSON'}}}
     put: {tags: [Settings], operationId: updateSettings, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {$ref: '#/components/requestBodies/JSONObject'}, responses: {'200': {$ref: '#/components/responses/JSON'}}}

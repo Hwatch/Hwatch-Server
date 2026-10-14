@@ -14,6 +14,7 @@ defineProps<{name:string}>()
     <template v-else-if="name==='duplicates'"><rect x="3" y="5" width="13" height="13" rx="2"/><path d="M8 2h11a2 2 0 0 1 2 2v11M7 9h5M7 13h5"/></template>
     <template v-else-if="name==='excluded'"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></template>
     <template v-else-if="name==='integrity'"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v2H9z"/><path d="m9 13 2 2 4-4"/></template>
+    <template v-else-if="name==='logs'"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></template>
     <template v-else-if="name==='menu'"><path d="M4 6h16M4 12h16M4 18h16"/></template>
     <template v-else-if="name==='more'"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></template>
     <template v-else-if="name==='settings'"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1v.1h-4V21a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4h-.1v-4H3A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1v-.1h4V3a1.7 1.7 0 0 0 1.1 1.6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.38.33.72.6 1 .27.27.62.48 1 .6h.1v4H21a1.7 1.7 0 0 0-1.6.4z"/></template>

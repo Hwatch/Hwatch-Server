@@ -294,6 +294,7 @@ export function useHWatchApp() {
     integrity: "/integrity",
     translations: "/translations",
     notifications: "/notifications",
+    logs: "/logs",
     settings: "/settings",
   };
   const viewTitles: Record<string, string> = {
@@ -306,6 +307,7 @@ export function useHWatchApp() {
     integrity: "媒体完整性",
     translations: "翻译管理",
     notifications: "通知",
+    logs: "日志中心",
     settings: "设置",
   };
   const pageDescriptions: Record<string, string> = {
@@ -318,6 +320,7 @@ export function useHWatchApp() {
     integrity: "扫描与校验媒体，所有清理均需预览和确认",
     translations: "导出与回导翻译，刷新 Plex 元数据",
     notifications: "系统提醒与请求级操作记录",
+    logs: "订阅检查与任务日志",
     settings: "下载、存储、备份与界面偏好",
   };
   const subscriptionQuery = ref(""),
@@ -1029,6 +1032,23 @@ export function useHWatchApp() {
     notifications.value = result.items;
     data.value.unread_notifications = result.unread;
   }
+  const logs = ref<any[]>([]);
+  const logsTotal = ref(0);
+  const logsLevel = ref("");
+  const logsError = ref("");
+  async function loadLogs() {
+    const p = new URLSearchParams({ limit: "200", offset: "0" });
+    if (logsLevel.value) p.set("level", logsLevel.value);
+    const result = await actions.run("logs-load", () => api("/api/logs?" + p));
+    if (result.duplicate) return;
+    if (result.ok && result.value) {
+      logs.value = result.value.items;
+      logsTotal.value = result.value.total;
+      logsError.value = "";
+    } else if (!result.ok) {
+      logsError.value = result.error || "日志加载失败";
+    }
+  }
   async function markNotificationsRead() {
     const result = await actions.run("notif-read", () =>
       api("/api/notifications/read-all", { method: "POST" }),
@@ -1442,6 +1462,7 @@ export function useHWatchApp() {
       // Random discovery loads after the library so it never blocks first paint.
       if (next === "library") void loadRandom(false);
       if (next === "settings") await loadSettings();
+      if (next === "logs") await loadLogs();
       if (next === "notifications") {
         await loadNotifications();
         if (notificationTab.value === "operations") await loadAuditLogs();
@@ -2126,6 +2147,11 @@ export function useHWatchApp() {
     markNotificationsRead,
     restoreExclusion,
     loadIntegrity,
+    logs,
+    logsTotal,
+    logsLevel,
+    logsError,
+    loadLogs,
     previewTransRunnerPlan,
     executeTransRunnerPlan,
     recoverPlan,

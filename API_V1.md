@@ -510,6 +510,16 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 `queued` 为排队中的订阅数，`active` 为正在抓取的订阅数，`running = queued + active`；两者都为 0 表示当前没有检查任务。
 
+### `GET /api/logs`
+
+只读的订阅检查日志中心。每次检查结束（成功或失败）都会写入一条记录，按 `id` 倒序返回，最多保留最近 5000 条，供「设置 → 高级管理 → 日志中心」查看。
+
+```json
+{"items":[{"id":1,"subscription_slug":"rule34video:akt","platform":"rule34video","level":"info","message":"检查完成：发现 12，新增 2，入队 2","created_at":"2026-10-15T00:00:00Z"}],"total":1,"limit":200,"offset":0}
+```
+
+参数：`limit`(1–500，默认 200)、`offset`、`slug`（按订阅过滤）、`level`（`info` 或 `error`）。
+
 抓取模板变化检测：当来源页面能访问但结构不再匹配（或返回人机校验页面）时，各平台适配器会返回明确错误（如 `rule34video 抓取模板检测失败：…`）并写入订阅的 `last_error`，而不是静默返回空结果。
 
 ## 7. 设置

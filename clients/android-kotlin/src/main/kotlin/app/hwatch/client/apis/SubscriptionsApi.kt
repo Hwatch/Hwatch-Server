@@ -93,6 +93,31 @@ interface SubscriptionsApi {
     @GET("api/platforms")
     fun listPlatforms(): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
+
+    /**
+    * enum for parameter level
+    */
+    enum class LevelListSubscriptionLogs(val value: kotlin.String) {
+        @SerializedName(value = "info") info("info"),
+        @SerializedName(value = "error") error("error")
+    }
+
+    /**
+     * GET api/logs
+     * 
+     * 订阅检查日志中心（只读）。记录每次检查的结果：发现/新增/入队数量或错误原因。按 id 倒序，最多保留最近 5000 条。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param limit  (optional, default to 200)
+     * @param offset  (optional)
+     * @param slug  (optional)
+     * @param level  (optional)
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/logs")
+    fun listSubscriptionLogs(@Query("limit") limit: kotlin.Int? = 200, @Query("offset") offset: kotlin.Int? = null, @Query("slug") slug: kotlin.String? = null, @Query("level") level: LevelListSubscriptionLogs? = null): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
     /**
      * GET api/subscriptions
      * 

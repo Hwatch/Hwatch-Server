@@ -1022,3 +1022,13 @@ h2 {
 }
 
 
+
+/* Log center */
+.log-toolbar select { min-width: 130px; }
+.log-center article { grid-template-columns: 170px 1fr auto; align-items: start; }
+.log-center .log-time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.log-center .log-body { display: grid; gap: 3px; min-width: 0; }
+.log-center .log-body b { font-size: 13px; }
+.log-center .log-body small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-center .log-body p { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 680px) { .log-center article { grid-template-columns: 1fr; } }

@@ -705,6 +705,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 订阅检查日志中心（只读）。记录每次检查的结果：发现/新增/入队数量或错误原因。按 id 倒序，最多保留最近 5000 条。 */
+        get: operations["listSubscriptionLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -2049,6 +2066,23 @@ export interface operations {
     checkStatus: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    listSubscriptionLogs: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                slug?: string;
+                level?: "info" | "error";
+            };
             header?: never;
             path?: never;
             cookie?: never;

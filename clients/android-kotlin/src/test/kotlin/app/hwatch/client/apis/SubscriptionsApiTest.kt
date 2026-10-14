@@ -77,6 +77,17 @@ class SubscriptionsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test listSubscriptionLogs
+        should("test listSubscriptionLogs") {
+            // uncomment below to test listSubscriptionLogs
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val offset : kotlin.Int = 56 // kotlin.Int | 
+            //val slug : kotlin.String = slug_example // kotlin.String | 
+            //val level : kotlin.String = level_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.listSubscriptionLogs(limit, offset, slug, level)
+            //result shouldBe ("TODO")
+        }
+
         // to test listSubscriptions
         should("test listSubscriptions") {
             // uncomment below to test listSubscriptions

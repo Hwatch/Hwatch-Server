@@ -158,6 +158,11 @@ const {
   markNotificationsRead,
   restoreExclusion,
   loadIntegrity,
+  logs,
+  logsTotal,
+  logsLevel,
+  logsError,
+  loadLogs,
   previewTransRunnerPlan,
   executeTransRunnerPlan,
   recoverPlan,
@@ -203,6 +208,7 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "excluded", label: "已排除", desc: "不再自动下载的媒体" },
   { id: "integrity", label: "媒体完整性", desc: "扫描、删除清单核对与 VDF" },
   { id: "translations", label: "翻译管理", desc: "WebAI 翻译导出 / 回导" },
+  { id: "logs", label: "日志中心", desc: "订阅检查与任务日志" },
 ];
 const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
 const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
@@ -1209,6 +1215,43 @@ function exitAdvanced() {
               >
             </article>
           </div>
+        </div>
+      </section>
+      <section v-else-if="view === 'logs'">
+        <div class="toolbar log-toolbar">
+          <select v-model="logsLevel" @change="loadLogs()">
+            <option value="">全部级别</option>
+            <option value="info">仅信息</option>
+            <option value="error">仅错误</option>
+          </select>
+          <span>{{ logsTotal }} 条记录</span>
+          <button
+            :disabled="actionPending('logs-load')"
+            :aria-busy="actionPending('logs-load')"
+            @click="loadLogs()"
+          >
+            {{ actionPending("logs-load") ? "刷新中…" : "刷新" }}
+          </button>
+        </div>
+        <p v-if="logsError" class="error" role="alert">{{ logsError }}</p>
+        <div class="rows log-center">
+          <article v-for="l in logs" :key="l.id">
+            <div class="log-time">{{ localTime(l.created_at) }}</div>
+            <div class="log-body">
+              <b>{{ l.platform }}</b> <small>{{ l.subscription_slug }}</small>
+              <p :class="{ error: l.level === 'error' }">{{ l.message }}</p>
+            </div>
+            <span
+              class="integrity-badge"
+              :class="l.level === 'error' ? 'integrity-failed' : 'integrity-completed'"
+              >{{ l.level }}</span
+            >
+          </article>
+          <StatePanel
+            v-if="!logs.length && !logsError"
+            title="暂无日志"
+            description="订阅检查完成后会在此记录结果。"
+          />
         </div>
       </section>
       <section v-else-if="view === 'notifications'">

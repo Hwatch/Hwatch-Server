@@ -1190,6 +1190,22 @@ func (a *App) checkStatus(w http.ResponseWriter, r *http.Request) {
 	active := int(a.checkActive.Load())
 	respond(w, 200, map[string]any{"queued": queued, "active": active, "running": queued + active})
 }
+
+// listLogs serves the subscription check log center (read-only).
+func (a *App) listLogs(w http.ResponseWriter, r *http.Request) {
+	limit := intParam(r, "limit", 200, 1, 500)
+	offset := intParam(r, "offset", 0, 0, 10000000)
+	values := r.URL.Query()
+	slug := values.Get("slug")
+	level := values.Get("level")
+	items, err := a.store.SubscriptionLogs(limit, offset, slug, level)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	total, _ := a.store.CountSubscriptionLogs(slug, level)
+	respond(w, 200, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset})
+}
 func (a *App) check(slug string) {
 	if a.maintenance.Load() {
 		return
@@ -1202,6 +1218,7 @@ func (a *App) check(slug string) {
 	adapter, err := a.adapters.ByID(sub.Platform)
 	if err != nil {
 		_ = a.store.UpdateSubscriptionCheck(slug, err.Error())
+		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", "适配器不可用："+err.Error())
 		return
 	}
 	if enricher, ok := adapter.(adapters.SubscriptionEnricher); ok {
@@ -1214,13 +1231,18 @@ func (a *App) check(slug string) {
 	items, err := adapter.ListVideos(context.Background(), sub, cfg.HTTPProxy)
 	if err != nil {
 		_ = a.store.UpdateSubscriptionCheck(slug, err.Error())
+		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", err.Error())
 		return
 	}
 	_ = a.store.UpdateSubscriptionCheck(slug, "")
+	createdCount, queuedCount := 0, 0
 	for _, item := range items {
 		created, e := a.store.UpsertDiscovered(item)
 		if e != nil {
 			continue
+		}
+		if created {
+			createdCount++
 		}
 		existing, _ := a.store.Video(item.ID)
 		needsHanimeMetadata := sub.Platform == "hanime1" && existing.Description == ""
@@ -1243,12 +1265,14 @@ func (a *App) check(slug string) {
 			}
 			if a.store.QueueVideo(item.ID) == nil {
 				a.startQueueWorker()
+				queuedCount++
 			}
 		}
 	}
 	if requeued, _ := a.store.RequeueTrustedCreatorMismatches(slug); requeued > 0 {
 		a.startQueueWorker()
 	}
+	_ = a.store.AddSubscriptionLog(slug, sub.Platform, "info", fmt.Sprintf("检查完成：发现 %d，新增 %d，入队 %d", len(items), createdCount, queuedCount))
 }
 func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
@@ -2059,6 +2083,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/check", a.checkHandler)
 	mux.HandleFunc("POST /api/check/{slug}", a.checkHandler)
 	mux.HandleFunc("GET /api/check/status", a.checkStatus)
+	mux.HandleFunc("GET /api/logs", a.listLogs)
 	mux.HandleFunc("POST /api/videos/{id}/{action}", a.videoAction)
 	mux.HandleFunc("POST /api/videos/{id}/refresh-thumbnail", a.refreshThumbnailHandler)
 	mux.HandleFunc("POST /api/videos/{id}/delete", a.deleteVideo)
