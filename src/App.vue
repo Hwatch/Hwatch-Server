@@ -387,6 +387,24 @@ function onShortError(e: Event) {
   const idx = Number(slide.dataset.index ?? -1);
   if (idx >= 0) shorts.value.splice(idx, 1);
 }
+const shortPos = ref<Record<string, number>>({});
+const shortDur = ref<Record<string, number>>({});
+function fmtClock(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  const m = Math.floor(seconds / 60);
+  const sec = Math.floor(seconds % 60);
+  return m + ":" + String(sec).padStart(2, "0");
+}
+function onShortTime(v: any, e: Event) {
+  const video = e.target as HTMLVideoElement;
+  shortPos.value[v.video_id] = video.currentTime;
+  shortDur.value[v.video_id] = video.duration || 0;
+}
+function seekShort(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const video = input.closest(".short")?.querySelector("video") as HTMLVideoElement | null;
+  if (video) video.currentTime = Number(input.value);
+}
 function toggleShortVideo(e: Event) {
   const video = e.currentTarget as HTMLVideoElement;
   if (video.paused) video.play().catch(() => {});
@@ -1447,21 +1465,36 @@ async function copyLog(log: any) {
               loop
               preload="metadata"
               @error="onShortError"
+              @timeupdate="onShortTime(v, $event)"
               @click="toggleShortVideo"
             ></video>
             <div class="short-overlay">
-              <div class="short-meta">
-                <b>{{ displayTitle(v) }}</b>
-                <small
-                  >{{ v.creator_name || v.subscription_slug }} ·
-                  {{ duration(v.duration_seconds) }}</small
-                >
+              <div class="short-progress">
+                <span class="short-time">{{ fmtClock(shortPos[v.video_id] || 0) }}</span>
+                <input
+                  type="range"
+                  min="0"
+                  :max="Math.max(1, Math.round(shortDur[v.video_id] || 1))"
+                  :value="Math.round(shortPos[v.video_id] || 0)"
+                  aria-label="播放进度"
+                  @input="seekShort"
+                />
+                <span class="short-time">{{ fmtClock(shortDur[v.video_id] || 0) }}</span>
               </div>
-              <div class="short-buttons">
-                <button @click="shortsMuted = !shortsMuted">
-                  {{ shortsMuted ? "🔇 静音" : "🔊 有声" }}
-                </button>
-                <button @click="selected = v">详情</button>
+              <div class="short-bottom">
+                <div class="short-meta">
+                  <b>{{ displayTitle(v) }}</b>
+                  <small
+                    >{{ v.creator_name || v.subscription_slug }} ·
+                    {{ duration(v.duration_seconds) }}</small
+                  >
+                </div>
+                <div class="short-buttons">
+                  <button @click="shortsMuted = !shortsMuted">
+                    {{ shortsMuted ? "🔇 静音" : "🔊 有声" }}
+                  </button>
+                  <button @click="selected = v">详情</button>
+                </div>
               </div>
             </div>
           </div>
