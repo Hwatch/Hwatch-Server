@@ -36,32 +36,7 @@ defineProps<{
 </script>
 <template>
   <aside aria-label="应用导航">
-    <div class="brand" :class="{ 'brand--advanced': advanced }">
-      <template v-if="advanced">
-        <button
-          type="button"
-          class="brand-back"
-          aria-label="返回正常页面"
-          title="返回正常页面"
-          @click="exitAdvanced()"
-        >
-          <svg
-            class="nav-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m15 18-6-6 6-6"></path>
-          </svg>
-        </button>
-        <b>高级设置</b>
-      </template>
-      <template v-else><span>H</span><b>HWatch</b></template>
-    </div>
+    <div class="brand"><span>H</span><b>HWatch</b></div>
     <nav v-if="advanced" aria-label="高级管理">
       <button
         v-for="m in managementEntries"
@@ -142,18 +117,29 @@ defineProps<{
         </button>
       </details>
       <button
-        :class="{
-          active:
-            view === 'settings' ||
-            [
-              'subscriptions',
-              'downloads',
-              'undownloaded',
-              'excluded',
-              'integrity',
-              'translations',
-            ].includes(view),
-        }"
+        v-if="advanced"
+        class="advanced-back"
+        aria-label="返回正常页面"
+        title="返回正常页面"
+        @click="exitAdvanced()"
+      >
+        <svg
+          class="nav-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m15 18-6-6 6-6"></path>
+        </svg>
+        <span>返回</span>
+      </button>
+      <button
+        v-else
+        :class="{ active: view === 'settings' }"
         :aria-current="view === 'settings' ? 'page' : undefined"
         v-on:click="changeView('settings')"
       >
