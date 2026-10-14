@@ -153,6 +153,7 @@ aside nav {
   overflow-y: auto;
   scrollbar-width: thin;
   padding-bottom: 16px;
+  align-content: start;
 }
 aside .brand {
   flex-shrink: 0;
