@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
@@ -355,6 +355,20 @@ async function submitChangePassword() {
   }
 }
 const shortsMuted = ref(true);
+const shortsRotated = ref(false);
+const shortLandscape = ref<Record<string, boolean>>({});
+const isNarrow = ref(
+  typeof window !== "undefined" && window.matchMedia("(max-width: 680px)").matches,
+);
+function syncNarrow() {
+  isNarrow.value = window.matchMedia("(max-width: 680px)").matches;
+}
+onMounted(() => window.addEventListener("resize", syncNarrow));
+onUnmounted(() => window.removeEventListener("resize", syncNarrow));
+function onShortMeta(v: any, e: Event) {
+  const el = e.target as HTMLVideoElement;
+  shortLandscape.value[v.video_id] = el.videoWidth > el.videoHeight;
+}
 const activeShort = ref(-1);
 const shortBuffering = ref<Record<string, boolean>>({});
 function primeShort(idx: number) {
@@ -427,6 +441,7 @@ watch(view, (next) => {
   if (next !== "shorts") {
     shortsObserver?.disconnect();
     shortsObserver = null;
+    shortsRotated.value = false;
   }
 });const logDetail = ref<any>(null);
 function subscriptionName(slug: string): string {
@@ -1465,7 +1480,7 @@ async function copyLog(log: any) {
       </section>
       <section v-else-if="view === 'shorts'">
         <p v-if="shortsError" class="error" role="alert">{{ shortsError }}</p>
-        <div class="shorts-feed">
+        <div class="shorts-feed" :class="{ rotated: shortsRotated }">
           <div
             v-for="(v, i) in shorts"
             :key="'short-' + i + ':' + v.video_id"
@@ -1479,6 +1494,7 @@ async function copyLog(log: any) {
               loop
               :preload="Math.abs(i - activeShort) <= 1 ? 'auto' : 'none'"
               @error="onShortError"
+              @loadedmetadata="onShortMeta(v, $event)"
               @waiting="shortBuffering[v.video_id] = true"
               @playing="shortBuffering[v.video_id] = false"
               @canplay="shortBuffering[v.video_id] = false"
@@ -1508,6 +1524,12 @@ async function copyLog(log: any) {
                   >
                 </div>
                 <div class="short-buttons">
+                  <button
+                    v-if="isNarrow && shortLandscape[v.video_id]"
+                    @click="shortsRotated = !shortsRotated"
+                  >
+                    {{ shortsRotated ? "竖屏" : "横屏" }}
+                  </button>
                   <button @click="shortsMuted = !shortsMuted">
                     {{ shortsMuted ? "🔇 静音" : "🔊 有声" }}
                   </button>

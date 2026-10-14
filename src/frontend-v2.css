@@ -1090,5 +1090,6 @@ h2 {
   .shell.immersive .page-header { display: none; }
   .shell.immersive .mobile-tabbar { display: none; }
   .shell.immersive .shorts-feed { height: 100vh; height: 100dvh; margin: 0; }
+  .shell.immersive .shorts-feed.rotated { position: fixed; top: 50%; left: 50%; width: 100vh; width: 100dvh; height: 100vw; transform: translate(-50%, -50%) rotate(90deg); border-radius: 0; z-index: 60; }
   .shell.immersive .sidebar-toggle { top: calc(12px + env(safe-area-inset-top)); left: 12px; background: rgba(0, 0, 0, .45); color: #fff; border-color: rgba(255, 255, 255, .22); }
 }
