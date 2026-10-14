@@ -1019,3 +1019,15 @@ h2 {
     border-bottom-color: var(--border);
   }
 }
+
+/* Settings → 高级管理 hub */
+.management-hub { margin-bottom: 20px; }
+.management-sub { color: var(--muted); font-size: 13px; margin: 4px 0 16px; }
+.management-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 12px; }
+.management-card { display: flex; align-items: center; gap: 12px; text-align: left; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--text); cursor: pointer; font: inherit; }
+.management-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.management-symbol { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 9px; background: var(--surface-raised); color: var(--accent); flex: none; }
+.management-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.management-body b { font-size: 14px; font-weight: 600; }
+.management-body small { color: var(--muted); font-size: 12px; }
+.management-arrow { color: var(--muted); font-style: normal; font-size: 18px; line-height: 1; }

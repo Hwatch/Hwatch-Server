@@ -404,33 +404,19 @@ export function useHWatchApp() {
     demo: localStorage.getItem("hwatch-sidebar-demo") !== "0",
     aria: localStorage.getItem("hwatch-sidebar-aria") !== "0",
   });
+  // Primary navigation stays minimal (Emby-like); everything else lives in
+  // Settings -> 高级管理 (see managementEntries in App.vue).
   const navGroups = [
     { id: "overview", label: "", items: [{ id: "home", label: "概览" }] },
     {
-      id: "content",
-      label: "内容获取",
-      items: [
-        { id: "subscriptions", label: "订阅管理" },
-        { id: "downloads", label: "下载中心" },
-        { id: "undownloaded", label: "未下载" },
-      ],
-    },
-    {
       id: "media",
       label: "媒体库",
-      items: [
-        { id: "library", label: "影视库" },
-        { id: "excluded", label: "已排除" },
-        { id: "integrity", label: "媒体完整性" },
-      ],
+      items: [{ id: "library", label: "影视库" }],
     },
     {
       id: "system",
       label: "系统",
-      items: [
-        { id: "translations", label: "翻译管理" },
-        { id: "notifications", label: "通知" },
-      ],
+      items: [{ id: "notifications", label: "通知" }],
     },
   ];
   function loadOpenGroups(): Record<string, boolean> {

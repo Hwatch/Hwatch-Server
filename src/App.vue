@@ -193,6 +193,16 @@ const {
   setSidebarCollapsed,
   updateSidebarItem,
 } = useHWatchApp();
+
+// Advanced management pages, tucked under Settings instead of the sidebar.
+const managementEntries: { id: string; label: string; desc: string }[] = [
+  { id: "subscriptions", label: "订阅管理", desc: "创作者 / 来源订阅与检查" },
+  { id: "downloads", label: "下载中心", desc: "进行中与历史下载任务" },
+  { id: "undownloaded", label: "未下载", desc: "已发现但尚未下载的视频" },
+  { id: "excluded", label: "已排除", desc: "不再自动下载的媒体" },
+  { id: "integrity", label: "媒体完整性", desc: "扫描、删除清单核对与 VDF" },
+  { id: "translations", label: "翻译管理", desc: "WebAI 翻译导出 / 回导" },
+];
 </script>
 <template>
   <a v-if="auth.authenticated" href="#main-content" class="skip-link"
@@ -1705,6 +1715,27 @@ const {
         </div>
       </section>
       <section v-else>
+        <div v-if="view === 'settings'" class="panel management-hub">
+          <h2>高级管理</h2>
+          <p class="management-sub">
+            订阅、下载、排除、完整性与翻译等管理页面集中于此。
+          </p>
+          <div class="management-grid">
+            <button
+              v-for="m in managementEntries"
+              :key="m.id"
+              type="button"
+              class="management-card"
+              @click="changeView(m.id)"
+            >
+              <span class="management-symbol"><NavIcon :name="m.id" /></span>
+              <span class="management-body"
+                ><b>{{ m.label }}</b><small>{{ m.desc }}</small></span
+              >
+              <i class="management-arrow" aria-hidden="true">›</i>
+            </button>
+          </div>
+        </div>
         <div v-if="view === 'translations'" class="panel translation-workspace">
           <h2>WebAI 翻译交换</h2>
           <p>

@@ -103,7 +103,18 @@ defineProps<{
         </button>
       </details>
       <button
-        :class="{ active: view === 'settings' }"
+        :class="{
+          active:
+            view === 'settings' ||
+            [
+              'subscriptions',
+              'downloads',
+              'undownloaded',
+              'excluded',
+              'integrity',
+              'translations',
+            ].includes(view),
+        }"
         :aria-current="view === 'settings' ? 'page' : undefined"
         v-on:click="changeView('settings')"
       >
