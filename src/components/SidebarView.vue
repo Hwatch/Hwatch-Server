@@ -188,9 +188,9 @@ const quickItems = computed(() =>
             ><small>当前账户</small><b>{{ auth.username }}</b></span
           ><span class="account-menu-caret">⌄</span>
         </summary>
-        <button class="sidebar-logout" aria-label="更换头像" title="更换头像" @click="openChangeAvatar()">
+        <button class="sidebar-menu-item" aria-label="更换头像" title="更换头像" @click="openChangeAvatar()">
           <NavIcon name="privacy" /><span>更换头像</span></button
-        ><button class="sidebar-logout" aria-label="修改密码" title="修改密码" @click="openChangePassword()">
+        ><button class="sidebar-menu-item" aria-label="修改密码" title="修改密码" @click="openChangePassword()">
           <NavIcon name="privacy" /><span>修改密码</span></button
         ><button
           class="sidebar-logout"

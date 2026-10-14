@@ -1047,3 +1047,9 @@ h2 {
 .user-avatar { width: 44px; height: 44px; border-radius: 50%; }
 .rows article img.avatar { cursor: pointer; }
 .rows article img.avatar:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Account menu: show labels (auth.css hides .sidebar-logout span on desktop) */
+.bottom .sidebar-logout span,
+.bottom .sidebar-menu-item span { display: inline; }
+.bottom .sidebar-logout,
+.bottom .sidebar-menu-item { justify-content: flex-start; gap: 10px; }
