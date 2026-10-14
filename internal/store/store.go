@@ -411,7 +411,7 @@ func (s *Store) Subscriptions() ([]Subscription, error) {
 func (s *Store) Subscription(slug string) (Subscription, error) {
 	var x Subscription
 	var enabled, baseline int
-	err := s.DB.QueryRow("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,avatar_override,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions WHERE slug=?", slug).Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError)
+	err := s.DB.QueryRow("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,avatar_override,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions WHERE slug=?", slug).Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.AvatarOverride, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError)
 	x.Enabled = enabled != 0
 	x.BaselineComplete = baseline != 0
 	return x, err
