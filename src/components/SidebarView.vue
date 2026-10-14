@@ -27,6 +27,7 @@ const props = defineProps<{
   auth: { username?: string };
   advanced: boolean;
   canAdmin: boolean;
+  openAdvanced: () => void;
   openChangePassword: () => void;
   managementEntries: { id: string; label: string; desc: string }[];
   exitAdvanced: () => void;
@@ -166,7 +167,7 @@ const quickItems = computed(() =>
         v-else-if="canAdmin"
         :class="{ active: view === 'settings' }"
         :aria-current="view === 'settings' ? 'page' : undefined"
-        v-on:click="changeView('settings')"
+        v-on:click="openAdvanced()"
       >
         <NavIcon name="settings" /><span>设置</span></button
       ><small v-if="sidebarItems.aria" :class="{ online: data.aria2_online }"

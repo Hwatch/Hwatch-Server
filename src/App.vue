@@ -224,7 +224,12 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "users", label: "用户管理", desc: "账号与角色（管理员 / 仅观看）" },
 ];
 const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
-const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
+const advancedMode = ref(false);
+const advanced = computed(() => advancedMode.value);
+function openAdvanced() {
+  advancedMode.value = true;
+  changeView("settings");
+}
 const timelineGroups = computed(() => {
   const map: Record<string, any[]> = {};
   for (const it of timeline.value) {
@@ -239,6 +244,7 @@ watch(view, (next) => {
   if (!ADVANCED_VIEWS.includes(next)) lastNormalView.value = next;
 });
 function exitAdvanced() {
+  advancedMode.value = false;
   changeView(lastNormalView.value || "home");
 }
 const newUser = ref({ username: "", password: "", role: "viewer" });
@@ -408,6 +414,7 @@ async function copyLog(log: any) {
       :auth="auth"
       :advanced="advanced"
       :can-admin="isAdmin"
+      :open-advanced="openAdvanced"
       :open-change-password="() => (changePasswordOpen = true)"
       :management-entries="managementEntries"
       :exit-advanced="exitAdvanced"
