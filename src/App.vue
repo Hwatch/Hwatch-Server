@@ -363,8 +363,17 @@ const isNarrow = ref(
 function syncNarrow() {
   isNarrow.value = window.matchMedia("(max-width: 680px)").matches;
 }
-onMounted(() => window.addEventListener("resize", syncNarrow));
-onUnmounted(() => window.removeEventListener("resize", syncNarrow));
+function onShortKey(e: KeyboardEvent) {
+  if (e.key === "Escape") shortsRotated.value = false;
+}
+onMounted(() => {
+  window.addEventListener("resize", syncNarrow);
+  window.addEventListener("keydown", onShortKey);
+});
+onUnmounted(() => {
+  window.removeEventListener("resize", syncNarrow);
+  window.removeEventListener("keydown", onShortKey);
+});
 function onShortMeta(v: any, e: Event) {
   const el = e.target as HTMLVideoElement;
   shortLandscape.value[v.video_id] = el.videoWidth > el.videoHeight;
@@ -1480,6 +1489,14 @@ async function copyLog(log: any) {
       </section>
       <section v-else-if="view === 'shorts'">
         <p v-if="shortsError" class="error" role="alert">{{ shortsError }}</p>
+        <button
+          v-if="shortsRotated"
+          class="short-rotate-exit"
+          aria-label="退出横屏"
+          @click="shortsRotated = false"
+        >
+          ✕ 退出横屏
+        </button>
         <div class="shorts-feed" :class="{ rotated: shortsRotated }">
           <div
             v-for="(v, i) in shorts"
