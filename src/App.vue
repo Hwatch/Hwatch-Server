@@ -219,6 +219,23 @@ watch(view, (next) => {
 function exitAdvanced() {
   changeView(lastNormalView.value || "home");
 }
+const logDetail = ref<any>(null);
+function subscriptionName(slug: string): string {
+  const sub = (data.value?.subscriptions || []).find((x: any) => x.slug === slug);
+  return sub ? sub.name : "";
+}
+async function copyLog(log: any) {
+  const text =
+    `时间: ${log.created_at}\n级别: ${log.level}\n平台: ${log.platform}\n` +
+    `订阅: ${subscriptionName(log.subscription_slug) || log.subscription_slug} (${log.subscription_slug})\n` +
+    `日志: ${log.message}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    notice.value = "日志已复制";
+  } catch {
+    notice.value = "复制失败，请手动选择";
+  }
+}
 </script>
 <template>
   <a v-if="auth.authenticated" href="#main-content" class="skip-link"
@@ -1234,7 +1251,16 @@ function exitAdvanced() {
         </div>
         <p v-if="logsError" class="error" role="alert">{{ logsError }}</p>
         <div class="rows log-center">
-          <article v-for="l in logs" :key="l.id">
+          <article
+            v-for="l in logs"
+            :key="l.id"
+            class="log-row"
+            role="button"
+            tabindex="0"
+            @click="logDetail = l"
+            @keydown.enter="logDetail = l"
+            @keydown.space.prevent="logDetail = l"
+          >
             <div class="log-time">{{ localTime(l.created_at) }}</div>
             <div class="log-body">
               <b>{{ l.platform }}</b> <small>{{ l.subscription_slug }}</small>
@@ -1251,6 +1277,43 @@ function exitAdvanced() {
             title="暂无日志"
             description="订阅检查完成后会在此记录结果。"
           />
+        </div>
+        <div v-if="logDetail" class="modal" @click.self="logDetail = null">
+          <div class="log-detail" role="dialog" aria-modal="true" aria-label="检查日志">
+            <div class="log-detail-head">
+              <h2>检查日志</h2>
+              <button class="close" @click="logDetail = null">关闭</button>
+            </div>
+            <dl>
+              <div>
+                <dt>时间</dt>
+                <dd>{{ localTime(logDetail.created_at) }} <small>({{ logDetail.created_at }})</small></dd>
+              </div>
+              <div>
+                <dt>级别</dt>
+                <dd>
+                  <span
+                    class="integrity-badge"
+                    :class="logDetail.level === 'error' ? 'integrity-failed' : 'integrity-completed'"
+                    >{{ logDetail.level }}</span
+                  >
+                </dd>
+              </div>
+              <div><dt>平台</dt><dd>{{ logDetail.platform }}</dd></div>
+              <div>
+                <dt>订阅</dt>
+                <dd>
+                  {{ subscriptionName(logDetail.subscription_slug) || logDetail.subscription_slug }}
+                  <small>({{ logDetail.subscription_slug }})</small>
+                </dd>
+              </div>
+            </dl>
+            <h3>完整日志</h3>
+            <pre class="log-full" :class="{ error: logDetail.level === 'error' }">{{ logDetail.message }}</pre>
+            <div class="actions">
+              <button @click="copyLog(logDetail)">复制日志</button>
+            </div>
+          </div>
         </div>
       </section>
       <section v-else-if="view === 'notifications'">

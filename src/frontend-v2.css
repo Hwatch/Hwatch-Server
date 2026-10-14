@@ -999,3 +999,18 @@ h2 {
 .filter-panel .filter-toggle { display: flex; align-items: center; gap: 8px; font-weight: 600; grid-column: 1 / -1; }
 .filter-panel .filter-toggle input { width: auto; }
 .filter-panel .filter-toggle small { color: var(--muted); font-weight: 400; }
+
+/* Log center: clickable rows + full log modal */
+.log-center article.log-row { cursor: pointer; }
+.log-center article.log-row:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.log-detail { width: min(720px, 100%); max-height: 90vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 20px; }
+.log-detail-head { display: flex; justify-content: space-between; align-items: center; }
+.log-detail-head h2 { margin: 0; }
+.log-detail dl { display: grid; gap: 8px; margin: 14px 0; }
+.log-detail dl > div { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: baseline; }
+.log-detail dt { color: var(--muted); font-size: 13px; }
+.log-detail dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.log-detail dd small { color: var(--muted); }
+.log-detail h3 { font-size: 14px; margin: 6px 0 8px; }
+.log-full { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-input); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 13px; margin: 0 0 14px; }
+.log-full.error { color: #f2a0a0; }
