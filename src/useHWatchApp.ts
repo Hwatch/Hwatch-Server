@@ -325,7 +325,7 @@ export function useHWatchApp() {
     downloads: "查看下载速度、队列和失败原因",
     library: "浏览已下载媒体，搜索原文与译文",
     timeline: "按日期查看观看记录",
-    shorts: "竖屏随机浏览，上下滑动换一个",
+    shorts: "随机视频流，上下滑动切换，可拖动进度条定位",
     undownloaded: "筛选发现的作品并提交下载",
     excluded: "查看排除原因，恢复允许下载",
     integrity: "扫描与校验媒体，所有清理均需预览和确认",
