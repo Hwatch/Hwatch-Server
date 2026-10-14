@@ -381,6 +381,12 @@ function registerShort(el: unknown, i: number) {
   ensureShortsObserver();
   shortsObserver?.observe(el as Element);
 }
+function onShortError(e: Event) {
+  const slide = (e.currentTarget as HTMLVideoElement).closest(".short") as HTMLElement | null;
+  if (!slide) return;
+  const idx = Number(slide.dataset.index ?? -1);
+  if (idx >= 0) shorts.value.splice(idx, 1);
+}
 function toggleShortVideo(e: Event) {
   const video = e.currentTarget as HTMLVideoElement;
   if (video.paused) video.play().catch(() => {});
@@ -1440,6 +1446,7 @@ async function copyLog(log: any) {
               playsinline
               loop
               preload="metadata"
+              @error="onShortError"
               @click="toggleShortVideo"
             ></video>
             <div class="short-overlay">
