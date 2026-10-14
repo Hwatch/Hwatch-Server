@@ -1084,4 +1084,10 @@ h2 {
 @media (max-width: 680px) {
   .shorts-feed { max-width: none; border-radius: 0; height: calc(100vh - 196px); height: calc(100dvh - 196px); margin: -28px -16px 0; }
   .short-overlay { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  /* Immersive shorts: hide page header and bottom dock, go edge to edge */
+  .shell.immersive main { padding: 0; }
+  .shell.immersive .page-header { display: none; }
+  .shell.immersive .mobile-tabbar { display: none; }
+  .shell.immersive .shorts-feed { height: 100vh; height: 100dvh; margin: 0; }
+  .shell.immersive .sidebar-toggle { top: calc(12px + env(safe-area-inset-top)); left: 12px; background: rgba(0, 0, 0, .45); color: #fff; border-color: rgba(255, 255, 255, .22); }
 }

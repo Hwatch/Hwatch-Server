@@ -497,6 +497,7 @@ async function copyLog(log: any) {
       'demo-mode': demoMode > 0,
       'strong-demo': demoMode === 2,
       'sidebar-collapsed': sidebarCollapsed,
+      immersive: view === 'shorts',
     }"
   >
     <button
