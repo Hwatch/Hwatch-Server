@@ -280,6 +280,8 @@ func adminOnlyRead(path string) bool {
 	switch {
 	case path == "/api/settings":
 		return true
+	case path == "/api/users", strings.HasPrefix(path, "/api/users/"):
+		return true
 	case path == "/api/backups", strings.HasPrefix(path, "/api/backups/"):
 		return true
 	case path == "/api/audit":
