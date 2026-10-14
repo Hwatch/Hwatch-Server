@@ -1530,7 +1530,11 @@ export function useHWatchApp() {
     pageError.value = "";
     try {
       if (!viewRoutes[next]) next = "home";
-      if (!isAdmin.value && ADMIN_ONLY_VIEWS.includes(next)) next = "home";
+      if (!isAdmin.value && ADMIN_ONLY_VIEWS.includes(next)) {
+        next = "home";
+        window.history.replaceState({ view: "home" }, "", viewRoutes.home);
+        updateHistory = false;
+      }
       // Clear transient feedback so stale messages/errors do not leak across views.
       notice.value = "";
       subscribeError.value = "";
