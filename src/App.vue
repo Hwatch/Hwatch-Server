@@ -251,7 +251,13 @@ const timelineDaysShown = ref(TIMELINE_DAYS_PAGE);
 const visibleTimelineGroups = computed(() =>
   timelineGroups.value.slice(0, timelineDaysShown.value),
 );
-watch(timeline, () => (timelineDaysShown.value = TIMELINE_DAYS_PAGE));
+watch(timeline, () => {
+  timelineDaysShown.value = TIMELINE_DAYS_PAGE;
+  nextTick(updateTimelineCols);
+});
+watch(view, (v) => {
+  if (v === "timeline") nextTick(updateTimelineCols);
+});
 const timelineDay = ref<string | null>(null);
 const timelineDayPage = ref(0);
 const timelineDayItems = computed(() =>
@@ -404,14 +410,21 @@ const isNarrow = ref(
 );
 function syncNarrow() {
   isNarrow.value = window.matchMedia("(max-width: 680px)").matches;
+  updateTimelineCols();
 }
-const timelineRowLimit = computed(() => (isNarrow.value ? 3 : 8));
+const timelineCols = ref(5);
+function updateTimelineCols() {
+  const el = document.querySelector(".timeline") as HTMLElement | null;
+  const width = el ? el.clientWidth : window.innerWidth;
+  timelineCols.value = Math.min(8, Math.max(2, Math.floor(width / 210)));
+}
 function onShortKey(e: KeyboardEvent) {
   if (e.key === "Escape") shortsRotated.value = false;
 }
 onMounted(() => {
   window.addEventListener("resize", syncNarrow);
   window.addEventListener("keydown", onShortKey);
+  updateTimelineCols();
 });
 onUnmounted(() => {
   window.removeEventListener("resize", syncNarrow);
@@ -1668,7 +1681,7 @@ async function copyLog(log: any) {
                 {{ g.date }} <small>{{ g.items.length }} 条</small>
               </h3>
               <button
-                v-if="g.items.length > timelineRowLimit"
+                v-if="g.items.length > timelineCols"
                 class="timeline-all"
                 @click="openTimelineDay(g.date)"
               >
@@ -1677,7 +1690,7 @@ async function copyLog(log: any) {
             </div>
             <div class="library timeline-strip">
               <MediaCard
-                v-for="v in g.items.slice(0, timelineRowLimit)"
+                v-for="v in g.items.slice(0, timelineCols)"
                 :key="v.watched_at + v.video_id"
                 :title="displayTitle(v)"
                 :subtitle="
@@ -1700,11 +1713,11 @@ async function copyLog(log: any) {
                 @play="selected = v"
               />
               <button
-                v-if="g.items.length > timelineRowLimit"
+                v-if="g.items.length > timelineCols"
                 class="timeline-more"
                 @click="openTimelineDay(g.date)"
               >
-                <span>+{{ g.items.length - timelineRowLimit }}</span>
+                <span>+{{ g.items.length - timelineCols }}</span>
                 查看全部
               </button>
             </div>
