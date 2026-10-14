@@ -18,6 +18,8 @@ Docs: [HTTP API V1](API_V1.md) · [OpenAPI 3.1](openapi.yaml) · [Roadmap](TODO.
 
 ![HWatch overview (demo mode)](docs/screenshots/dashboard.png)
 
+![Watch timeline (demo mode)](docs/screenshots/timeline.png)
+
 ## Features
 
 - Full-pagination creator subscriptions; builds a complete baseline on first run and auto-downloads new works afterwards
@@ -31,6 +33,10 @@ Docs: [HTTP API V1](API_V1.md) · [OpenAPI 3.1](openapi.yaml) · [Roadmap](TODO.
 - Plex TV layout, tvshow.nfo, per-episode NFO, posters and episode thumbnails
 - After download, ffprobe records H.264/H.265/AV1, audio codec, resolution, frame rate, bit rate, bit depth and container
 - In-app library browsing, search, pagination, preview and playback
+- Watch **timeline**: a per-day history of what you played, built from playback events
+- **Log center**: every subscription check is recorded with counts, duration and a step-by-step terminal-style log
+- **Random discovery**: a filter toggle that samples the whole library and re-rolls on each page
+- **Multi-user roles**: an `admin` role plus `view-only` accounts that can browse and play but cannot change settings or trigger downloads/deletes
 - Paste video-detail HTML to import
 - NAS disk usage and cumulative download traffic stats
 - Platform adapter registry; every source is integrated through an isolated adapter
