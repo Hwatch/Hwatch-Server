@@ -771,12 +771,13 @@ export function useHWatchApp() {
     sortBy = ref("downloaded_at"),
     sortOrder = ref("desc");
   // Random discovery: a small, non-blocking sample of the whole library.
-  const RANDOM_LIMIT = 6;
-  const RANDOM_HISTORY_MAX = 36;
+  const RANDOM_LIMIT = 24;
+  const RANDOM_HISTORY_MAX = 120;
   const randomItems = ref<Video[]>([]);
   const randomError = ref("");
-  const randomScope = ref<"all" | "current">("all");
-  const randomOpen = ref(true);
+  // When on, the library grid shows random media (respecting current filters)
+  // and paging fetches another random batch.
+  const randomMode = ref(false);
   const randomHistory = ref<string[]>([]);
   const pages = computed(() => Math.max(1, Math.ceil(total.value / 48))),
     downloadTasks = computed(() => videos.value),
@@ -1326,18 +1327,16 @@ export function useHWatchApp() {
       limit: String(RANDOM_LIMIT),
       language: translationLanguage.value,
     });
-    if (randomScope.value === "current") {
-      if (query.value) p.set("q", query.value);
-      p.set("scope", searchScope.value);
-      p.set("tag_mode", tagMode.value);
-      if (selectedTags.value.length)
-        p.set("tags", selectedTags.value.join(","));
-      if (excludedTags.value.length)
-        p.set("exclude_tags", excludedTags.value.join(","));
-      if (creatorFilter.value) p.set("creator", creatorFilter.value);
-      if (codecFilter.value) p.set("codec", codecFilter.value);
-      if (minHeight.value) p.set("min_height", String(minHeight.value));
-    }
+    if (query.value) p.set("q", query.value);
+    p.set("scope", searchScope.value);
+    p.set("tag_mode", tagMode.value);
+    if (selectedTags.value.length)
+      p.set("tags", selectedTags.value.join(","));
+    if (excludedTags.value.length)
+      p.set("exclude_tags", excludedTags.value.join(","));
+    if (creatorFilter.value) p.set("creator", creatorFilter.value);
+    if (codecFilter.value) p.set("codec", codecFilter.value);
+    if (minHeight.value) p.set("min_height", String(minHeight.value));
     if (randomHistory.value.length)
       p.set("exclude", randomHistory.value.join(","));
     return p;
@@ -1368,6 +1367,9 @@ export function useHWatchApp() {
       RANDOM_HISTORY_MAX,
     );
   }
+  watch(randomMode, (on) => {
+    if (on && view.value === "library") void loadRandom(false);
+  });
   async function loadFacets() {
     if (!facets.value.tags.length)
       facets.value = await api("/api/videos/facets");
@@ -1460,7 +1462,7 @@ export function useHWatchApp() {
       if (["library", "undownloaded", "downloads"].includes(next))
         await loadVideos();
       // Random discovery loads after the library so it never blocks first paint.
-      if (next === "library") void loadRandom(false);
+      if (next === "library" && randomMode.value) void loadRandom(false);
       if (next === "settings") await loadSettings();
       if (next === "logs") await loadLogs();
       if (next === "notifications") {
@@ -1951,9 +1953,6 @@ export function useHWatchApp() {
     },
     { flush: "sync" },
   );
-  watch(randomScope, () => {
-    if (view.value === "library") void loadRandom(false);
-  });
   watch(creatorQuery, () => {
     if (creatorTimer) clearTimeout(creatorTimer);
     creatorSearchID++;
@@ -1992,11 +1991,7 @@ export function useHWatchApp() {
         if (videoLoadTimer) clearTimeout(videoLoadTimer);
         videoLoadTimer = window.setTimeout(() => void loadVideos(), 300);
       }
-      if (
-        view.value === "library" &&
-        randomScope.value === "current" &&
-        randomOpen.value
-      )
+      if (view.value === "library" && randomMode.value)
         void loadRandom(false);
       if (view.value === "home") refreshDashboard();
     },
@@ -2118,8 +2113,7 @@ export function useHWatchApp() {
     sortOrder,
     randomItems,
     randomError,
-    randomScope,
-    randomOpen,
+    randomMode,
     loadRandom,
     pages,
     unfinishedDownloadTasks,

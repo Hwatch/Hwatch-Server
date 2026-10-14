@@ -129,8 +129,7 @@ const {
   sortOrder,
   randomItems,
   randomError,
-  randomScope,
-  randomOpen,
+  randomMode,
   loadRandom,
   pages,
   unfinishedDownloadTasks,
@@ -1572,7 +1571,9 @@ function exitAdvanced() {
           ><select v-if="view === 'library'" v-model="sortOrder">
             <option value="desc">降序</option>
             <option value="asc">升序</option></select
-          ><span
+          ><span v-if="randomMode && view === 'library'"
+            >随机 {{ randomItems.length }} 条</span
+          ><span v-else
             >{{ total }} 个{{
               view === "library" ? "已下载" : "未下载"
             }}视频</span
@@ -1582,6 +1583,11 @@ function exitAdvanced() {
           v-if="view === 'library' && showFilters"
           class="panel filter-panel"
         >
+          <label class="filter-toggle"
+            ><input type="checkbox" v-model="randomMode" />随机发现<small
+              >勾选后按当前筛选随机展示，翻页即换一批</small
+            ></label
+          >
           <label
             >搜索范围<select v-model="searchScope">
               <option value="all">原文和译文</option>
@@ -1657,70 +1663,13 @@ function exitAdvanced() {
             清除筛选
           </button>
         </div>
-        <div v-if="view === 'library'" class="panel random-discovery">
-          <div class="random-head">
-            <button
-              class="random-title"
-              type="button"
-              :aria-expanded="randomOpen"
-              @click="randomOpen = !randomOpen"
-            >
-              随机发现
-            </button>
-            <span class="random-sub"
-              >从整个影视库随机抽取，发现久未播放的内容。</span
-            >
-            <select v-model="randomScope" aria-label="随机范围">
-              <option value="all">全部媒体</option>
-              <option value="current">当前筛选</option>
-            </select>
-            <button
-              class="primary"
-              :disabled="actionPending('library-random')"
-              :aria-busy="actionPending('library-random')"
-              @click="loadRandom(true)"
-            >
-              {{ actionPending("library-random") ? "换一批中…" : "换一批" }}
-            </button>
-          </div>
-          <p v-if="randomError" class="random-error" role="status">
-            {{ randomError }}
-          </p>
-          <div v-if="randomOpen" class="library random-grid">
-            <MediaCard
-              v-for="v in randomItems"
-              :key="'random-' + v.video_id"
-              :title="displayTitle(v)"
-              :subtitle="
-                displaySubtitle(
-                  v,
-                  (v.creator_name || v.subscription_slug) +
-                    ' · ' +
-                    (v.published_at ? localTime(v.published_at) : '日期未知'),
-                )
-              "
-              :summary="mediaSummary(v) || v.views.toLocaleString() + ' 次观看'"
-              :duration="duration(v.duration_seconds)"
-              :src="'/thumb/' + v.video_id"
-              :state="coverState(v.video_id)"
-              :downloadable="false"
-              :pending="false"
-              @image="(el) => registerCoverImg(v.video_id, el)"
-              @loaded="markCoverLoaded(v.video_id)"
-              @error="onCoverError($event, v.video_id)"
-              @play="selected = v"
-            />
-            <StatePanel
-              v-if="!randomItems.length && !actionPending('library-random')"
-              title="暂无随机推荐"
-              description="当前范围内没有可随机发现的已下载媒体。"
-            />
-          </div>
-        </div>
+        <p v-if="randomMode && view === 'library' && randomError" class="error" role="status">
+          {{ randomError }}
+        </p>
         <div class="library">
           <MediaCard
-            v-for="v in videos"
-            :key="v.video_id"
+            v-for="v in randomMode && view === 'library' ? randomItems : videos"
+            :key="(randomMode && view === 'library' ? 'r-' : '') + v.video_id"
             :title="displayTitle(v)"
             :subtitle="
               displaySubtitle(
@@ -1734,8 +1683,10 @@ function exitAdvanced() {
             :duration="duration(v.duration_seconds)"
             :src="'/thumb/' + v.video_id"
             :state="coverState(v.video_id)"
-            :downloadable="view === 'undownloaded'"
-            :pending="actionPending(videoActionKey(v.video_id, 'download'))"
+            :downloadable="!randomMode && view === 'undownloaded'"
+            :pending="
+              !randomMode && actionPending(videoActionKey(v.video_id, 'download'))
+            "
             @image="(el) => registerCoverImg(v.video_id, el)"
             @loaded="markCoverLoaded(v.video_id)"
             @error="onCoverError($event, v.video_id)"
@@ -1743,7 +1694,17 @@ function exitAdvanced() {
             @download="videoAction(v, 'download')"
           />
           <StatePanel
-            v-if="!videos.length"
+            v-if="
+              randomMode &&
+              view === 'library' &&
+              !randomItems.length &&
+              !actionPending('library-random')
+            "
+            title="暂无随机推荐"
+            description="当前筛选范围内没有可随机发现的已下载媒体。"
+          />
+          <StatePanel
+            v-else-if="!(randomMode && view === 'library') && !videos.length"
             :title="
               view === 'library' ? '影视库暂无已下载视频' : '没有未下载视频'
             "
@@ -1752,22 +1713,25 @@ function exitAdvanced() {
         </div>
         <div class="pagination">
           <button
-            :disabled="page === 0"
+            :disabled="randomMode ? true : page === 0"
             @click="
               page--;
               loadVideos();
             "
           >
             上一页</button
-          ><span>{{ page + 1 }} / {{ pages }}</span
+          ><span v-if="randomMode && view === 'library'"
+            >随机 · 第 {{ page + 1 }} 批</span
+          ><span v-else>{{ page + 1 }} / {{ pages }}</span
           ><button
-            :disabled="page + 1 >= pages"
+            :disabled="!randomMode && page + 1 >= pages"
             @click="
-              page++;
-              loadVideos();
+              randomMode && view === 'library'
+                ? (page++, loadRandom(true))
+                : (page++, loadVideos())
             "
           >
-            下一页
+            {{ randomMode && view === "library" ? "换一批" : "下一页" }}
           </button>
         </div>
       </section>

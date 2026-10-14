@@ -1,4 +1,4 @@
-// Frontend + backend contract check for the library "random discovery" panel.
+// Frontend + backend contract check for library random browsing (filter toggle).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -23,23 +23,25 @@ check(/file_path<>''/.test(store), "random query must require a non-empty media 
 check(/id NOT LIKE 'test:%'/.test(store), "random query must exclude test fixtures");
 check(/ORDER BY random\(\)/.test(store), "random query must use SQL random() over the whole pool");
 
-// Frontend: panel, loading/dedupe, scope switch, history de-dup.
-check(app.includes("随机发现"), "missing random discovery panel title");
-check(app.includes("换一批"), "missing 换一批 button");
-check(app.includes('actionPending("library-random")'), "换一批 must use the library-random action key");
-check(/class="library random-grid"/.test(app), "random results must reuse the library grid");
+// Frontend: it is a checkbox inside the filter panel now (no standalone panel).
+check(!/random-discovery/.test(app), "standalone random-discovery panel must be gone");
+check(!/random-discovery/.test(css), "random-discovery styles must be removed");
+check(/class="panel filter-panel"/.test(app), "library must keep the filter panel");
+check(/type="checkbox" v-model="randomMode"/.test(app), "filter panel must have a randomMode checkbox");
+check(/randomMode && view === 'library' \? randomItems : videos/.test(app), "grid must switch to randomItems in random mode");
+check(/loadRandom\(true\)/.test(app) && app.includes("换一批"), "paging must fetch another random batch");
 check(/@play="selected = v"/.test(app), "random cards must reuse the play entry point");
-check(/randomScope/.test(app) && app.includes("全部媒体") && app.includes("当前筛选"), "missing scope switch");
-check(/const RANDOM_LIMIT = 6/.test(composable), "default batch must be 6");
+check(/const randomMode = ref\(false\)/.test(composable), "composable must define randomMode");
+check(/const RANDOM_LIMIT = 24/.test(composable), "random batch size must be 24");
 check(/function loadRandom\(/.test(composable), "missing loadRandom");
 check(/actions\.run\("library-random"/.test(composable), "loadRandom must use the library-random action");
 check(/randomHistory/.test(composable) && /p\.set\("exclude"/.test(composable), "must pass recent history as exclude");
-check(/randomScope\.value === "current"/.test(composable), "random scope must honor current filters");
+check(/randomMode\.value/.test(composable), "random must honor the randomMode flag");
 check(/if \(items\.length === 0 && randomHistory\.value\.length && allowReset\)/.test(composable), "must reset history when the pool is exhausted");
 check(/if \(!result\.ok\)/.test(composable) && /randomError\.value = result\.error/.test(composable), "failure must keep previous batch and set an error");
 
 // Layout.
-check(/\.random-discovery/.test(css), "missing random-discovery styles");
+check(/\.filter-panel \.filter-toggle/.test(css), "missing filter toggle styles");
 
 if (failures.length) {
   console.error("library random check failed:");
