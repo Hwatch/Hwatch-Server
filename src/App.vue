@@ -441,10 +441,39 @@ function seekShort(e: Event) {
   const video = input.closest(".short")?.querySelector("video") as HTMLVideoElement | null;
   if (video) video.currentTime = Number(input.value);
 }
-function toggleShortVideo(e: Event) {
+const SHORT_SEEK_SECONDS = 5;
+const shortFlash = ref("");
+let shortFlashTimer: ReturnType<typeof setTimeout> | undefined;
+function flashShort(text: string) {
+  shortFlash.value = text;
+  if (shortFlashTimer) clearTimeout(shortFlashTimer);
+  shortFlashTimer = setTimeout(() => (shortFlash.value = ""), 700);
+}
+function skipBy(video: HTMLVideoElement, delta: number) {
+  const max = isFinite(video.duration) && video.duration > 0 ? video.duration : Infinity;
+  video.currentTime = Math.min(Math.max(0, video.currentTime + delta), max);
+}
+function onShortTap(e: MouseEvent) {
   const video = e.currentTarget as HTMLVideoElement;
-  if (video.paused) video.play().catch(() => {});
-  else video.pause();
+  const toggle = () => {
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+    flashShort(video.paused ? "⏸ 暂停" : "▶ 播放");
+  };
+  if (!shortsRotated.value) {
+    toggle();
+    return;
+  }
+  const ratio = e.offsetX / (video.clientWidth || 1);
+  if (ratio < 0.35) {
+    skipBy(video, -SHORT_SEEK_SECONDS);
+    flashShort(`⏪ ${SHORT_SEEK_SECONDS} 秒`);
+  } else if (ratio > 0.65) {
+    skipBy(video, SHORT_SEEK_SECONDS);
+    flashShort(`${SHORT_SEEK_SECONDS} 秒 ⏩`);
+  } else {
+    toggle();
+  }
 }
 watch(view, (next) => {
   if (next !== "shorts") {
@@ -1516,9 +1545,10 @@ async function copyLog(log: any) {
               @playing="shortBuffering[v.video_id] = false"
               @canplay="shortBuffering[v.video_id] = false"
               @timeupdate="onShortTime(v, $event)"
-              @click="toggleShortVideo"
+              @click="onShortTap"
             ></video>
             <div v-if="shortBuffering[v.video_id]" class="short-buffer">缓冲中…</div>
+            <div v-if="shortFlash" class="short-flash">{{ shortFlash }}</div>
             <div class="short-overlay">
               <div class="short-progress">
                 <span class="short-time">{{ fmtClock(shortPos[v.video_id] || 0) }}</span>
