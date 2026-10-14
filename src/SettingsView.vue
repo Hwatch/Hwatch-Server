@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import NavIcon from './NavIcon.vue'
 import ThemeControl from './components/ThemeControl.vue'
 
@@ -8,13 +8,11 @@ type Backup={name:string;size:number;created_at:string;sha256:string;valid:boole
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
 type API=(path:string,init?:RequestInit)=>Promise<any>
-const props=defineProps<{section:string;settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
-const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];'update:section':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
+const props=defineProps<{settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
+const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
-const toggle=(name:string)=>{open.value=open.value===name?'':name;emit('update:section',open.value)}
-function scrollToSection(name:string){nextTick(()=>document.getElementById('setting-'+name)?.scrollIntoView({behavior:'smooth',block:'start'}))}
-watch(()=>props.section,(v)=>{if(v&&v!==open.value){open.value=v;scrollToSection(v)}})
+const toggle=(name:string)=>open.value=open.value===name?'':name
 const recovery=ref<any>({available:false})
 const trStatus=ref<{configured:boolean;created_at:string;last_used_at:string;scopes:string[]}>({configured:false,created_at:'',last_used_at:'',scopes:[]})
 const trNewToken=ref(''),trBusy=ref(false),trError=ref('')

@@ -25,9 +25,6 @@ defineProps<{
   auth: { username?: string };
   advanced: boolean;
   managementEntries: { id: string; label: string; desc: string }[];
-  settingsSections: { id: string; icon: string; label: string }[];
-  settingsSection: string;
-  openSettingsSection: (id: string) => void;
   exitAdvanced: () => void;
   toggleGroup: (id: string) => void;
   changeView: (id: string) => void;
@@ -41,28 +38,22 @@ defineProps<{
   <aside aria-label="应用导航">
     <div class="brand"><span>H</span><b>HWatch</b></div>
     <nav v-if="advanced" aria-label="高级管理">
-      <template v-if="view === 'settings'">
-        <button
-          v-for="s in settingsSections"
-          :key="s.id"
-          :class="{ active: settingsSection === s.id }"
-          :aria-current="settingsSection === s.id ? 'true' : undefined"
-          @click="openSettingsSection(s.id)"
-        >
-          <NavIcon :name="s.icon" /><span class="nav-text">{{ s.label }}</span>
-        </button>
-      </template>
-      <template v-else>
-        <button
-          v-for="m in managementEntries"
-          :key="m.id"
-          :class="{ active: view === m.id }"
-          :aria-current="view === m.id ? 'page' : undefined"
-          @click="changeView(m.id)"
-        >
-          <NavIcon :name="m.id" /><span class="nav-text">{{ m.label }}</span>
-        </button>
-      </template>
+      <button
+        :class="{ active: view === 'settings' }"
+        :aria-current="view === 'settings' ? 'page' : undefined"
+        @click="changeView('settings')"
+      >
+        <NavIcon name="settings" /><span class="nav-text">设置</span>
+      </button>
+      <button
+        v-for="m in managementEntries"
+        :key="m.id"
+        :class="{ active: view === m.id }"
+        :aria-current="view === m.id ? 'page' : undefined"
+        @click="changeView(m.id)"
+      >
+        <NavIcon :name="m.id" /><span class="nav-text">{{ m.label }}</span>
+      </button>
     </nav>
     <nav v-else>
       <template v-for="group in navGroups" :key="group.id">
