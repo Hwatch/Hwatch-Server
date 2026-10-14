@@ -1067,7 +1067,7 @@ export function useHWatchApp() {
   const timelineError = ref("");
   async function loadTimeline() {
     const p = new URLSearchParams({
-      limit: "200",
+      limit: "500",
       offset: "0",
       language: translationLanguage.value,
     });

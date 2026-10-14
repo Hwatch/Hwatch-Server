@@ -245,6 +245,37 @@ const timelineGroups = computed(() => {
   }
   return Object.keys(map).map((date) => ({ date, items: map[date] }));
 });
+const TIMELINE_ROW_LIMIT = 8;
+const TIMELINE_PAGE_SIZE = 24;
+const TIMELINE_DAYS_PAGE = 20;
+const timelineDaysShown = ref(TIMELINE_DAYS_PAGE);
+const visibleTimelineGroups = computed(() =>
+  timelineGroups.value.slice(0, timelineDaysShown.value),
+);
+watch(timeline, () => (timelineDaysShown.value = TIMELINE_DAYS_PAGE));
+const timelineDay = ref<string | null>(null);
+const timelineDayPage = ref(0);
+const timelineDayItems = computed(() =>
+  timelineDay.value
+    ? timelineGroups.value.find((g) => g.date === timelineDay.value)?.items || []
+    : [],
+);
+const timelineDayPages = computed(() =>
+  Math.max(1, Math.ceil(timelineDayItems.value.length / TIMELINE_PAGE_SIZE)),
+);
+const timelineDayPageItems = computed(() =>
+  timelineDayItems.value.slice(
+    timelineDayPage.value * TIMELINE_PAGE_SIZE,
+    (timelineDayPage.value + 1) * TIMELINE_PAGE_SIZE,
+  ),
+);
+function openTimelineDay(date: string) {
+  timelineDay.value = date;
+  timelineDayPage.value = 0;
+}
+function closeTimelineDay() {
+  timelineDay.value = null;
+}
 // Remember the last normal page so the sidebar "back" returns there.
 const lastNormalView = ref("home");
 watch(view, (next) => {
@@ -1631,11 +1662,81 @@ async function copyLog(log: any) {
         </div>
         <p v-if="timelineError" class="error" role="alert">{{ timelineError }}</p>
         <div class="timeline">
-          <div v-for="g in timelineGroups" :key="g.date" class="timeline-day">
-            <h3 class="timeline-date">{{ g.date }}</h3>
+          <div v-for="g in visibleTimelineGroups" :key="g.date" class="timeline-day">
+            <div class="timeline-day-head">
+              <h3 class="timeline-date">
+                {{ g.date }} <small>{{ g.items.length }} 条</small>
+              </h3>
+              <button
+                v-if="g.items.length > TIMELINE_ROW_LIMIT"
+                class="timeline-all"
+                @click="openTimelineDay(g.date)"
+              >
+                查看全部（{{ g.items.length }}）
+              </button>
+            </div>
+            <div class="library timeline-strip">
+              <MediaCard
+                v-for="v in g.items.slice(0, TIMELINE_ROW_LIMIT)"
+                :key="v.watched_at + v.video_id"
+                :title="displayTitle(v)"
+                :subtitle="
+                  displaySubtitle(
+                    v,
+                    (v.creator_name || v.subscription_slug) +
+                      ' · ' +
+                      (v.watched_at ? localTime(v.watched_at) : ''),
+                  )
+                "
+                :summary="mediaSummary(v) || v.views.toLocaleString() + ' 次观看'"
+                :duration="duration(v.duration_seconds)"
+                :src="'/thumb/' + v.video_id"
+                :state="coverState(v.video_id)"
+                :downloadable="false"
+                :pending="false"
+                @image="(el) => registerCoverImg(v.video_id, el)"
+                @loaded="markCoverLoaded(v.video_id)"
+                @error="onCoverError($event, v.video_id)"
+                @play="selected = v"
+              />
+              <button
+                v-if="g.items.length > TIMELINE_ROW_LIMIT"
+                class="timeline-more"
+                @click="openTimelineDay(g.date)"
+              >
+                <span>+{{ g.items.length - TIMELINE_ROW_LIMIT }}</span>
+                查看全部
+              </button>
+            </div>
+          </div>
+          <button
+            v-if="timelineGroups.length > visibleTimelineGroups.length"
+            class="timeline-all timeline-load-more"
+            @click="timelineDaysShown += TIMELINE_DAYS_PAGE"
+          >
+            加载更早的日期（还有
+            {{ timelineGroups.length - visibleTimelineGroups.length }} 天）
+          </button>
+          <StatePanel
+            v-if="!timeline.length && !timelineError"
+            title="暂无观看记录"
+            description="播放视频后会在这里按日期记录。"
+          />
+        </div>
+        <div v-if="timelineDay" class="modal" @click.self="closeTimelineDay">
+          <div
+            class="log-detail timeline-day-detail"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="timelineDay + ' 观看记录'"
+          >
+            <div class="log-detail-head">
+              <h2>{{ timelineDay }} · {{ timelineDayItems.length }} 条</h2>
+              <button class="close" @click="closeTimelineDay">关闭</button>
+            </div>
             <div class="library">
               <MediaCard
-                v-for="v in g.items"
+                v-for="v in timelineDayPageItems"
                 :key="v.watched_at + v.video_id"
                 :title="displayTitle(v)"
                 :subtitle="
@@ -1658,12 +1759,22 @@ async function copyLog(log: any) {
                 @play="selected = v"
               />
             </div>
+            <div v-if="timelineDayPages > 1" class="timeline-pager">
+              <button
+                :disabled="timelineDayPage <= 0"
+                @click="timelineDayPage--"
+              >
+                上一页
+              </button>
+              <span>第 {{ timelineDayPage + 1 }} / {{ timelineDayPages }} 页</span>
+              <button
+                :disabled="timelineDayPage >= timelineDayPages - 1"
+                @click="timelineDayPage++"
+              >
+                下一页
+              </button>
+            </div>
           </div>
-          <StatePanel
-            v-if="!timeline.length && !timelineError"
-            title="暂无观看记录"
-            description="播放视频后会在这里按日期记录。"
-          />
         </div>
       </section>
       <section v-else-if="view === 'users'">
