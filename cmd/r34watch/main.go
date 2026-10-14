@@ -1294,6 +1294,39 @@ func (a *App) check(slug string) {
 	addEvent("info", "完成", summary)
 	_ = a.store.AddSubscriptionLog(slug, sub.Platform, "info", summary, len(items), createdCount, queuedCount, time.Since(start).Milliseconds(), events)
 }
+
+// timeline serves the watch timeline (read-only), newest first.
+func (a *App) timeline(w http.ResponseWriter, r *http.Request) {
+	limit := intParam(r, "limit", 200, 1, 500)
+	offset := intParam(r, "offset", 0, 0, 10000000)
+	language := r.URL.Query().Get("language")
+	if language == "" {
+		language = "zh-CN"
+	}
+	events, err := a.store.WatchEvents(limit, offset)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	videos := []store.Video{}
+	watched := []string{}
+	for _, e := range events {
+		v, err := a.store.Video(e.VideoID)
+		if err != nil {
+			continue
+		}
+		videos = append(videos, v)
+		watched = append(watched, e.WatchedAt)
+	}
+	translations, _ := a.store.Translations(language)
+	items := translatedVideoMaps(videos, language, translations)
+	for i := range items {
+		items[i]["watched_at"] = watched[i]
+	}
+	total, _ := a.store.CountWatchEvents()
+	respond(w, 200, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset})
+}
+
 func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	if slug != "" {
@@ -1800,6 +1833,7 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	}
 	if v.Status == "completed" {
 		_ = a.store.RecordPlayback(v.ID)
+		_ = a.store.RecordWatch(v.ID)
 	}
 	http.ServeFile(w, r, path)
 }
@@ -2104,6 +2138,7 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("POST /api/check/{slug}", a.checkHandler)
 	mux.HandleFunc("GET /api/check/status", a.checkStatus)
 	mux.HandleFunc("GET /api/logs", a.listLogs)
+	mux.HandleFunc("GET /api/timeline", a.timeline)
 	mux.HandleFunc("POST /api/videos/{id}/{action}", a.videoAction)
 	mux.HandleFunc("POST /api/videos/{id}/refresh-thumbnail", a.refreshThumbnailHandler)
 	mux.HandleFunc("POST /api/videos/{id}/delete", a.deleteVideo)

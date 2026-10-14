@@ -428,4 +428,19 @@ interface LibraryApi {
     @GET("thumb/{id}")
     fun videoThumbnail(@Path("id") id: kotlin.String): Call<Unit>
 
+    /**
+     * GET api/timeline
+     * 
+     * 观看时间线（只读）：按时间倒序返回观看事件，含译文标题等媒体字段与 watched_at。播放 /media/{id} 时写入；同一视频 10 分钟内去重，最多保留 5000 条。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param language  (optional, default to "zh-CN")
+     * @param limit  (optional, default to 200)
+     * @param offset  (optional)
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("api/timeline")
+    fun watchTimeline(@Query("language") language: kotlin.String? = "zh-CN", @Query("limit") limit: kotlin.Int? = 200, @Query("offset") offset: kotlin.Int? = null): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
 }

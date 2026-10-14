@@ -14,6 +14,7 @@ defineProps<{name:string}>()
     <template v-else-if="name==='duplicates'"><rect x="3" y="5" width="13" height="13" rx="2"/><path d="M8 2h11a2 2 0 0 1 2 2v11M7 9h5M7 13h5"/></template>
     <template v-else-if="name==='excluded'"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></template>
     <template v-else-if="name==='integrity'"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v2H9z"/><path d="m9 13 2 2 4-4"/></template>
+    <template v-else-if="name==='timeline'"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></template>
     <template v-else-if="name==='logs'"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></template>
     <template v-else-if="name==='menu'"><path d="M4 6h16M4 12h16M4 18h16"/></template>
     <template v-else-if="name==='more'"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></template>

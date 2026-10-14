@@ -705,6 +705,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 观看时间线（只读）：按时间倒序返回观看事件，含译文标题等媒体字段与 watched_at。播放 /media/{id} 时写入；同一视频 10 分钟内去重，最多保留 5000 条。 */
+        get: operations["watchTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/logs": {
         parameters: {
             query?: never;
@@ -2066,6 +2083,22 @@ export interface operations {
     checkStatus: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+        };
+    };
+    watchTimeline: {
+        parameters: {
+            query?: {
+                language?: components["parameters"]["Language"];
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;

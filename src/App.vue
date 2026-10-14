@@ -162,6 +162,10 @@ const {
   logsLevel,
   logsError,
   loadLogs,
+  timeline,
+  timelineTotal,
+  timelineError,
+  loadTimeline,
   previewTransRunnerPlan,
   executeTransRunnerPlan,
   recoverPlan,
@@ -211,6 +215,14 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
 ];
 const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
 const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
+const timelineGroups = computed(() => {
+  const map: Record<string, any[]> = {};
+  for (const it of timeline.value) {
+    const day = localTime(it.watched_at).slice(0, 10);
+    (map[day] ||= []).push(it);
+  }
+  return Object.keys(map).map((date) => ({ date, items: map[date] }));
+});
 // Remember the last normal page so the sidebar "back" returns there.
 const lastNormalView = ref("home");
 watch(view, (next) => {
@@ -1234,6 +1246,50 @@ async function copyLog(log: any) {
               >
             </article>
           </div>
+        </div>
+      </section>
+      <section v-else-if="view === 'timeline'">
+        <div class="toolbar">
+          <span>{{ timelineTotal }} 条观看记录</span>
+          <button
+            :disabled="actionPending('timeline-load')"
+            :aria-busy="actionPending('timeline-load')"
+            @click="loadTimeline()"
+          >
+            {{ actionPending("timeline-load") ? "刷新中…" : "刷新" }}
+          </button>
+        </div>
+        <p v-if="timelineError" class="error" role="alert">{{ timelineError }}</p>
+        <div class="timeline">
+          <div v-for="g in timelineGroups" :key="g.date" class="timeline-day">
+            <h3 class="timeline-date">{{ g.date }}</h3>
+            <div class="rows">
+              <article
+                v-for="v in g.items"
+                :key="v.watched_at + v.video_id"
+                class="timeline-row"
+                role="button"
+                tabindex="0"
+                @click="selected = v"
+                @keydown.enter="selected = v"
+                @keydown.space.prevent="selected = v"
+              >
+                <div class="timeline-time">{{ localTime(v.watched_at).slice(11) }}</div>
+                <div class="timeline-body">
+                  <b>{{ displayTitle(v) }}</b>
+                  <small
+                    >{{ v.creator_name || v.subscription_slug }} · {{ v.platform }}</small
+                  >
+                </div>
+                <span class="timeline-dur">{{ duration(v.duration_seconds) }}</span>
+              </article>
+            </div>
+          </div>
+          <StatePanel
+            v-if="!timeline.length && !timelineError"
+            title="暂无观看记录"
+            description="播放视频后会在这里按日期记录。"
+          />
         </div>
       </section>
       <section v-else-if="view === 'logs'">

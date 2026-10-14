@@ -27,6 +27,7 @@ All URIs are relative to *http://localhost*
 | [**vdfGUIExecute**](LibraryApi.md#vdfGUIExecute) | **POST** api/media-integrity/vdf/execute |  |
 | [**videoFacets**](LibraryApi.md#videoFacets) | **GET** api/videos/facets |  |
 | [**videoThumbnail**](LibraryApi.md#videoThumbnail) | **GET** thumb/{id} |  |
+| [**watchTimeline**](LibraryApi.md#watchTimeline) | **GET** api/timeline |  |
 
 
 
@@ -939,4 +940,45 @@ null (empty response body)
 
  - **Content-Type**: Not defined
  - **Accept**: Not defined
+
+
+
+
+观看时间线（只读）：按时间倒序返回观看事件，含译文标题等媒体字段与 watched_at。播放 /media/{id} 时写入；同一视频 10 分钟内去重，最多保留 5000 条。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(LibraryApi::class.java)
+val language : kotlin.String = language_example // kotlin.String | 
+val limit : kotlin.Int = 56 // kotlin.Int | 
+val offset : kotlin.Int = 56 // kotlin.Int | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.watchTimeline(language, limit, offset)
+```
+
+### Parameters
+| **language** | **kotlin.String**|  | [optional] [default to &quot;zh-CN&quot;] |
+| **limit** | **kotlin.Int**|  | [optional] [default to 200] |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **offset** | **kotlin.Int**|  | [optional] |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
 

@@ -254,5 +254,15 @@ class LibraryApiTest : ShouldSpec() {
             //apiInstance.videoThumbnail(id)
         }
 
+        // to test watchTimeline
+        should("test watchTimeline") {
+            // uncomment below to test watchTimeline
+            //val language : kotlin.String = language_example // kotlin.String | 
+            //val limit : kotlin.Int = 56 // kotlin.Int | 
+            //val offset : kotlin.Int = 56 // kotlin.Int | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.watchTimeline(language, limit, offset)
+            //result shouldBe ("TODO")
+        }
+
     }
 }

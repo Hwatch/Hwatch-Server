@@ -1029,3 +1029,14 @@ h2 {
 .terminal-bar .dot.green { background: #27c93f; }
 .terminal-body { margin: 0; padding: 14px 16px; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.75; color: #9fe8b0; }
 .terminal-body.error { color: #ffb3b3; }
+
+/* Watch timeline */
+.timeline { display: grid; gap: 22px; }
+.timeline-date { font-size: 15px; color: var(--muted); margin: 0 0 8px; font-weight: 700; letter-spacing: 0.04em; }
+.timeline-row { grid-template-columns: 64px 1fr auto; align-items: center; cursor: pointer; }
+.timeline-row:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.timeline-time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.timeline-body { display: grid; gap: 2px; min-width: 0; }
+.timeline-body b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-body small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-dur { color: var(--muted); font-size: 12px; white-space: nowrap; }

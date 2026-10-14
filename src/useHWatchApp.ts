@@ -290,6 +290,7 @@ export function useHWatchApp() {
     downloads: "/downloads",
     undownloaded: "/undownloaded",
     library: "/library",
+    timeline: "/timeline",
     excluded: "/excluded",
     integrity: "/integrity",
     translations: "/translations",
@@ -303,6 +304,7 @@ export function useHWatchApp() {
     downloads: "下载中心",
     undownloaded: "未下载",
     library: "影视库",
+    timeline: "时间线",
     excluded: "已排除",
     integrity: "媒体完整性",
     translations: "翻译管理",
@@ -315,6 +317,7 @@ export function useHWatchApp() {
     subscriptions: "管理作者与番剧来源，查看采集和下载进度",
     downloads: "查看下载速度、队列和失败原因",
     library: "浏览已下载媒体，搜索原文与译文",
+    timeline: "按日期查看观看记录",
     undownloaded: "筛选发现的作品并提交下载",
     excluded: "查看排除原因，恢复允许下载",
     integrity: "扫描与校验媒体，所有清理均需预览和确认",
@@ -414,7 +417,10 @@ export function useHWatchApp() {
     {
       id: "media",
       label: "媒体库",
-      items: [{ id: "library", label: "影视库" }],
+      items: [
+        { id: "library", label: "影视库" },
+        { id: "timeline", label: "时间线" },
+      ],
     },
     {
       id: "system",
@@ -1037,6 +1043,27 @@ export function useHWatchApp() {
   const logsTotal = ref(0);
   const logsLevel = ref("");
   const logsError = ref("");
+  const timeline = ref<any[]>([]);
+  const timelineTotal = ref(0);
+  const timelineError = ref("");
+  async function loadTimeline() {
+    const p = new URLSearchParams({
+      limit: "200",
+      offset: "0",
+      language: translationLanguage.value,
+    });
+    const result = await actions.run("timeline-load", () =>
+      api("/api/timeline?" + p),
+    );
+    if (result.duplicate) return;
+    if (result.ok && result.value) {
+      timeline.value = result.value.items;
+      timelineTotal.value = result.value.total;
+      timelineError.value = "";
+    } else if (!result.ok) {
+      timelineError.value = result.error || "时间线加载失败";
+    }
+  }
   async function loadLogs() {
     const p = new URLSearchParams({ limit: "200", offset: "0" });
     if (logsLevel.value) p.set("level", logsLevel.value);
@@ -1465,6 +1492,7 @@ export function useHWatchApp() {
       if (next === "library" && randomMode.value) void loadRandom(false);
       if (next === "settings") await loadSettings();
       if (next === "logs") await loadLogs();
+      if (next === "timeline") await loadTimeline();
       if (next === "notifications") {
         await loadNotifications();
         if (notificationTab.value === "operations") await loadAuditLogs();
@@ -2141,6 +2169,10 @@ export function useHWatchApp() {
     markNotificationsRead,
     restoreExclusion,
     loadIntegrity,
+    timeline,
+    timelineTotal,
+    timelineError,
+    loadTimeline,
     logs,
     logsTotal,
     logsLevel,

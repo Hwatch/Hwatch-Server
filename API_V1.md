@@ -520,6 +520,16 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 
 参数：`limit`(1–500，默认 200)、`offset`、`slug`（按订阅过滤）、`level`（`info` 或 `error`）。
 
+### `GET /api/timeline`
+
+只读的观看时间线。播放 `/media/{video_id}` 时写入一条观看事件（同一视频 10 分钟内去重，最多保留 5000 条），按时间倒序返回，供「时间线」页按日期分组展示。
+
+```json
+{"items":[{"video_id":"rule34video:1","title":"…","creator_name":"…","duration_seconds":120,"watched_at":"2026-10-15T00:00:00Z"}],"total":1,"limit":200,"offset":0}
+```
+
+参数：`language`、`limit`(1–500，默认 200)、`offset`。
+
 抓取模板变化检测：当来源页面能访问但结构不再匹配（或返回人机校验页面）时，各平台适配器会返回明确错误（如 `rule34video 抓取模板检测失败：…`）并写入订阅的 `last_error`，而不是静默返回空结果。
 
 ## 7. 设置
