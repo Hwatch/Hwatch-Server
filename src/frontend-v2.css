@@ -1012,8 +1012,6 @@ h2 {
 .log-detail dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .log-detail dd small { color: var(--muted); }
 .log-detail h3 { font-size: 14px; margin: 6px 0 8px; }
-.log-full { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-input); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 13px; margin: 0 0 14px; }
-.log-full.error { color: #f2a0a0; }
 
 /* Log center: structured detail */
 .log-center .log-meta { color: var(--muted); font-size: 11px; }
@@ -1021,9 +1019,13 @@ h2 {
 .log-stats > span { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; background: var(--surface-input); border: 1px solid var(--border); border-radius: 10px; min-width: 72px; }
 .log-stats small { color: var(--muted); font-size: 11px; }
 .log-stats b { font-size: 16px; }
-.log-events { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 4px; max-height: 320px; overflow: auto; }
-.log-events li { display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 13px; padding: 5px 8px; border-radius: 7px; background: var(--surface-input); }
-.log-events li time { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.log-events li.error span { color: #f2a0a0; }
-.log-events li.warn span { color: #e5b951; }
-.log-events li.muted { display: block; color: var(--muted); }
+/* Log center: terminal view */
+.terminal { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #0b0e13; }
+.terminal-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: #12161d; border-bottom: 1px solid var(--border); }
+.terminal-bar b { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.terminal-bar .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.terminal-bar .dot.red { background: #ff5f56; }
+.terminal-bar .dot.amber { background: #ffbd2e; }
+.terminal-bar .dot.green { background: #27c93f; }
+.terminal-body { margin: 0; padding: 14px 16px; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.75; color: #9fe8b0; }
+.terminal-body.error { color: #ffb3b3; }

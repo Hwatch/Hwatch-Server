@@ -7,6 +7,7 @@ import "encoding/json"
 type SubscriptionLogEvent struct {
 	At      string `json:"at"`
 	Level   string `json:"level"`
+	Tag     string `json:"tag"`
 	Message string `json:"message"`
 }
 

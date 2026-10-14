@@ -515,7 +515,7 @@ data: {"tasks":[...],"download_speed":123456,"connections":8}
 只读的订阅检查日志中心。每次检查结束（成功或失败）都会写入一条记录，按 `id` 倒序返回，最多保留最近 5000 条，供「设置 → 高级管理 → 日志中心」查看。
 
 ```json
-{"items":[{"id":1,"subscription_slug":"rule34video:akt","platform":"rule34video","level":"info","message":"检查完成：发现 12，新增 2，入队 2","duration_ms":842,"found":12,"created":2,"queued":2,"events":[{"at":"2026-10-15T00:00:00Z","level":"info","message":"来源返回 12 个条目"},{"at":"2026-10-15T00:00:01Z","level":"info","message":"新增：rule34video:123"}],"created_at":"2026-10-15T00:00:00Z"}],"total":1,"limit":200,"offset":0}
+{"items":[{"id":1,"subscription_slug":"rule34video:akt","platform":"rule34video","level":"info","message":"检查完成：发现 12，新增 2，入队 2","duration_ms":842,"found":12,"created":2,"queued":2,"events":[{"at":"2026-10-15T00:00:00Z","level":"info","tag":"查询","message":"来源返回 12 个条目"},{"at":"2026-10-15T00:00:01Z","level":"info","tag":"新增","message":"新增：rule34video:123"}],"created_at":"2026-10-15T00:00:00Z"}],"total":1,"limit":200,"offset":0}
 ```
 
 参数：`limit`(1–500，默认 200)、`offset`、`slug`（按订阅过滤）、`level`（`info` 或 `error`）。

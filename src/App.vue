@@ -224,13 +224,16 @@ function subscriptionName(slug: string): string {
   const sub = (data.value?.subscriptions || []).find((x: any) => x.slug === slug);
   return sub ? sub.name : "";
 }
+function logLines(log: any): string {
+  const evs = log.events || [];
+  if (!evs.length) return `${localTime(log.created_at)} 【完成】${log.message}`;
+  return evs
+    .map((e: any) => `${localTime(e.at)} 【${e.tag || "日志"}】${e.message}`)
+    .join("\n");
+}
 async function copyLog(log: any) {
-  const text =
-    `时间: ${log.created_at}\n级别: ${log.level}\n平台: ${log.platform}\n` +
-    `订阅: ${subscriptionName(log.subscription_slug) || log.subscription_slug} (${log.subscription_slug})\n` +
-    `日志: ${log.message}`;
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(logLines(log));
     notice.value = "日志已复制";
   } catch {
     notice.value = "复制失败，请手动选择";
@@ -1312,27 +1315,23 @@ async function copyLog(log: any) {
                 </dd>
               </div>
             </dl>
-            <h3>完整日志</h3>
-            <pre class="log-full" :class="{ error: logDetail.level === 'error' }">{{ logDetail.message }}</pre>
             <div class="log-stats">
               <span><small>耗时</small><b>{{ logDetail.duration_ms }} ms</b></span>
               <span><small>发现</small><b>{{ logDetail.found }}</b></span>
               <span><small>新增</small><b>{{ logDetail.created }}</b></span>
               <span><small>入队</small><b>{{ logDetail.queued }}</b></span>
             </div>
-            <h3>事件流</h3>
-            <ol class="log-events">
-              <li
-                v-for="(ev, i) in logDetail.events || []"
-                :key="i"
-                :class="{ error: ev.level === 'error', warn: ev.level === 'warn' }"
-              >
-                <time>{{ localTime(ev.at) }}</time><span>{{ ev.message }}</span>
-              </li>
-              <li v-if="!(logDetail.events || []).length" class="muted">
-                无分步事件（旧记录或无需明细）
-              </li>
-            </ol>
+            <div class="terminal">
+              <div class="terminal-bar">
+                <span class="dot red"></span><span class="dot amber"></span
+                ><span class="dot green"></span>
+                <b>hwatch · {{ logDetail.subscription_slug }}</b>
+              </div>
+              <pre
+                class="terminal-body"
+                :class="{ error: logDetail.level === 'error' }"
+              >{{ logLines(logDetail) }}</pre>
+            </div>
             <div class="actions">
               <button @click="copyLog(logDetail)">复制日志</button>
             </div>
