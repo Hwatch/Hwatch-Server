@@ -386,9 +386,23 @@ onUnmounted(() => {
   window.removeEventListener("resize", syncNarrow);
   window.removeEventListener("keydown", onShortKey);
 });
+function dropShort(v: any) {
+  const i = shorts.value.findIndex((x) => x.video_id === v.video_id);
+  if (i >= 0) shorts.value.splice(i, 1);
+}
 function onShortMeta(v: any, e: Event) {
   const el = e.target as HTMLVideoElement;
+  if (el.videoWidth === 0) {
+    // Audio track decoded but no picture (e.g. HEVC with hev1 tag on Safari).
+    flashShort("该视频编码不受支持，已跳过");
+    dropShort(v);
+    return;
+  }
   shortLandscape.value[v.video_id] = el.videoWidth > el.videoHeight;
+}
+function onShortPlaying(v: any, e: Event) {
+  shortBuffering.value[v.video_id] = false;
+  if ((e.target as HTMLVideoElement).videoWidth === 0) dropShort(v);
 }
 const activeShort = ref(-1);
 const shortBuffering = ref<Record<string, boolean>>({});
@@ -1555,7 +1569,7 @@ async function copyLog(log: any) {
               @error="onShortError"
               @loadedmetadata="onShortMeta(v, $event)"
               @waiting="shortBuffering[v.video_id] = true"
-              @playing="shortBuffering[v.video_id] = false"
+              @playing="onShortPlaying(v, $event)"
               @canplay="shortBuffering[v.video_id] = false"
               @timeupdate="onShortTime(v, $event)"
               @click="onShortTap"
