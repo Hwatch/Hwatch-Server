@@ -1064,3 +1064,17 @@ h2 {
 @media (max-width: 680px) {
   .player-top-actions { margin-top: -4px; }
 }
+
+/* Shorts-style random browsing */
+.shorts-feed { height: calc(100dvh - 150px); min-height: 420px; overflow-y: auto; scroll-snap-type: y mandatory; border-radius: 14px; background: #000; overscroll-behavior: contain; }
+.short { position: relative; height: 100%; scroll-snap-align: start; display: grid; place-items: center; }
+.short video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.short-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; background: linear-gradient(to top, rgba(0,0,0,.7), transparent); }
+.short-meta { min-width: 0; color: #fff; }
+.short-meta b { display: block; font-size: 15px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.short-meta small { color: #cfd3da; font-size: 12px; }
+.short-buttons { display: flex; gap: 8px; flex: none; }
+.shorts-loading { position: sticky; bottom: 12px; text-align: center; color: var(--muted); padding: 8px; }
+@media (max-width: 680px) {
+  .shorts-feed { height: calc(100dvh - 205px); border-radius: 0; margin: -28px -16px 0; }
+}

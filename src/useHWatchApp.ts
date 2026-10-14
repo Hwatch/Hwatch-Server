@@ -294,6 +294,7 @@ export function useHWatchApp() {
     undownloaded: "/undownloaded",
     library: "/library",
     timeline: "/timeline",
+    shorts: "/shorts",
     excluded: "/excluded",
     integrity: "/integrity",
     translations: "/translations",
@@ -309,6 +310,7 @@ export function useHWatchApp() {
     undownloaded: "未下载",
     library: "影视库",
     timeline: "时间线",
+    shorts: "随机浏览",
     excluded: "已排除",
     integrity: "媒体完整性",
     translations: "翻译管理",
@@ -323,6 +325,7 @@ export function useHWatchApp() {
     downloads: "查看下载速度、队列和失败原因",
     library: "浏览已下载媒体，搜索原文与译文",
     timeline: "按日期查看观看记录",
+    shorts: "竖屏随机浏览，上下滑动换一个",
     undownloaded: "筛选发现的作品并提交下载",
     excluded: "查看排除原因，恢复允许下载",
     integrity: "扫描与校验媒体，所有清理均需预览和确认",
@@ -434,6 +437,7 @@ export function useHWatchApp() {
       items: [
         { id: "library", label: "影视库" },
         { id: "timeline", label: "时间线" },
+        { id: "shorts", label: "随机浏览" },
       ],
     },
     {
@@ -1079,6 +1083,43 @@ export function useHWatchApp() {
       timelineError.value = result.error || "时间线加载失败";
     }
   }
+  const shorts = ref<any[]>([]);
+  const shortsError = ref("");
+  const shortsBusy = ref(false);
+  async function loadShorts(append = false) {
+    if (shortsBusy.value) return;
+    shortsBusy.value = true;
+    shortsError.value = "";
+    try {
+      const buildParams = (exclude: boolean) => {
+        const p = new URLSearchParams({
+          limit: "8",
+          language: translationLanguage.value,
+        });
+        if (exclude && shorts.value.length)
+          p.set(
+            "exclude",
+            shorts.value
+              .map((s) => s.video_id)
+              .slice(-120)
+              .join(","),
+          );
+        return p;
+      };
+      const result = await api("/api/library/random?" + buildParams(true));
+      let items: any[] = result.items || [];
+      if (append && items.length === 0) {
+        // Recent-history exclusion exhausted the pool: allow repeats.
+        const retry = await api("/api/library/random?" + buildParams(false));
+        items = retry.items || [];
+      }
+      shorts.value = append ? shorts.value.concat(items) : items;
+    } catch (e) {
+      shortsError.value = String(e).replace(/^Error:\s*/, "");
+    } finally {
+      shortsBusy.value = false;
+    }
+  }
   async function loadLogs() {
     const p = new URLSearchParams({ limit: "200", offset: "0" });
     if (logsLevel.value) p.set("level", logsLevel.value);
@@ -1586,6 +1627,7 @@ export function useHWatchApp() {
       if (next === "logs") await loadLogs();
       if (next === "users") await loadUsers();
       if (next === "timeline") await loadTimeline();
+      if (next === "shorts") await loadShorts(false);
       if (next === "notifications") {
         await loadNotifications();
         if (notificationTab.value === "operations") await loadAuditLogs();
@@ -2273,6 +2315,10 @@ export function useHWatchApp() {
     changeOwnPassword,
     uploadAvatar,
     clearAvatar,
+    shorts,
+    shortsError,
+    shortsBusy,
+    loadShorts,
     timeline,
     timelineTotal,
     timelineError,

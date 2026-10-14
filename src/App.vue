@@ -163,6 +163,10 @@ const {
   logsError,
   loadLogs,
   isAdmin,
+  shorts,
+  shortsError,
+  shortsBusy,
+  loadShorts,
   users,
   usersError,
   loadUsers,
@@ -350,7 +354,44 @@ async function submitChangePassword() {
     notice.value = "修改失败：" + (result.error || "");
   }
 }
-const logDetail = ref<any>(null);
+const shortsMuted = ref(true);
+let shortsObserver: IntersectionObserver | null = null;
+function ensureShortsObserver() {
+  if (shortsObserver || typeof IntersectionObserver === "undefined") return;
+  shortsObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const video = entry.target.querySelector("video") as HTMLVideoElement | null;
+        if (!video) continue;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+          video.play().catch(() => {});
+          const idx = Number((entry.target as HTMLElement).dataset.index || 0);
+          if (idx >= shorts.value.length - 2) void loadShorts(true);
+        } else {
+          video.pause();
+        }
+      }
+    },
+    { threshold: [0, 0.6, 1] },
+  );
+}
+function registerShort(el: unknown, i: number) {
+  if (!el) return;
+  (el as HTMLElement).dataset.index = String(i);
+  ensureShortsObserver();
+  shortsObserver?.observe(el as Element);
+}
+function toggleShortVideo(e: Event) {
+  const video = e.currentTarget as HTMLVideoElement;
+  if (video.paused) video.play().catch(() => {});
+  else video.pause();
+}
+watch(view, (next) => {
+  if (next !== "shorts") {
+    shortsObserver?.disconnect();
+    shortsObserver = null;
+  }
+});const logDetail = ref<any>(null);
 function subscriptionName(slug: string): string {
   const sub = (data.value?.subscriptions || []).find((x: any) => x.slug === slug);
   return sub ? sub.name : "";
@@ -1382,6 +1423,42 @@ async function copyLog(log: any) {
               >
             </article>
           </div>
+        </div>
+      </section>
+      <section v-else-if="view === 'shorts'">
+        <p v-if="shortsError" class="error" role="alert">{{ shortsError }}</p>
+        <div class="shorts-feed">
+          <div
+            v-for="(v, i) in shorts"
+            :key="'short-' + i + ':' + v.video_id"
+            class="short"
+            :ref="(el) => registerShort(el, i)"
+          >
+            <video
+              :src="'/media/' + v.video_id"
+              :muted="shortsMuted"
+              playsinline
+              loop
+              preload="metadata"
+              @click="toggleShortVideo"
+            ></video>
+            <div class="short-overlay">
+              <div class="short-meta">
+                <b>{{ displayTitle(v) }}</b>
+                <small
+                  >{{ v.creator_name || v.subscription_slug }} ·
+                  {{ duration(v.duration_seconds) }}</small
+                >
+              </div>
+              <div class="short-buttons">
+                <button @click="shortsMuted = !shortsMuted">
+                  {{ shortsMuted ? "🔇 静音" : "🔊 有声" }}
+                </button>
+                <button @click="selected = v">详情</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="shortsBusy" class="shorts-loading">加载中…</div>
         </div>
       </section>
       <section v-else-if="view === 'timeline'">
