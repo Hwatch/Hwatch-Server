@@ -332,7 +332,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	videos, _ := a.store.RecentCompleted(12)
-	recentlyPlayed, _ := a.store.RecentlyPlayed(12)
+	recentlyPlayed := a.recentWatched(12)
 	language := r.URL.Query().Get("language")
 	if language == "" {
 		language = "zh-CN"
@@ -1293,6 +1293,27 @@ func (a *App) check(slug string) {
 	summary := fmt.Sprintf("检查完成：发现 %d，新增 %d，入队 %d", len(items), createdCount, queuedCount)
 	addEvent("info", "完成", summary)
 	_ = a.store.AddSubscriptionLog(slug, sub.Platform, "info", summary, len(items), createdCount, queuedCount, time.Since(start).Milliseconds(), events)
+}
+
+// recentWatched returns the most recent distinct watched videos (from the
+// watch timeline) for the dashboard "recently played" section.
+func (a *App) recentWatched(limit int) []store.Video {
+	events, _ := a.store.WatchEvents(400, 0)
+	seen := map[string]bool{}
+	out := []store.Video{}
+	for _, e := range events {
+		if seen[e.VideoID] {
+			continue
+		}
+		seen[e.VideoID] = true
+		if v, err := a.store.Video(e.VideoID); err == nil {
+			out = append(out, v)
+		}
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 // timeline serves the watch timeline (read-only), newest first.

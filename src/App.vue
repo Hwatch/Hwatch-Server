@@ -1263,26 +1263,30 @@ async function copyLog(log: any) {
         <div class="timeline">
           <div v-for="g in timelineGroups" :key="g.date" class="timeline-day">
             <h3 class="timeline-date">{{ g.date }}</h3>
-            <div class="rows">
-              <article
+            <div class="library">
+              <MediaCard
                 v-for="v in g.items"
                 :key="v.watched_at + v.video_id"
-                class="timeline-row"
-                role="button"
-                tabindex="0"
-                @click="selected = v"
-                @keydown.enter="selected = v"
-                @keydown.space.prevent="selected = v"
-              >
-                <div class="timeline-time">{{ localTime(v.watched_at).slice(11) }}</div>
-                <div class="timeline-body">
-                  <b>{{ displayTitle(v) }}</b>
-                  <small
-                    >{{ v.creator_name || v.subscription_slug }} · {{ v.platform }}</small
-                  >
-                </div>
-                <span class="timeline-dur">{{ duration(v.duration_seconds) }}</span>
-              </article>
+                :title="displayTitle(v)"
+                :subtitle="
+                  displaySubtitle(
+                    v,
+                    (v.creator_name || v.subscription_slug) +
+                      ' · ' +
+                      (v.watched_at ? localTime(v.watched_at) : ''),
+                  )
+                "
+                :summary="mediaSummary(v) || v.views.toLocaleString() + ' 次观看'"
+                :duration="duration(v.duration_seconds)"
+                :src="'/thumb/' + v.video_id"
+                :state="coverState(v.video_id)"
+                :downloadable="false"
+                :pending="false"
+                @image="(el) => registerCoverImg(v.video_id, el)"
+                @loaded="markCoverLoaded(v.video_id)"
+                @error="onCoverError($event, v.video_id)"
+                @play="selected = v"
+              />
             </div>
           </div>
           <StatePanel

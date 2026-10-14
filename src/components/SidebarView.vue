@@ -93,17 +93,17 @@ const quickItems = computed(() =>
             >
           </button>
       </template>
-    </nav>
-    <div class="bottom">
       <button
         v-for="m in advanced ? [] : quickItems"
-        :key="m.id"
+        :key="'quick-' + m.id"
         :class="{ active: view === m.id }"
         :aria-current="view === m.id ? 'page' : undefined"
         @click="changeView(m.id)"
       >
-        <NavIcon :name="m.id" /><span>{{ m.label }}</span>
+        <NavIcon :name="m.id" /><span class="nav-text">{{ m.label }}</span>
       </button>
+    </nav>
+    <div class="bottom">
       <details class="sidebar-shortcuts">
         <summary>
           <NavIcon name="language" /><span>显示偏好</span
