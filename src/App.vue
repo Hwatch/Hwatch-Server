@@ -764,7 +764,15 @@ async function copyLog(log: any) {
               @click="pickAvatar({ kind: 'sub', id: group.avatar.slug })"
               @keydown.enter="pickAvatar({ kind: 'sub', id: group.avatar.slug })"
             />
-            <div v-else class="avatar">{{ group.name.slice(0, 1).toUpperCase() }}</div>
+            <div
+              v-else
+              class="avatar"
+              role="button"
+              tabindex="0"
+              title="点击更换头像"
+              @click="pickAvatar({ kind: 'sub', id: group.sources[0].slug })"
+              @keydown.enter="pickAvatar({ kind: 'sub', id: group.sources[0].slug })"
+            >{{ group.name.slice(0, 1).toUpperCase() }}</div>
             <div class="subscription-group-body">
               <div class="subscription-group-title">
                 <b>{{ group.name }}</b
