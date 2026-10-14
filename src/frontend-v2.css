@@ -1033,7 +1033,8 @@ h2 {
 .terminal-body.error { color: #ffb3b3; }
 
 /* Watch timeline */
-.timeline { display: grid; gap: 22px; }
+.timeline { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+.timeline-day { min-width: 0; }
 .timeline-date { font-size: 15px; color: var(--muted); margin: 0 0 8px; font-weight: 700; letter-spacing: 0.04em; }
 .timeline-row { grid-template-columns: 64px 1fr auto; align-items: center; cursor: pointer; }
 .timeline-row:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
@@ -1046,7 +1047,7 @@ h2 {
 .timeline-date small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; letter-spacing: 0; }
 .timeline-all { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; padding: 4px 6px; min-height: 0; }
 .timeline-all:hover { text-decoration: underline; }
-.library.timeline-strip { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.library.timeline-strip { display: flex; gap: 12px; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; scroll-snap-type: x proximity; }
 .library.timeline-strip > article { flex: 0 0 190px; scroll-snap-align: start; }
 .timeline-more { flex: 0 0 auto; align-self: center; display: grid; place-items: center; gap: 4px; width: 110px; height: 96px; border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: 12px; background: var(--surface); color: var(--muted); cursor: pointer; }
 .timeline-more span { font-size: 20px; font-weight: 700; color: var(--accent); }
