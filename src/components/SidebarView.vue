@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import NavIcon from "../NavIcon.vue";
-defineProps<{
+const props = defineProps<{
   navGroups: {
     id: string;
     label: string;
@@ -18,6 +19,7 @@ defineProps<{
     original: boolean;
     demo: boolean;
     aria: boolean;
+    [key: string]: boolean;
   };
   translationLanguage: string;
   showOriginal: boolean;
@@ -33,6 +35,11 @@ defineProps<{
   logout: () => void;
   setLanguage: (value: string) => void;
 }>();
+
+// Homepage quick links to advanced management pages (from Settings).
+const quickItems = computed(() =>
+  props.managementEntries.filter((m) => props.sidebarItems[m.id]),
+);
 </script>
 <template>
   <aside aria-label="应用导航">
@@ -88,6 +95,15 @@ defineProps<{
       </template>
     </nav>
     <div class="bottom">
+      <button
+        v-for="m in advanced ? [] : quickItems"
+        :key="m.id"
+        :class="{ active: view === m.id }"
+        :aria-current="view === m.id ? 'page' : undefined"
+        @click="changeView(m.id)"
+      >
+        <NavIcon :name="m.id" /><span>{{ m.label }}</span>
+      </button>
       <details class="sidebar-shortcuts">
         <summary>
           <NavIcon name="language" /><span>显示偏好</span

@@ -1926,6 +1926,7 @@ async function copyLog(log: any) {
         </div>
         <SettingsView
           v-else
+          :management-entries="managementEntries"
           :settings="settings"
           :api="api"
           :busy="settingsBusy"

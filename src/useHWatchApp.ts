@@ -409,6 +409,14 @@ export function useHWatchApp() {
     original: localStorage.getItem("hwatch-sidebar-original") !== "0",
     demo: localStorage.getItem("hwatch-sidebar-demo") !== "0",
     aria: localStorage.getItem("hwatch-sidebar-aria") !== "0",
+    // Optional homepage quick links to advanced management pages (off by default).
+    subscriptions: localStorage.getItem("hwatch-sidebar-subscriptions") === "1",
+    downloads: localStorage.getItem("hwatch-sidebar-downloads") === "1",
+    undownloaded: localStorage.getItem("hwatch-sidebar-undownloaded") === "1",
+    excluded: localStorage.getItem("hwatch-sidebar-excluded") === "1",
+    integrity: localStorage.getItem("hwatch-sidebar-integrity") === "1",
+    translations: localStorage.getItem("hwatch-sidebar-translations") === "1",
+    logs: localStorage.getItem("hwatch-sidebar-logs") === "1",
   });
   // Primary navigation stays minimal (Emby-like); everything else lives in
   // Settings -> 高级管理 (see managementEntries in App.vue).
