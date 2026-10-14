@@ -1045,3 +1045,5 @@ h2 {
 .hidden-file { display: none; }
 .account-avatar { object-fit: cover; }
 .user-avatar { width: 44px; height: 44px; border-radius: 50%; }
+.rows article img.avatar { cursor: pointer; }
+.rows article img.avatar:hover { outline: 2px solid var(--accent); outline-offset: 1px; }

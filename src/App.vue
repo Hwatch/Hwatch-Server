@@ -754,13 +754,17 @@ async function copyLog(log: any) {
           <article v-for="group in filteredSubscriptionGroups" :key="group.key">
             <img
               v-if="group.avatar"
+              class="avatar"
               :src="group.avatar.avatar_proxy_url"
               :alt="group.name"
               loading="lazy"
+              role="button"
+              tabindex="0"
+              title="点击更换头像"
+              @click="pickAvatar({ kind: 'sub', id: group.avatar.slug })"
+              @keydown.enter="pickAvatar({ kind: 'sub', id: group.avatar.slug })"
             />
-            <div v-else class="avatar">
-              {{ group.name.slice(0, 1).toUpperCase() }}
-            </div>
+            <div v-else class="avatar">{{ group.name.slice(0, 1).toUpperCase() }}</div>
             <div class="subscription-group-body">
               <div class="subscription-group-title">
                 <b>{{ group.name }}</b
@@ -811,8 +815,6 @@ async function copyLog(log: any) {
                   </div>
                 </div>
                 <div class="actions">
-                  <button @click="pickAvatar({ kind: 'sub', id: sub.slug })">换头像</button>
-                  <button @click="clearAvatarTarget('sub', sub.slug)">清除头像</button>
                   <button
                     :disabled="actionPending('check:' + sub.slug)"
                     :aria-busy="actionPending('check:' + sub.slug)"
