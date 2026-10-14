@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import NavIcon from "./NavIcon.vue";
 import SettingsView from "./SettingsView.vue";
 import PageHeader from "./components/PageHeader.vue";
@@ -356,6 +356,18 @@ async function submitChangePassword() {
 }
 const shortsMuted = ref(true);
 const shortsRotated = ref(false);
+const shortsFeed = ref<HTMLElement | null>(null);
+function toggleShortsRotate() {
+  const feed = shortsFeed.value;
+  let idx = activeShort.value;
+  if (feed && idx < 0) idx = Math.round(feed.scrollTop / (feed.clientHeight || 1));
+  shortsRotated.value = !shortsRotated.value;
+  nextTick(() => {
+    const el = shortsFeed.value;
+    if (!el || idx < 0) return;
+    el.scrollTop = idx * el.clientHeight;
+  });
+}
 const shortLandscape = ref<Record<string, boolean>>({});
 const isNarrow = ref(
   typeof window !== "undefined" && window.matchMedia("(max-width: 680px)").matches,
@@ -1522,11 +1534,11 @@ async function copyLog(log: any) {
           v-if="shortsRotated"
           class="short-rotate-exit"
           aria-label="退出横屏"
-          @click="shortsRotated = false"
+          @click="toggleShortsRotate"
         >
           ✕ 退出横屏
         </button>
-        <div class="shorts-feed" :class="{ rotated: shortsRotated }">
+        <div ref="shortsFeed" class="shorts-feed" :class="{ rotated: shortsRotated }">
           <div
             v-for="(v, i) in shorts"
             :key="'short-' + i + ':' + v.video_id"
@@ -1573,7 +1585,7 @@ async function copyLog(log: any) {
                 <div class="short-buttons">
                   <button
                     v-if="isNarrow && shortLandscape[v.video_id]"
-                    @click="shortsRotated = !shortsRotated"
+                    @click="toggleShortsRotate"
                   >
                     {{ shortsRotated ? "竖屏" : "横屏" }}
                   </button>
