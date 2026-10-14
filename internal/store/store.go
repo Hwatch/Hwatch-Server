@@ -190,6 +190,11 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE duplicate_candidates ADD COLUMN metrics_json TEXT NOT NULL DEFAULT '{}'",
 		"ALTER TABLE rate_limits ADD COLUMN transient INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE deletion_plan_items ADD COLUMN group_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE subscription_logs ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE subscription_logs ADD COLUMN found_count INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE subscription_logs ADD COLUMN created_count INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE subscription_logs ADD COLUMN queued_count INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE subscription_logs ADD COLUMN events_json TEXT NOT NULL DEFAULT '[]'",
 	} {
 		_, _ = db.Exec(statement)
 	}

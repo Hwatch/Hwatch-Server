@@ -1265,6 +1265,10 @@ async function copyLog(log: any) {
             <div class="log-body">
               <b>{{ l.platform }}</b> <small>{{ l.subscription_slug }}</small>
               <p :class="{ error: l.level === 'error' }">{{ l.message }}</p>
+              <small class="log-meta"
+                >耗时 {{ l.duration_ms }}ms · 发现 {{ l.found }} · 新增
+                {{ l.created }} · 入队 {{ l.queued }}</small
+              >
             </div>
             <span
               class="integrity-badge"
@@ -1310,6 +1314,25 @@ async function copyLog(log: any) {
             </dl>
             <h3>完整日志</h3>
             <pre class="log-full" :class="{ error: logDetail.level === 'error' }">{{ logDetail.message }}</pre>
+            <div class="log-stats">
+              <span><small>耗时</small><b>{{ logDetail.duration_ms }} ms</b></span>
+              <span><small>发现</small><b>{{ logDetail.found }}</b></span>
+              <span><small>新增</small><b>{{ logDetail.created }}</b></span>
+              <span><small>入队</small><b>{{ logDetail.queued }}</b></span>
+            </div>
+            <h3>事件流</h3>
+            <ol class="log-events">
+              <li
+                v-for="(ev, i) in logDetail.events || []"
+                :key="i"
+                :class="{ error: ev.level === 'error', warn: ev.level === 'warn' }"
+              >
+                <time>{{ localTime(ev.at) }}</time><span>{{ ev.message }}</span>
+              </li>
+              <li v-if="!(logDetail.events || []).length" class="muted">
+                无分步事件（旧记录或无需明细）
+              </li>
+            </ol>
             <div class="actions">
               <button @click="copyLog(logDetail)">复制日志</button>
             </div>

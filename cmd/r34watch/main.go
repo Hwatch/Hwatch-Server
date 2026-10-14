@@ -1214,11 +1214,20 @@ func (a *App) check(slug string) {
 	if err != nil || !sub.Enabled {
 		return
 	}
+	start := time.Now()
+	events := []store.SubscriptionLogEvent{}
+	addEvent := func(level, msg string) {
+		if len(events) < 40 {
+			events = append(events, store.SubscriptionLogEvent{At: store.Now(), Level: level, Message: msg})
+		}
+	}
+	addEvent("info", "开始检查")
 	cfg, _ := a.store.Settings()
 	adapter, err := a.adapters.ByID(sub.Platform)
 	if err != nil {
 		_ = a.store.UpdateSubscriptionCheck(slug, err.Error())
-		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", "适配器不可用："+err.Error())
+		addEvent("error", "适配器不可用："+err.Error())
+		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", "适配器不可用："+err.Error(), 0, 0, 0, time.Since(start).Milliseconds(), events)
 		return
 	}
 	if enricher, ok := adapter.(adapters.SubscriptionEnricher); ok {
@@ -1226,14 +1235,17 @@ func (a *App) check(slug string) {
 		if enriched.Name != sub.Name || enriched.AvatarURL != sub.AvatarURL {
 			_ = a.store.UpdateSubscriptionMetadata(sub.Slug, enriched.Name, enriched.AvatarURL, enriched.ExternalLinks)
 			sub = enriched
+			addEvent("info", "更新订阅元数据："+enriched.Name)
 		}
 	}
 	items, err := adapter.ListVideos(context.Background(), sub, cfg.HTTPProxy)
 	if err != nil {
 		_ = a.store.UpdateSubscriptionCheck(slug, err.Error())
-		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", err.Error())
+		addEvent("error", err.Error())
+		_ = a.store.AddSubscriptionLog(slug, sub.Platform, "error", err.Error(), 0, 0, 0, time.Since(start).Milliseconds(), events)
 		return
 	}
+	addEvent("info", fmt.Sprintf("来源返回 %d 个条目", len(items)))
 	_ = a.store.UpdateSubscriptionCheck(slug, "")
 	createdCount, queuedCount := 0, 0
 	for _, item := range items {
@@ -1243,6 +1255,7 @@ func (a *App) check(slug string) {
 		}
 		if created {
 			createdCount++
+			addEvent("info", "新增："+item.ID)
 		}
 		existing, _ := a.store.Video(item.ID)
 		needsHanimeMetadata := sub.Platform == "hanime1" && existing.Description == ""
@@ -1253,6 +1266,8 @@ func (a *App) check(slug string) {
 				if strings.TrimRight(detailed.CreatorURL, "/") == strings.TrimRight(sub.URL, "/") {
 					_ = a.store.UpdateSubscriptionMetadata(slug, detailed.CreatorName, detailed.CreatorAvatar, detailed.ExternalLinksJSON)
 				}
+			} else {
+				addEvent("warn", "详情抓取失败："+item.ID)
 			}
 			if needsHanimeMetadata {
 				time.Sleep(250 * time.Millisecond)
@@ -1261,18 +1276,23 @@ func (a *App) check(slug string) {
 		if created || existing.Status == "removed" {
 			if a.store.IsMediaExcluded(item.ID) {
 				_ = a.store.UpdateTask(item.ID, "excluded", "", "", "", "该视频已加入已排除，跳过自动下载", 0, 0)
+				addEvent("warn", "已排除，跳过："+item.ID)
 				continue
 			}
 			if a.store.QueueVideo(item.ID) == nil {
 				a.startQueueWorker()
 				queuedCount++
+				addEvent("info", "加入下载队列："+item.ID)
 			}
 		}
 	}
 	if requeued, _ := a.store.RequeueTrustedCreatorMismatches(slug); requeued > 0 {
 		a.startQueueWorker()
+		addEvent("info", fmt.Sprintf("重新排队 %d 个创作者不匹配任务", requeued))
 	}
-	_ = a.store.AddSubscriptionLog(slug, sub.Platform, "info", fmt.Sprintf("检查完成：发现 %d，新增 %d，入队 %d", len(items), createdCount, queuedCount))
+	summary := fmt.Sprintf("检查完成：发现 %d，新增 %d，入队 %d", len(items), createdCount, queuedCount)
+	addEvent("info", summary)
+	_ = a.store.AddSubscriptionLog(slug, sub.Platform, "info", summary, len(items), createdCount, queuedCount, time.Since(start).Milliseconds(), events)
 }
 func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")

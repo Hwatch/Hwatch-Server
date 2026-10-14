@@ -1014,3 +1014,16 @@ h2 {
 .log-detail h3 { font-size: 14px; margin: 6px 0 8px; }
 .log-full { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-input); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 13px; margin: 0 0 14px; }
 .log-full.error { color: #f2a0a0; }
+
+/* Log center: structured detail */
+.log-center .log-meta { color: var(--muted); font-size: 11px; }
+.log-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 14px; }
+.log-stats > span { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; background: var(--surface-input); border: 1px solid var(--border); border-radius: 10px; min-width: 72px; }
+.log-stats small { color: var(--muted); font-size: 11px; }
+.log-stats b { font-size: 16px; }
+.log-events { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+.log-events li { display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 13px; padding: 5px 8px; border-radius: 7px; background: var(--surface-input); }
+.log-events li time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.log-events li.error span { color: #f2a0a0; }
+.log-events li.warn span { color: #e5b951; }
+.log-events li.muted { display: block; color: var(--muted); }
