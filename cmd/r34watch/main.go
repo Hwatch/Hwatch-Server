@@ -164,7 +164,7 @@ func parseModelURL(raw string) (string, error) {
 }
 
 func subMap(s store.Subscription) map[string]any {
-	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "avatar_proxy_url": avatarProxyURL(s), "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
+	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "avatar_proxy_url": avatarProxyURL(s), "has_avatar": s.AvatarURL != "" || s.AvatarOverride != "", "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
 }
 func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	out := make([]map[string]any, 0, len(items))

@@ -24,6 +24,7 @@ export function useHWatchApp() {
     url: string;
     avatar_url: string;
     avatar_proxy_url: string;
+    has_avatar?: boolean;
     external_links: Link[];
     enabled: boolean;
     last_checked_at: string;
@@ -815,7 +816,8 @@ export function useHWatchApp() {
         const key = sub.name.trim().toLocaleLowerCase();
         const group = groups.get(key) || { key, name: sub.name, sources: [] };
         group.sources.push(sub);
-        if (!group.avatar && sub.avatar_url) group.avatar = sub;
+        if (!group.avatar && (sub.avatar_url || sub.has_avatar))
+          group.avatar = sub;
         groups.set(key, group);
       }
       return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
