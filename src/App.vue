@@ -355,6 +355,15 @@ async function submitChangePassword() {
   }
 }
 const shortsMuted = ref(true);
+const activeShort = ref(-1);
+const shortBuffering = ref<Record<string, boolean>>({});
+function primeShort(idx: number) {
+  if (idx < 0) return;
+  const video = document.querySelector(`.short[data-index="${idx}"] video`) as HTMLVideoElement | null;
+  if (!video) return;
+  video.preload = "auto";
+  if (video.readyState === 0) video.load();
+}
 let shortsObserver: IntersectionObserver | null = null;
 function ensureShortsObserver() {
   if (shortsObserver || typeof IntersectionObserver === "undefined") return;
@@ -364,8 +373,12 @@ function ensureShortsObserver() {
         const video = entry.target.querySelector("video") as HTMLVideoElement | null;
         if (!video) continue;
         if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-          video.play().catch(() => {});
           const idx = Number((entry.target as HTMLElement).dataset.index || 0);
+          activeShort.value = idx;
+          video.preload = "auto";
+          if (video.readyState === 0) video.load();
+          video.play().catch(() => {});
+          primeShort(idx + 1);
           if (idx >= shorts.value.length - 2) void loadShorts(true);
         } else {
           video.pause();
@@ -1464,11 +1477,15 @@ async function copyLog(log: any) {
               :muted="shortsMuted"
               playsinline
               loop
-              preload="metadata"
+              :preload="Math.abs(i - activeShort) <= 1 ? 'auto' : 'none'"
               @error="onShortError"
+              @waiting="shortBuffering[v.video_id] = true"
+              @playing="shortBuffering[v.video_id] = false"
+              @canplay="shortBuffering[v.video_id] = false"
               @timeupdate="onShortTime(v, $event)"
               @click="toggleShortVideo"
             ></video>
+            <div v-if="shortBuffering[v.video_id]" class="short-buffer">缓冲中…</div>
             <div class="short-overlay">
               <div class="short-progress">
                 <span class="short-time">{{ fmtClock(shortPos[v.video_id] || 0) }}</span>
