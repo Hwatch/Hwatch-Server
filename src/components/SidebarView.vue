@@ -24,10 +24,11 @@ const props = defineProps<{
   translationLanguage: string;
   showOriginal: boolean;
   demoMode: number;
-  auth: { username?: string };
+  auth: { username?: string; avatar_url?: string };
   advanced: boolean;
   canAdmin: boolean;
   openAdvanced: () => void;
+  openChangeAvatar: () => void;
   openChangePassword: () => void;
   managementEntries: { id: string; label: string; desc: string }[];
   exitAdvanced: () => void;
@@ -175,14 +176,21 @@ const quickItems = computed(() =>
       >
       <details class="sidebar-account-menu">
         <summary class="sidebar-account">
-          <span class="account-avatar">{{
+          <img
+            v-if="auth.avatar_url"
+            class="account-avatar"
+            :src="auth.avatar_url"
+            :alt="auth.username || '我'"
+          /><span v-else class="account-avatar">{{
             (auth.username || "H").slice(0, 1).toUpperCase()
           }}</span>
           <span
             ><small>当前账户</small><b>{{ auth.username }}</b></span
           ><span class="account-menu-caret">⌄</span>
         </summary>
-        <button class="sidebar-logout" aria-label="修改密码" title="修改密码" @click="openChangePassword()">
+        <button class="sidebar-logout" aria-label="更换头像" title="更换头像" @click="openChangeAvatar()">
+          <NavIcon name="privacy" /><span>更换头像</span></button
+        ><button class="sidebar-logout" aria-label="修改密码" title="修改密码" @click="openChangePassword()">
           <NavIcon name="privacy" /><span>修改密码</span></button
         ><button
           class="sidebar-logout"

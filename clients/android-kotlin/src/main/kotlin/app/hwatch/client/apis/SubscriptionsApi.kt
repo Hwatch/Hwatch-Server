@@ -82,6 +82,20 @@ interface SubscriptionsApi {
     fun deleteSubscription(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
+     * DELETE api/subscriptions/{slug}/avatar
+     * 
+     * 清除订阅自定义头像，回退到采集头像。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param slug 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @DELETE("api/subscriptions/{slug}/avatar")
+    fun deleteSubscriptionAvatar(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
      * GET api/platforms
      * 
      * 
@@ -172,5 +186,20 @@ interface SubscriptionsApi {
      */
     @PATCH("api/subscriptions/{slug}")
     fun updateSubscription(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body updateSubscriptionRequest: UpdateSubscriptionRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/subscriptions/{slug}/avatar
+     * 
+     * 上传订阅（作者/番剧）自定义头像，覆盖采集到的头像。
+     * Responses:
+     *  - 200: 成功
+     *  - 400: 请求失败
+     *
+     * @param slug 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/subscriptions/{slug}/avatar")
+    fun uploadSubscriptionAvatar(@Path("slug") slug: kotlin.String, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
 }

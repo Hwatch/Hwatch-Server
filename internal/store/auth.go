@@ -11,6 +11,7 @@ type User struct {
 	ID           int64  `json:"id"`
 	Username     string `json:"username"`
 	Role         string `json:"role"`
+	Avatar       string `json:"avatar"`
 	PasswordHash string `json:"-"`
 	CreatedAt    string `json:"created_at"`
 }
@@ -54,8 +55,8 @@ func (s *Store) CreateFirstAdmin(username, passwordHash string) (int64, error) {
 
 func (s *Store) UserByName(username string) (User, error) {
 	var user User
-	err := s.DB.QueryRow("SELECT id,username,password_hash,role,created_at FROM users WHERE username=?", username).
-		Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.CreatedAt)
+	err := s.DB.QueryRow("SELECT id,username,password_hash,role,avatar,created_at FROM users WHERE username=?", username).
+		Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.Avatar, &user.CreatedAt)
 	return user, err
 }
 
@@ -101,7 +102,7 @@ func (s *Store) CreateUser(username, passwordHash, role string) (int64, error) {
 }
 
 func (s *Store) Users() ([]User, error) {
-	rows, err := s.DB.Query("SELECT id,username,role,created_at FROM users ORDER BY id")
+	rows, err := s.DB.Query("SELECT id,username,role,avatar,created_at FROM users ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func (s *Store) Users() ([]User, error) {
 	out := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.Avatar, &u.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -119,8 +120,8 @@ func (s *Store) Users() ([]User, error) {
 
 func (s *Store) UserByID(id int64) (User, error) {
 	var u User
-	err := s.DB.QueryRow("SELECT id,username,password_hash,role,created_at FROM users WHERE id=?", id).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	err := s.DB.QueryRow("SELECT id,username,password_hash,role,avatar,created_at FROM users WHERE id=?", id).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.Avatar, &u.CreatedAt)
 	return u, err
 }
 
@@ -146,4 +147,14 @@ func (s *Store) CountAdmins() (int64, error) {
 	var n int64
 	err := s.DB.QueryRow("SELECT count(*) FROM users WHERE role='admin'").Scan(&n)
 	return n, err
+}
+
+func (s *Store) SetUserAvatar(id int64, avatar string) error {
+	_, err := s.DB.Exec("UPDATE users SET avatar=? WHERE id=?", avatar, id)
+	return err
+}
+
+func (s *Store) SetSubscriptionAvatar(slug, avatar string) error {
+	_, err := s.DB.Exec("UPDATE subscriptions SET avatar_override=? WHERE slug=?", avatar, slug)
+	return err
 }

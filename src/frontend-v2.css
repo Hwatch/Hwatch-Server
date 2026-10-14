@@ -1040,3 +1040,8 @@ h2 {
 .timeline-body b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-body small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-dur { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* Avatars */
+.hidden-file { display: none; }
+.account-avatar { object-fit: cover; }
+.user-avatar { width: 44px; height: 44px; border-radius: 50%; }

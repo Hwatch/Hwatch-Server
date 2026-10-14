@@ -166,11 +166,14 @@ const {
   users,
   usersError,
   loadUsers,
+  refreshDashboard,
   createUser,
   updateUserRole,
   deleteUser,
   resetUserPassword,
   changeOwnPassword,
+  uploadAvatar,
+  clearAvatar,
   timeline,
   timelineTotal,
   timelineError,
@@ -248,6 +251,48 @@ function exitAdvanced() {
   changeView(lastNormalView.value || "home");
 }
 const newUser = ref({ username: "", password: "", role: "viewer" });
+const avatarInput = ref<HTMLInputElement | null>(null);
+const avatarTarget = ref<{ kind: string; id: string } | null>(null);
+function pickAvatar(target: { kind: string; id: string }) {
+  avatarTarget.value = target;
+  avatarInput.value?.click();
+}
+function bumpSelfAvatar() {
+  if (auth.value)
+    auth.value = {
+      ...auth.value,
+      avatar_url: (auth.value.avatar_url || "").split("?")[0] + "?t=" + Date.now(),
+    };
+}
+async function onAvatarFile(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  const target = avatarTarget.value;
+  if (!file || !target) return;
+  const result = await uploadAvatar(target.kind, target.id, file);
+  input.value = "";
+  if (result.duplicate) return;
+  if (result.ok) {
+    notice.value = "头像已更新";
+    if (target.kind === "user") await loadUsers();
+    else if (target.kind === "sub") await refreshDashboard();
+    else bumpSelfAvatar();
+  } else {
+    notice.value = "上传失败：" + (result.error || "");
+  }
+}
+async function clearAvatarTarget(kind: string, id: string) {
+  const result = await clearAvatar(kind, id);
+  if (result.duplicate) return;
+  if (result.ok) {
+    notice.value = "头像已清除";
+    if (kind === "user") await loadUsers();
+    else if (kind === "sub") await refreshDashboard();
+    else bumpSelfAvatar();
+  } else {
+    notice.value = "清除失败：" + (result.error || "");
+  }
+}
 const changePasswordOpen = ref(false);
 const changePw = ref({ current: "", next: "", confirm: "" });
 async function submitCreateUser() {
@@ -416,6 +461,7 @@ async function copyLog(log: any) {
       :can-admin="isAdmin"
       :open-advanced="openAdvanced"
       :open-change-password="() => (changePasswordOpen = true)"
+      :open-change-avatar="() => pickAvatar({ kind: 'self', id: '' })"
       :management-entries="managementEntries"
       :exit-advanced="exitAdvanced"
       :toggle-group="toggleGroup"
@@ -765,6 +811,8 @@ async function copyLog(log: any) {
                   </div>
                 </div>
                 <div class="actions">
+                  <button @click="pickAvatar({ kind: 'sub', id: sub.slug })">换头像</button>
+                  <button @click="clearAvatarTarget('sub', sub.slug)">清除头像</button>
                   <button
                     :disabled="actionPending('check:' + sub.slug)"
                     :aria-busy="actionPending('check:' + sub.slug)"
@@ -1391,12 +1439,14 @@ async function copyLog(log: any) {
         </div>
         <div class="rows">
           <article v-for="u in users" :key="u.id">
-            <div class="account-avatar">{{ u.username.slice(0, 1).toUpperCase() }}</div>
+            <img class="account-avatar user-avatar" :src="'/avatar/user/' + u.id" :alt="u.username" />
             <div>
               <b>{{ u.username }}</b>
               <small>{{ u.role === "admin" ? "管理员" : "仅观看" }} · 创建于 {{ localTime(u.created_at) }}</small>
             </div>
             <div class="actions">
+              <button @click="pickAvatar({ kind: 'user', id: String(u.id) })">换头像</button>
+              <button @click="clearAvatarTarget('user', String(u.id))">清除头像</button>
               <button :disabled="actionPending('user-role:' + u.id)" @click="toggleRole(u)">{{ u.role === "admin" ? "设为仅观看" : "设为管理员" }}</button>
               <button @click="promptResetPassword(u)">重置密码</button>
               <button class="danger" :disabled="actionPending('user-del:' + u.id)" @click="removeUser(u)">删除</button>
@@ -2072,6 +2122,7 @@ async function copyLog(log: any) {
           <div class="actions"><button class="primary" :disabled="actionPending('change-password')" @click="submitChangePassword">{{ actionPending("change-password") ? "提交中…" : "提交" }}</button></div>
         </div>
       </div>
+      <input ref="avatarInput" type="file" accept="image/*" class="hidden-file" @change="onAvatarFile" />
     </main>
     <nav class="mobile-tabbar" aria-label="主要导航">
       <button

@@ -9,7 +9,8 @@ export async function requestJSON<T>(
   onUnauthorized: () => void,
 ): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (init?.body) headers.set("Content-Type", "application/json");
+  if (init?.body && !(init.body instanceof FormData))
+    headers.set("Content-Type", "application/json");
   if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
   const response = await fetch(path, { ...init, headers });
   const text = await response.text();

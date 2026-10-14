@@ -70,6 +70,19 @@ interface AuthApi {
     fun createUser(@Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body createUserRequest: CreateUserRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
+     * DELETE api/auth/avatar
+     * 
+     * 清除当前用户头像。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @DELETE("api/auth/avatar")
+    fun deleteMyAvatar(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
      * DELETE api/users/{id}
      * 
      * 删除用户（仅管理员，不能删除自己或最后一个管理员）。
@@ -83,6 +96,20 @@ interface AuthApi {
      */
     @DELETE("api/users/{id}")
     fun deleteUser(@Path("id") id: kotlin.Int, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * DELETE api/users/{id}/avatar
+     * 
+     * 清除指定用户头像（仅管理员）。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param id 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @DELETE("api/users/{id}/avatar")
+    fun deleteUserAvatar(@Path("id") id: kotlin.Int, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/users
@@ -169,5 +196,47 @@ interface AuthApi {
      */
     @PATCH("api/users/{id}")
     fun updateUserRole(@Path("id") id: kotlin.Int, @Header("X-CSRF-Token") xCSRFToken: kotlin.String, @Body updateUserRoleRequest: UpdateUserRoleRequest): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/auth/avatar
+     * 
+     * 上传当前用户头像（multipart 字段 file，PNG/JPEG/WebP/GIF，≤6MB）。
+     * Responses:
+     *  - 200: 成功
+     *  - 400: 请求失败
+     *
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/auth/avatar")
+    fun uploadMyAvatar(@Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * POST api/users/{id}/avatar
+     * 
+     * 上传指定用户头像（仅管理员）。
+     * Responses:
+     *  - 200: 成功
+     *  - 400: 请求失败
+     *
+     * @param id 
+     * @param xCSRFToken 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @POST("api/users/{id}/avatar")
+    fun uploadUserAvatar(@Path("id") id: kotlin.Int, @Header("X-CSRF-Token") xCSRFToken: kotlin.String): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+
+    /**
+     * GET avatar/user/{id}
+     * 
+     * 用户头像图片（无自定义头像时返回首字母占位图）。
+     * Responses:
+     *  - 200: 成功
+     *
+     * @param id 
+     * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
+     */
+    @GET("avatar/user/{id}")
+    fun userAvatar(@Path("id") id: kotlin.Int): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
 }

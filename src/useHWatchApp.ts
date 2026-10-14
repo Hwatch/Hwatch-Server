@@ -190,6 +190,7 @@ export function useHWatchApp() {
     authenticated: boolean;
     username?: string;
     role?: string;
+    avatar_url?: string;
     csrf_token?: string;
   };
   const auth = ref<AuthState>({ configured: true, authenticated: false }),
@@ -1456,6 +1457,23 @@ export function useHWatchApp() {
       }),
     );
   }
+  function avatarURL(kind: string, id: string): string {
+    if (kind === "self") return "/api/auth/avatar";
+    if (kind === "user") return "/api/users/" + id + "/avatar";
+    return "/api/subscriptions/" + encodeURIComponent(id) + "/avatar";
+  }
+  function uploadAvatar(kind: string, id: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return actions.run("avatar:" + kind + ":" + id, () =>
+      api(avatarURL(kind, id), { method: "POST", body: form }),
+    );
+  }
+  function clearAvatar(kind: string, id: string) {
+    return actions.run("avatar-clear:" + kind + ":" + id, () =>
+      api(avatarURL(kind, id), { method: "DELETE" }),
+    );
+  }
   function changeOwnPassword(current_password: string, new_password: string) {
     return actions.run("change-password", () =>
       api("/api/auth/password", {
@@ -2251,6 +2269,8 @@ export function useHWatchApp() {
     deleteUser,
     resetUserPassword,
     changeOwnPassword,
+    uploadAvatar,
+    clearAvatar,
     timeline,
     timelineTotal,
     timelineError,
@@ -2273,6 +2293,7 @@ export function useHWatchApp() {
     createBackup,
     restoreBackup,
     changeView,
+    refreshDashboard,
     subscribe,
     searchCreators,
     chooseCreator,

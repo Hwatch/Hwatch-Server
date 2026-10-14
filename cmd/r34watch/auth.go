@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -60,6 +61,7 @@ func (a *App) authStatus(w http.ResponseWriter, r *http.Request) {
 		response["authenticated"] = true
 		response["username"] = session.Username
 		response["role"] = session.Role
+		response["avatar_url"] = fmt.Sprintf("/avatar/user/%d", session.UserID)
 		response["csrf_token"] = session.CSRFToken
 	}
 	respond(w, http.StatusOK, response)
@@ -195,7 +197,7 @@ func (a *App) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) authMe(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(authContextKey{}).(store.Session)
-	respond(w, http.StatusOK, map[string]any{"authenticated": true, "username": session.Username, "role": session.Role, "csrf_token": session.CSRFToken})
+	respond(w, http.StatusOK, map[string]any{"authenticated": true, "username": session.Username, "role": session.Role, "avatar_url": fmt.Sprintf("/avatar/user/%d", session.UserID), "csrf_token": session.CSRFToken})
 }
 
 func (a *App) requireAuth(next http.Handler) http.Handler {
@@ -267,6 +269,8 @@ func viewerAllowed(method, path string) bool {
 	case method == http.MethodPost && path == "/api/auth/logout":
 		return true
 	case method == http.MethodPost && path == "/api/auth/password":
+		return true
+	case (method == http.MethodPost || method == http.MethodDelete) && path == "/api/auth/avatar":
 		return true
 	case method == http.MethodPost && path == "/api/notifications/read-all":
 		return true

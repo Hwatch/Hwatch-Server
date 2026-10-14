@@ -21,10 +21,10 @@ type SubscriptionProgress struct {
 	BytesDownloaded, TotalBytes               int64
 }
 type Subscription struct {
-	ID                                                                             int64
-	Slug, Name, URL, AvatarURL, ExternalLinks, CreatedAt, LastCheckedAt, LastError string
-	Platform, Type, SourceID, AdapterConfig, Cursor                                string
-	Enabled, BaselineComplete                                                      bool
+	ID                                                                                             int64
+	Slug, Name, URL, AvatarURL, AvatarOverride, ExternalLinks, CreatedAt, LastCheckedAt, LastError string
+	Platform, Type, SourceID, AdapterConfig, Cursor                                                string
+	Enabled, BaselineComplete                                                                      bool
 }
 type Video struct {
 	ID, SubscriptionSlug, Title, Description, PageURL, PublishedAt, DiscoveredAt, ThumbnailURL    string
@@ -198,6 +198,8 @@ func Open(path string) (*Store, error) {
 		"ALTER TABLE subscription_logs ADD COLUMN queued_count INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE subscription_logs ADD COLUMN events_json TEXT NOT NULL DEFAULT '[]'",
 		"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
+		"ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE subscriptions ADD COLUMN avatar_override TEXT NOT NULL DEFAULT ''",
 	} {
 		_, _ = db.Exec(statement)
 	}
@@ -388,7 +390,7 @@ func (s *Store) AddSubscription(sub Subscription) error {
 	return err
 }
 func (s *Store) Subscriptions() ([]Subscription, error) {
-	rows, err := s.DB.Query("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions ORDER BY name")
+	rows, err := s.DB.Query("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,avatar_override,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +399,7 @@ func (s *Store) Subscriptions() ([]Subscription, error) {
 	for rows.Next() {
 		var x Subscription
 		var enabled, baseline int
-		if err = rows.Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError); err != nil {
+		if err = rows.Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.AvatarOverride, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError); err != nil {
 			return nil, err
 		}
 		x.Enabled = enabled != 0
@@ -409,7 +411,7 @@ func (s *Store) Subscriptions() ([]Subscription, error) {
 func (s *Store) Subscription(slug string) (Subscription, error) {
 	var x Subscription
 	var enabled, baseline int
-	err := s.DB.QueryRow("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions WHERE slug=?", slug).Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError)
+	err := s.DB.QueryRow("SELECT id,slug,name,url,platform,subscription_type,source_id,adapter_config,cursor_json,avatar_url,avatar_override,external_links,enabled,baseline_complete,created_at,last_checked_at,last_error FROM subscriptions WHERE slug=?", slug).Scan(&x.ID, &x.Slug, &x.Name, &x.URL, &x.Platform, &x.Type, &x.SourceID, &x.AdapterConfig, &x.Cursor, &x.AvatarURL, &x.ExternalLinks, &enabled, &baseline, &x.CreatedAt, &x.LastCheckedAt, &x.LastError)
 	x.Enabled = enabled != 0
 	x.BaselineComplete = baseline != 0
 	return x, err

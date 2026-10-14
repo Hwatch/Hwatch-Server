@@ -8,13 +8,18 @@ All URIs are relative to *http://localhost*
 | [**authStatus**](AuthApi.md#authStatus) | **GET** api/auth/status |  |
 | [**changeOwnPassword**](AuthApi.md#changeOwnPassword) | **POST** api/auth/password |  |
 | [**createUser**](AuthApi.md#createUser) | **POST** api/users |  |
+| [**deleteMyAvatar**](AuthApi.md#deleteMyAvatar) | **DELETE** api/auth/avatar |  |
 | [**deleteUser**](AuthApi.md#deleteUser) | **DELETE** api/users/{id} |  |
+| [**deleteUserAvatar**](AuthApi.md#deleteUserAvatar) | **DELETE** api/users/{id}/avatar |  |
 | [**listUsers**](AuthApi.md#listUsers) | **GET** api/users |  |
 | [**login**](AuthApi.md#login) | **POST** api/auth/login |  |
 | [**logout**](AuthApi.md#logout) | **POST** api/auth/logout |  |
 | [**setUserPassword**](AuthApi.md#setUserPassword) | **POST** api/users/{id}/password |  |
 | [**setupAdmin**](AuthApi.md#setupAdmin) | **POST** api/auth/setup |  |
 | [**updateUserRole**](AuthApi.md#updateUserRole) | **PATCH** api/users/{id} |  |
+| [**uploadMyAvatar**](AuthApi.md#uploadMyAvatar) | **POST** api/auth/avatar |  |
+| [**uploadUserAvatar**](AuthApi.md#uploadUserAvatar) | **POST** api/users/{id}/avatar |  |
+| [**userAvatar**](AuthApi.md#userAvatar) | **GET** avatar/user/{id} |  |
 
 
 
@@ -162,6 +167,43 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.crea
 
 
 
+清除当前用户头像。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(AuthApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteMyAvatar(xCSRFToken)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
 删除用户（仅管理员，不能删除自己或最后一个管理员）。
 
 ### Example
@@ -177,6 +219,45 @@ val id : kotlin.Int = 56 // kotlin.Int |
 val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
 
 val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteUser(id, xCSRFToken)
+```
+
+### Parameters
+| **id** | **kotlin.Int**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+清除指定用户头像（仅管理员）。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(AuthApi::class.java)
+val id : kotlin.Int = 56 // kotlin.Int | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteUserAvatar(id, xCSRFToken)
 ```
 
 ### Parameters
@@ -417,5 +498,118 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.upda
 ### HTTP request headers
 
  - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+
+
+上传当前用户头像（multipart 字段 file，PNG/JPEG/WebP/GIF，≤6MB）。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(AuthApi::class.java)
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.uploadMyAvatar(xCSRFToken)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+上传指定用户头像（仅管理员）。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(AuthApi::class.java)
+val id : kotlin.Int = 56 // kotlin.Int | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.uploadUserAvatar(id, xCSRFToken)
+```
+
+### Parameters
+| **id** | **kotlin.Int**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+用户头像图片（无自定义头像时返回首字母占位图）。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(AuthApi::class.java)
+val id : kotlin.Int = 56 // kotlin.Int | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.userAvatar(id)
+```
+
+### Parameters
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **id** | **kotlin.Int**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 

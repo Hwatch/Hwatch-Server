@@ -70,6 +70,15 @@ class SubscriptionsApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test deleteSubscriptionAvatar
+        should("test deleteSubscriptionAvatar") {
+            // uncomment below to test deleteSubscriptionAvatar
+            //val slug : kotlin.String = slug_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteSubscriptionAvatar(slug, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
         // to test listPlatforms
         should("test listPlatforms") {
             // uncomment below to test listPlatforms
@@ -118,6 +127,15 @@ class SubscriptionsApiTest : ShouldSpec() {
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
             //val updateSubscriptionRequest : UpdateSubscriptionRequest =  // UpdateSubscriptionRequest | 
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.updateSubscription(slug, xCSRFToken, updateSubscriptionRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test uploadSubscriptionAvatar
+        should("test uploadSubscriptionAvatar") {
+            // uncomment below to test uploadSubscriptionAvatar
+            //val slug : kotlin.String = slug_example // kotlin.String | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.uploadSubscriptionAvatar(slug, xCSRFToken)
             //result shouldBe ("TODO")
         }
 

@@ -63,12 +63,29 @@ class AuthApiTest : ShouldSpec() {
             //result shouldBe ("TODO")
         }
 
+        // to test deleteMyAvatar
+        should("test deleteMyAvatar") {
+            // uncomment below to test deleteMyAvatar
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteMyAvatar(xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
         // to test deleteUser
         should("test deleteUser") {
             // uncomment below to test deleteUser
             //val id : kotlin.Int = 56 // kotlin.Int | 
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteUser(id, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test deleteUserAvatar
+        should("test deleteUserAvatar") {
+            // uncomment below to test deleteUserAvatar
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.deleteUserAvatar(id, xCSRFToken)
             //result shouldBe ("TODO")
         }
 
@@ -120,6 +137,31 @@ class AuthApiTest : ShouldSpec() {
             //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
             //val updateUserRoleRequest : UpdateUserRoleRequest =  // UpdateUserRoleRequest | 
             //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.updateUserRole(id, xCSRFToken, updateUserRoleRequest)
+            //result shouldBe ("TODO")
+        }
+
+        // to test uploadMyAvatar
+        should("test uploadMyAvatar") {
+            // uncomment below to test uploadMyAvatar
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.uploadMyAvatar(xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test uploadUserAvatar
+        should("test uploadUserAvatar") {
+            // uncomment below to test uploadUserAvatar
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.uploadUserAvatar(id, xCSRFToken)
+            //result shouldBe ("TODO")
+        }
+
+        // to test userAvatar
+        should("test userAvatar") {
+            // uncomment below to test userAvatar
+            //val id : kotlin.Int = 56 // kotlin.Int | 
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.userAvatar(id)
             //result shouldBe ("TODO")
         }
 

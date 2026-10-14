@@ -140,6 +140,9 @@ source:3144962 -> source%3A3144962
 
 ### 用户与角色（多用户）
 
+头像：`GET /avatar/user/{id}` 提供用户头像（无自定义时返回首字母占位）；`/avatar/{slug}` 提供订阅（作者/番剧）头像，若设置了自定义头像则优先使用。设置接口：`POST/DELETE /api/auth/avatar`（自己）、`POST/DELETE /api/users/{id}/avatar`（仅管理员）、`POST/DELETE /api/subscriptions/{slug}/avatar`（仅管理员）。上传使用 multipart 字段 `file`，支持 PNG / JPEG / WebP / GIF，≤ 6MB；自定义订阅头像不会被采集结果覆盖。
+
+
 账号分两种角色：`admin`（全部能力）与 `viewer`（仅观看：只读 + 播放，不能做任何写操作，也看不到设置/备份/审计/日志/完整性/翻译导入等敏感页面）。
 
 - `GET /api/users`：列出用户（仅 admin）。

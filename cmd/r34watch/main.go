@@ -164,7 +164,7 @@ func parseModelURL(raw string) (string, error) {
 }
 
 func subMap(s store.Subscription) map[string]any {
-	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "avatar_proxy_url": "/avatar/" + url.PathEscape(s.Slug), "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
+	return map[string]any{"id": s.ID, "slug": s.Slug, "platform": s.Platform, "subscription_type": s.Type, "source_id": s.SourceID, "name": s.Name, "url": s.URL, "avatar_url": s.AvatarURL, "avatar_proxy_url": avatarProxyURL(s), "external_links": jsonValue(s.ExternalLinks), "enabled": s.Enabled, "baseline_complete": s.BaselineComplete, "created_at": s.CreatedAt, "last_checked_at": s.LastCheckedAt, "last_error": s.LastError}
 }
 func (a *App) subscriptionMaps(items []store.Subscription) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
@@ -2023,6 +2023,16 @@ func (a *App) subscriptionAvatar(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if sub.AvatarOverride != "" {
+		if _, statErr := os.Stat(sub.AvatarOverride); statErr == nil {
+			if kind := mime.TypeByExtension(filepath.Ext(sub.AvatarOverride)); kind != "" {
+				w.Header().Set("Content-Type", kind)
+			}
+			w.Header().Set("Cache-Control", "private, max-age=300")
+			http.ServeFile(w, r, sub.AvatarOverride)
+			return
+		}
+	}
 	cfg, _ := a.store.Settings()
 	cacheDir := filepath.Join(cfg.DownloadDir, ".hwatch-avatars")
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(sub.Slug)))
@@ -2087,6 +2097,19 @@ func (a *App) avatarPlaceholder(w http.ResponseWriter, name string) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprintf(w, `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" fill="#e5b951"/><text x="64" y="68" fill="#241f14" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="52" font-weight="700">%s</text></svg>`, initial)
 }
+func avatarProxyURL(s store.Subscription) string {
+	src := s.AvatarOverride
+	if src == "" {
+		src = s.AvatarURL
+	}
+	base := "/avatar/" + url.PathEscape(s.Slug)
+	if src == "" {
+		return base
+	}
+	sum := sha256.Sum256([]byte(src))
+	return fmt.Sprintf("%s?v=%x", base, sum[:4])
+}
+
 func staticHandler(dist string) http.Handler {
 	files := http.FileServer(http.Dir(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2184,6 +2207,13 @@ func (a *App) router(dist string) http.Handler {
 	mux.HandleFunc("GET /media/{id}", a.media)
 	mux.HandleFunc("GET /thumb/{id}", a.thumbnail)
 	mux.HandleFunc("GET /avatar/{slug}", a.subscriptionAvatar)
+	mux.HandleFunc("GET /avatar/user/{id}", a.userAvatar)
+	mux.HandleFunc("POST /api/auth/avatar", a.uploadMyAvatar)
+	mux.HandleFunc("DELETE /api/auth/avatar", a.deleteMyAvatar)
+	mux.HandleFunc("POST /api/users/{id}/avatar", a.uploadUserAvatar)
+	mux.HandleFunc("DELETE /api/users/{id}/avatar", a.deleteUserAvatar)
+	mux.HandleFunc("POST /api/subscriptions/{slug}/avatar", a.uploadSubscriptionAvatar)
+	mux.HandleFunc("DELETE /api/subscriptions/{slug}/avatar", a.deleteSubscriptionAvatar)
 	mux.HandleFunc("GET /api/events", a.events)
 	mux.Handle("/", staticHandler(dist))
 	return requestLog(a.requireAuth(mux))

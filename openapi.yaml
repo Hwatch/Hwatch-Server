@@ -26,6 +26,14 @@ paths:
     post: {tags: [Auth], operationId: logout, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/auth/me:
     get: {tags: [Auth], operationId: authMe, responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/auth/avatar:
+    post: {tags: [Auth], operationId: uploadMyAvatar, description: 上传当前用户头像（multipart 字段 file，PNG/JPEG/WebP/GIF，≤6MB）。, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [Auth], operationId: deleteMyAvatar, description: 清除当前用户头像。, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/users/{id}/avatar:
+    post: {tags: [Auth], operationId: uploadUserAvatar, description: 上传指定用户头像（仅管理员）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [Auth], operationId: deleteUserAvatar, description: 清除指定用户头像（仅管理员）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /avatar/user/{id}:
+    get: {tags: [Auth], operationId: userAvatar, description: 用户头像图片（无自定义头像时返回首字母占位图）。, parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/auth/password:
     post: {tags: [Auth], operationId: changeOwnPassword, description: 修改当前登录账号的密码（任意已登录用户）。, parameters: [{$ref: '#/components/parameters/CSRF'}], requestBody: {required: true, content: {application/json: {schema: {type: object, required: [current_password, new_password], properties: {current_password: {type: string}, new_password: {type: string}}}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
   /api/users:
@@ -244,6 +252,9 @@ paths:
     get: {tags: [Subscriptions], operationId: listPlatforms, responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/creators/search:
     get: {tags: [Subscriptions], operationId: searchCreators, parameters: [{name: platform, in: query, schema: {type: string}}, {name: q, in: query, required: true, schema: {type: string}}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
+  /api/subscriptions/{slug}/avatar:
+    post: {tags: [Subscriptions], operationId: uploadSubscriptionAvatar, description: 上传订阅（作者/番剧）自定义头像，覆盖采集到的头像。, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [Subscriptions], operationId: deleteSubscriptionAvatar, description: 清除订阅自定义头像，回退到采集头像。, parameters: [{$ref: '#/components/parameters/Slug'}, {$ref: '#/components/parameters/CSRF'}], responses: {'200': {$ref: '#/components/responses/JSON'}}}
   /api/check:
     post: {tags: [Subscriptions], operationId: checkAll, parameters: [{$ref: '#/components/parameters/CSRF'}], responses: {'202': {$ref: '#/components/responses/JSON'}}}
   /api/check/{slug}:

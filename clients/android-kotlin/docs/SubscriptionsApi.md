@@ -9,12 +9,14 @@ All URIs are relative to *http://localhost*
 | [**checkSubscription**](SubscriptionsApi.md#checkSubscription) | **POST** api/check/{slug} |  |
 | [**createSubscription**](SubscriptionsApi.md#createSubscription) | **POST** api/subscriptions |  |
 | [**deleteSubscription**](SubscriptionsApi.md#deleteSubscription) | **DELETE** api/subscriptions/{slug} |  |
+| [**deleteSubscriptionAvatar**](SubscriptionsApi.md#deleteSubscriptionAvatar) | **DELETE** api/subscriptions/{slug}/avatar |  |
 | [**listPlatforms**](SubscriptionsApi.md#listPlatforms) | **GET** api/platforms |  |
 | [**listSubscriptionLogs**](SubscriptionsApi.md#listSubscriptionLogs) | **GET** api/logs |  |
 | [**listSubscriptions**](SubscriptionsApi.md#listSubscriptions) | **GET** api/subscriptions |  |
 | [**searchCreators**](SubscriptionsApi.md#searchCreators) | **GET** api/creators/search |  |
 | [**subscriptionAvatar**](SubscriptionsApi.md#subscriptionAvatar) | **GET** avatar/{slug} |  |
 | [**updateSubscription**](SubscriptionsApi.md#updateSubscription) | **PATCH** api/subscriptions/{slug} |  |
+| [**uploadSubscriptionAvatar**](SubscriptionsApi.md#uploadSubscriptionAvatar) | **POST** api/subscriptions/{slug}/avatar |  |
 
 
 
@@ -176,6 +178,45 @@ val slug : kotlin.String = slug_example // kotlin.String |
 val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
 
 val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteSubscription(slug, xCSRFToken)
+```
+
+### Parameters
+| **slug** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+
+
+清除订阅自定义头像，回退到采集头像。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
+val slug : kotlin.String = slug_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.deleteSubscriptionAvatar(slug, xCSRFToken)
 ```
 
 ### Parameters
@@ -413,5 +454,44 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.upda
 ### HTTP request headers
 
  - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+
+
+上传订阅（作者/番剧）自定义头像，覆盖采集到的头像。
+
+### Example
+```kotlin
+// Import classes:
+//import app.hwatch.client.*
+//import app.hwatch.client.infrastructure.*
+//import app.hwatch.client.models.*
+
+val apiClient = ApiClient()
+val webService = apiClient.createWebservice(SubscriptionsApi::class.java)
+val slug : kotlin.String = slug_example // kotlin.String | 
+val xCSRFToken : kotlin.String = xCSRFToken_example // kotlin.String | 
+
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.uploadSubscriptionAvatar(slug, xCSRFToken)
+```
+
+### Parameters
+| **slug** | **kotlin.String**|  | |
+| Name | Type | Description  | Notes |
+| ------------- | ------------- | ------------- | ------------- |
+| **xCSRFToken** | **kotlin.String**|  | |
+
+### Return type
+
+[**kotlin.collections.Map&lt;kotlin.String, kotlin.Any&gt;**](kotlin.Any.md)
+
+### Authorization
+
+
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
