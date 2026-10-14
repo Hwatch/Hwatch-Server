@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import NavIcon from './NavIcon.vue'
 import ThemeControl from './components/ThemeControl.vue'
 
@@ -8,11 +8,13 @@ type Backup={name:string;size:number;created_at:string;sha256:string;valid:boole
 type SidebarItems={language:boolean;original:boolean;demo:boolean;aria:boolean}
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
 type API=(path:string,init?:RequestInit)=>Promise<any>
-const props=defineProps<{settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
-const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
+const props=defineProps<{section:string;settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
+const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];'update:section':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
-const toggle=(name:string)=>open.value=open.value===name?'':name
+const toggle=(name:string)=>{open.value=open.value===name?'':name;emit('update:section',open.value)}
+function scrollToSection(name:string){nextTick(()=>document.getElementById('setting-'+name)?.scrollIntoView({behavior:'smooth',block:'start'}))}
+watch(()=>props.section,(v)=>{if(v&&v!==open.value){open.value=v;scrollToSection(v)}})
 const recovery=ref<any>({available:false})
 const trStatus=ref<{configured:boolean;created_at:string;last_used_at:string;scopes:string[]}>({configured:false,created_at:'',last_used_at:'',scopes:[]})
 const trNewToken=ref(''),trBusy=ref(false),trError=ref('')
@@ -26,7 +28,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
 
 <template>
   <div class="settings-page">
-    <section class="setting-card" :class="{open:open==='download'}">
+    <section class="setting-card" :class="{open:open==='download'}" id="setting-download">
       <button class="setting-head" type="button" :aria-expanded="open==='download'" @click="toggle('download')">
         <span class="setting-symbol"><NavIcon name="downloads"/></span><span><b>下载与存储</b><small>管理下载目录、并发、连接和空间限制</small></span><i>⌄</i>
       </button>
@@ -39,7 +41,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </form>
     </section>
 
-    <section class="setting-card" :class="{open:open==='backup'}">
+    <section class="setting-card" :class="{open:open==='backup'}" id="setting-backup">
       <button class="setting-head" type="button" :aria-expanded="open==='backup'" @click="toggle('backup')">
         <span class="setting-symbol"><NavIcon name="library"/></span><span><b>数据库备份与恢复</b><small>将 SQLite 一致性快照保存到 NFS，不重复备份媒体</small></span><i>⌄</i>
       </button>
@@ -64,7 +66,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </div>
     </section>
 
-    <section class="setting-card" :class="{open:open==='network'}">
+    <section class="setting-card" :class="{open:open==='network'}" id="setting-network">
       <button class="setting-head" type="button" :aria-expanded="open==='network'" @click="toggle('network')">
         <span class="setting-symbol"><NavIcon name="network"/></span><span><b>网络与调度</b><small>管理代理、aria2、检查时间和时区</small></span><i>⌄</i>
       </button>
@@ -77,7 +79,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </form>
     </section>
 
-    <section class="setting-card" :class="{open:open==='exclude'}">
+    <section class="setting-card" :class="{open:open==='exclude'}" id="setting-exclude">
       <button class="setting-head" type="button" :aria-expanded="open==='exclude'" @click="toggle('exclude')">
         <span class="setting-symbol"><NavIcon name="exclude"/></span><span><b>自动排除规则</b><small>过滤错误归属、合集和不需要的内容</small></span><i>⌄</i>
       </button>
@@ -90,7 +92,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </form>
     </section>
 
-    <section class="setting-card" :class="{open:open==='display'}">
+    <section class="setting-card" :class="{open:open==='display'}" id="setting-display">
       <button class="setting-head" type="button" :aria-expanded="open==='display'" @click="toggle('display')">
         <span class="setting-symbol"><NavIcon name="demo"/></span><span><b>显示与隐私</b><small>控制页面演示模式和敏感内容显示</small></span><i>⌄</i>
       </button>
@@ -101,7 +103,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </div>
     </section>
 
-    <section class="setting-card" :class="{open:open==='transrunner'}">
+    <section class="setting-card" :class="{open:open==='transrunner'}" id="setting-transrunner">
       <button class="setting-head" type="button" :aria-expanded="open==='transrunner'" @click="toggle('transrunner')">
         <span class="setting-symbol"><NavIcon name="network"/></span><span><b>TransRunner 集成</b><small>为外部计算服务签发受限的回调令牌</small></span><i>⌄</i>
       </button>
@@ -118,7 +120,7 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
       </div>
     </section>
 
-    <section class="setting-card" :class="{open:open==='import'}">
+    <section class="setting-card" :class="{open:open==='import'}" id="setting-import">
       <button class="setting-head" type="button" :aria-expanded="open==='import'" @click="toggle('import')">
         <span class="setting-symbol"><NavIcon name="import"/></span><span><b>数据导入</b><small>粘贴视频详情区域的 HTML 数据</small></span><i>⌄</i>
       </button>

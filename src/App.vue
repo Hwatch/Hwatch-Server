@@ -209,6 +209,20 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
   { id: "translations", label: "翻译管理", desc: "WebAI 翻译导出 / 回导" },
   { id: "logs", label: "日志中心", desc: "订阅检查与任务日志" },
 ];
+const settingsSections = [
+  { id: "download", icon: "downloads", label: "下载与存储" },
+  { id: "backup", icon: "library", label: "数据库备份与恢复" },
+  { id: "network", icon: "network", label: "网络与调度" },
+  { id: "exclude", icon: "exclude", label: "自动排除规则" },
+  { id: "display", icon: "privacy", label: "显示与隐私" },
+  { id: "transrunner", icon: "settings", label: "TransRunner 集成" },
+  { id: "import", icon: "import", label: "数据导入" },
+];
+const settingsSection = ref("download");
+function openSettingsSection(id: string) {
+  settingsSection.value = id;
+  if (view.value !== "settings") changeView("settings");
+}
 const ADVANCED_VIEWS = ["settings", ...managementEntries.map((m) => m.id)];
 const advanced = computed(() => ADVANCED_VIEWS.includes(view.value));
 // Remember the last normal page so the sidebar "back" returns there.
@@ -328,6 +342,9 @@ async function copyLog(log: any) {
       :auth="auth"
       :advanced="advanced"
       :management-entries="managementEntries"
+      :settings-sections="settingsSections"
+      :settings-section="settingsSection"
+      :open-settings-section="openSettingsSection"
       :exit-advanced="exitAdvanced"
       :toggle-group="toggleGroup"
       :change-view="changeView"
@@ -1870,6 +1887,8 @@ async function copyLog(log: any) {
         </div>
         <SettingsView
           v-else
+          :section="settingsSection"
+          @update:section="settingsSection = $event"
           :settings="settings"
           :api="api"
           :busy="settingsBusy"
