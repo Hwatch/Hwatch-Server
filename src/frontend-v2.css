@@ -1053,3 +1053,6 @@ h2 {
 .bottom .sidebar-menu-item span { display: inline; }
 .bottom .sidebar-logout,
 .bottom .sidebar-menu-item { justify-content: flex-start; gap: 10px; }
+.bottom .sidebar-account-menu { display: grid; }
+.bottom .sidebar-account-menu .sidebar-logout,
+.bottom .sidebar-account-menu .sidebar-menu-item { width: 100%; justify-content: flex-start; }
