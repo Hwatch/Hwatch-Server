@@ -1814,9 +1814,8 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
       <button
         v-for="item in [
           { id: 'home', label: '概览' },
-          { id: 'subscriptions', label: '订阅' },
-          { id: 'downloads', label: '下载' },
           { id: 'library', label: '影视库' },
+          { id: 'notifications', label: '通知' },
           { id: 'more', label: '更多' },
         ]"
         :key="item.id"
@@ -1824,9 +1823,7 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
           active:
             view === item.id ||
             (item.id === 'more' &&
-              !['home', 'subscriptions', 'downloads', 'library'].includes(
-                view,
-              )),
+              !['home', 'library', 'notifications'].includes(view)),
         }"
         @click="
           item.id === 'more' ? setSidebarCollapsed(false) : changeView(item.id)
@@ -1835,9 +1832,9 @@ const managementEntries: { id: string; label: string; desc: string }[] = [
         <NavIcon :name="item.id" /><span>{{ item.label }}</span
         ><i
           v-if="
-            item.id === 'downloads' && data.counts.active + data.counts.waiting
+            item.id === 'notifications' && data.unread_notifications
           "
-          >{{ data.counts.active + data.counts.waiting }}</i
+          >{{ data.unread_notifications }}</i
         >
       </button>
     </nav>
