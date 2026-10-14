@@ -62,21 +62,15 @@ defineProps<{
       </template>
       <template v-else><span>H</span><b>HWatch</b></template>
     </div>
-    <nav v-if="advanced" class="side-hub" aria-label="高级管理">
+    <nav v-if="advanced" aria-label="高级管理">
       <button
         v-for="m in managementEntries"
         :key="m.id"
-        type="button"
-        class="management-card"
         :class="{ active: view === m.id }"
         :aria-current="view === m.id ? 'page' : undefined"
         @click="changeView(m.id)"
       >
-        <span class="management-symbol"><NavIcon :name="m.id" /></span>
-        <span class="management-body"
-          ><b>{{ m.label }}</b><small>{{ m.desc }}</small></span
-        >
-        <i class="management-arrow" aria-hidden="true">›</i>
+        <NavIcon :name="m.id" /><span class="nav-text">{{ m.label }}</span>
       </button>
     </nav>
     <nav v-else>
