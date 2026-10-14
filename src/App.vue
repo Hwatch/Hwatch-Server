@@ -454,12 +454,12 @@ function seekShort(e: Event) {
   if (video) video.currentTime = Number(input.value);
 }
 const SHORT_SEEK_SECONDS = 5;
-const shortFlash = ref("");
+const shortFlash = ref<{ main: string; sub?: string } | null>(null);
 let shortFlashTimer: ReturnType<typeof setTimeout> | undefined;
-function flashShort(text: string) {
-  shortFlash.value = text;
+function flashShort(main: string, sub?: string) {
+  shortFlash.value = { main, sub };
   if (shortFlashTimer) clearTimeout(shortFlashTimer);
-  shortFlashTimer = setTimeout(() => (shortFlash.value = ""), 700);
+  shortFlashTimer = setTimeout(() => (shortFlash.value = null), 900);
 }
 function skipBy(video: HTMLVideoElement, delta: number) {
   const max = isFinite(video.duration) && video.duration > 0 ? video.duration : Infinity;
@@ -467,10 +467,11 @@ function skipBy(video: HTMLVideoElement, delta: number) {
 }
 function onShortTap(e: MouseEvent) {
   const video = e.currentTarget as HTMLVideoElement;
+  const timeText = () => `${fmtClock(video.currentTime)} / ${fmtClock(video.duration || 0)}`;
   const toggle = () => {
     if (video.paused) video.play().catch(() => {});
     else video.pause();
-    flashShort(video.paused ? "⏸ 暂停" : "▶ 播放");
+    flashShort(video.paused ? "⏸ 暂停" : "▶ 播放", timeText());
   };
   if (!shortsRotated.value) {
     toggle();
@@ -479,10 +480,10 @@ function onShortTap(e: MouseEvent) {
   const ratio = e.offsetX / (video.clientWidth || 1);
   if (ratio < 0.35) {
     skipBy(video, -SHORT_SEEK_SECONDS);
-    flashShort(`⏪ ${SHORT_SEEK_SECONDS} 秒`);
+    flashShort(`⏪ ${SHORT_SEEK_SECONDS} 秒`, timeText());
   } else if (ratio > 0.65) {
     skipBy(video, SHORT_SEEK_SECONDS);
-    flashShort(`${SHORT_SEEK_SECONDS} 秒 ⏩`);
+    flashShort(`${SHORT_SEEK_SECONDS} 秒 ⏩`, timeText());
   } else {
     toggle();
   }
@@ -1560,7 +1561,10 @@ async function copyLog(log: any) {
               @click="onShortTap"
             ></video>
             <div v-if="shortBuffering[v.video_id]" class="short-buffer">缓冲中…</div>
-            <div v-if="shortFlash" class="short-flash">{{ shortFlash }}</div>
+            <div v-if="shortFlash" class="short-flash">
+              <b>{{ shortFlash.main }}</b>
+              <small v-if="shortFlash.sub">{{ shortFlash.sub }}</small>
+            </div>
             <div class="short-overlay">
               <div class="short-progress">
                 <span class="short-time">{{ fmtClock(shortPos[v.video_id] || 0) }}</span>
