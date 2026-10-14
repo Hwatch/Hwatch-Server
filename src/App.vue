@@ -1397,15 +1397,6 @@ async function copyLog(log: any) {
           </article>
         </div>
       </section>
-      <div v-if="changePasswordOpen" class="modal" @click.self="changePasswordOpen = false">
-        <div class="log-detail" role="dialog" aria-modal="true" aria-label="修改密码">
-          <div class="log-detail-head"><h2>修改密码</h2><button class="close" @click="changePasswordOpen = false">关闭</button></div>
-          <label class="pw-field">当前密码<input v-model="changePw.current" type="password" autocomplete="current-password"></label>
-          <label class="pw-field">新密码<input v-model="changePw.next" type="password" autocomplete="new-password"><small>至少 10 位</small></label>
-          <label class="pw-field">确认新密码<input v-model="changePw.confirm" type="password" autocomplete="new-password"></label>
-          <div class="actions"><button class="primary" :disabled="actionPending('change-password')" @click="submitChangePassword">{{ actionPending("change-password") ? "提交中…" : "提交" }}</button></div>
-        </div>
-      </div>
       <section v-else-if="view === 'logs'">
         <div class="toolbar log-toolbar">
           <select v-model="logsLevel" @change="loadLogs()">
@@ -2065,6 +2056,15 @@ async function copyLog(log: any) {
           v-on:update:import-html="importHTML = $event"
         />
       </section>
+      <div v-if="changePasswordOpen" class="modal" @click.self="changePasswordOpen = false">
+        <div class="log-detail" role="dialog" aria-modal="true" aria-label="修改密码">
+          <div class="log-detail-head"><h2>修改密码</h2><button class="close" @click="changePasswordOpen = false">关闭</button></div>
+          <label class="pw-field">当前密码<input v-model="changePw.current" type="password" autocomplete="current-password"></label>
+          <label class="pw-field">新密码<input v-model="changePw.next" type="password" autocomplete="new-password"><small>至少 10 位</small></label>
+          <label class="pw-field">确认新密码<input v-model="changePw.confirm" type="password" autocomplete="new-password"></label>
+          <div class="actions"><button class="primary" :disabled="actionPending('change-password')" @click="submitChangePassword">{{ actionPending("change-password") ? "提交中…" : "提交" }}</button></div>
+        </div>
+      </div>
     </main>
     <nav class="mobile-tabbar" aria-label="主要导航">
       <button
