@@ -1058,3 +1058,9 @@ h2 {
 .bottom .sidebar-account-menu .sidebar-menu-item { width: 100%; justify-content: flex-start; }
 .rows article .avatar { cursor: pointer; }
 .rows article .avatar:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Player: keep the top actions (close/delete) reachable regardless of video height */
+.player-top-actions { position: sticky; top: 0; z-index: 3; background: var(--surface); padding-bottom: 8px; }
+@media (max-width: 680px) {
+  .player-top-actions { margin-top: -4px; }
+}
