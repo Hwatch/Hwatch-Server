@@ -1686,6 +1686,23 @@ async function copyLog(log: any) {
                     {{ shortsMuted ? "🔇 静音" : "🔊 有声" }}
                   </button>
                   <button @click="selected = v">详情</button>
+                  <select
+                    class="short-select"
+                    :value="shortsWatchedDays"
+                    title="不推送最近看过的"
+                    aria-label="不推送最近看过的"
+                    @change="
+                      setShortsWatchedDays(
+                        Number(($event.target as HTMLSelectElement).value),
+                      )
+                    "
+                  >
+                    <option :value="0">不限</option>
+                    <option :value="1">今天</option>
+                    <option :value="3">3 天</option>
+                    <option :value="7">7 天</option>
+                    <option :value="30">30 天</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -2497,7 +2514,6 @@ async function copyLog(log: any) {
           :import-html="importHTML"
           :demo-mode="demoMode"
           :sidebar-items="sidebarItems"
-          :shorts-watched-days="shortsWatchedDays"
           :backups="backups"
           :backup-directory="backupDirectory"
           :backup-sensitive="backupSensitive"
@@ -2506,7 +2522,6 @@ async function copyLog(log: any) {
           @preview-exclusions="previewExclusions"
           v-on:toggle-demo="toggleDemo"
           v-on:update-sidebar-item="updateSidebarItem"
-          v-on:update-shorts-watched-days="setShortsWatchedDays"
           v-on:save="saveSettings"
           v-on:create-backup="createBackup"
           v-on:restore-backup="restoreBackup"

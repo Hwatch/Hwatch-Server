@@ -10,8 +10,8 @@ type SidebarItemKey='language'|'original'|'demo'|'aria'|'subscriptions'|'downloa
 type SidebarItems=Record<SidebarItemKey,boolean>
 type ExclusionPreview={id:string;title:string;subscriptionSlug:string;reason:string;status:string}
 type API=(path:string,init?:RequestInit)=>Promise<any>
-const props=defineProps<{managementEntries:ManagementEntry[];settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;shortsWatchedDays:number;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
-const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean];updateShortsWatchedDays:[value:number]}>()
+const props=defineProps<{managementEntries:ManagementEntry[];settings:Settings;busy:boolean;settingsBusy:boolean;backupsBusy:boolean;importBusy:boolean;importHtml:string;demoMode:number;sidebarItems:SidebarItems;backups:Backup[];backupDirectory:string;backupSensitive:boolean;exclusionPreview:ExclusionPreview[];exclusionTotal:number;api:API}>()
+const emit=defineEmits<{save:[];previewExclusions:[];import:[];createBackup:[];restoreBackup:[name:string];'update:importHtml':[value:string];toggleDemo:[];updateSidebarItem:[item:keyof SidebarItems,value:boolean]}>()
 const size=(n=0)=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(1)+' KB'
 const open=ref('download')
 const toggle=(name:string)=>open.value=open.value===name?'':name
@@ -101,7 +101,6 @@ onMounted(async()=>{try{const response=await fetch('/api/recovery/latest');if(re
         <div class="display-setting"><span><b>演示模式</b><small>{{demoMode===0?'当前正常显示':demoMode===1?'当前已模糊图片和视频':'当前已隐藏敏感文字并加强模糊'}}</small></span><button :class="{primary:demoMode>0}" @click="emit('toggleDemo')">{{demoMode===0?'开启演示模式':demoMode===1?'进入强演示模式':'关闭演示模式'}}</button></div>
         <div class="sidebar-options"><b>侧栏底部项目</b><small>“设置”入口始终保留，避免隐藏后无法恢复。</small><label><input type="checkbox" :checked="sidebarItems.language" @change="emit('updateSidebarItem','language',($event.target as HTMLInputElement).checked)">语言选择</label><label><input type="checkbox" :checked="sidebarItems.original" @change="emit('updateSidebarItem','original',($event.target as HTMLInputElement).checked)">原文 / 译文切换</label><label><input type="checkbox" :checked="sidebarItems.demo" @change="emit('updateSidebarItem','demo',($event.target as HTMLInputElement).checked)">演示模式快捷按钮</label><label><input type="checkbox" :checked="sidebarItems.aria" @change="emit('updateSidebarItem','aria',($event.target as HTMLInputElement).checked)">aria2 在线状态</label></div>
         <div class="sidebar-options"><b>主页侧栏快捷入口</b><small>勾选后把高级管理里的入口显示在主页侧栏导航中，方便直达。</small><label v-for="m in managementEntries" :key="m.id"><input type="checkbox" :checked="sidebarItems[m.id as SidebarItemKey]" @change="emit('updateSidebarItem',m.id as SidebarItemKey,($event.target as HTMLInputElement).checked)">{{ m.label }}</label></div>
-        <div class="sidebar-options"><b>随机浏览</b><small>随机视频流不推送最近看过的内容（按设置的时区自然日计算）。</small><label>最近看过的视频<select :value="shortsWatchedDays" @change="emit('updateShortsWatchedDays',Number(($event.target as HTMLSelectElement).value))"><option :value="0">不限</option><option :value="1">今天</option><option :value="3">3 天</option><option :value="7">7 天</option><option :value="30">30 天</option></select></label></div>
       </div>
     </section>
 

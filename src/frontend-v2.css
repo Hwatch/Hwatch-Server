@@ -1088,7 +1088,9 @@ h2 {
 .short { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; background: #000; overflow: hidden; }
 .short video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; cursor: pointer; }
 .short-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; background: linear-gradient(to top, rgba(0,0,0,.8), rgba(0,0,0,.32) 58%, transparent); pointer-events: none; }
-.short-overlay button, .short-overlay input { pointer-events: auto; }
+.short-overlay button, .short-overlay input, .short-overlay select { pointer-events: auto; }
+.short-select { appearance: none; -webkit-appearance: none; background: rgba(0, 0, 0, .55); color: #fff; border: 1px solid rgba(255, 255, 255, .28); border-radius: 8px; padding: 6px 22px 6px 10px; font-size: 13px; line-height: 1.2; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, #fff 50%), linear-gradient(135deg, #fff 50%, transparent 50%); background-position: calc(100% - 13px) center, calc(100% - 8px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.short-select option { color: #111; }
 .short-rotate-exit { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 80; padding: 9px 15px; border-radius: 999px; background: rgba(0, 0, 0, .72); color: #fff; border: 1px solid rgba(255, 255, 255, .32); font-size: 13px; }
 .short-buffer { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 13px; pointer-events: none; }
 .short-flash { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 8px 16px; border-radius: 10px; background: rgba(0, 0, 0, .66); color: #fff; font-size: 15px; font-weight: 600; text-align: center; pointer-events: none; }
