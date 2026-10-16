@@ -167,6 +167,8 @@ const {
   shortsError,
   shortsBusy,
   loadShorts,
+  shortsWatchedDays,
+  setShortsWatchedDays,
   users,
   usersError,
   loadUsers,
@@ -2495,6 +2497,7 @@ async function copyLog(log: any) {
           :import-html="importHTML"
           :demo-mode="demoMode"
           :sidebar-items="sidebarItems"
+          :shorts-watched-days="shortsWatchedDays"
           :backups="backups"
           :backup-directory="backupDirectory"
           :backup-sensitive="backupSensitive"
@@ -2503,6 +2506,7 @@ async function copyLog(log: any) {
           @preview-exclusions="previewExclusions"
           v-on:toggle-demo="toggleDemo"
           v-on:update-sidebar-item="updateSidebarItem"
+          v-on:update-shorts-watched-days="setShortsWatchedDays"
           v-on:save="saveSettings"
           v-on:create-backup="createBackup"
           v-on:restore-backup="restoreBackup"

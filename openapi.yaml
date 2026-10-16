@@ -137,6 +137,7 @@ paths:
         - {name: creator, in: query, schema: {type: string}}
         - {name: codec, in: query, schema: {type: string}}
         - {name: min_height, in: query, schema: {type: integer}}
+        - {name: exclude_watched_days, in: query, schema: {type: integer, minimum: 0, maximum: 365, default: 0}, description: 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤}
         - {$ref: '#/components/parameters/Language'}
       responses: {'200': {$ref: '#/components/responses/JSON'}, '400': {$ref: '#/components/responses/Error'}}
   /api/tasks:

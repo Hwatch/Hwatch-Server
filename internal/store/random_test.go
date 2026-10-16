@@ -148,3 +148,31 @@ func TestRandomVideosLimitAndExcludeBounds(t *testing.T) {
 		t.Fatalf("oversized exclude list mishandled: %v", randomIDs(items))
 	}
 }
+
+// TestRandomVideosExcludesRecentlyWatched covers the time-window exclusion used
+// by the random discovery feed: anything watched at/after the cutoff is hidden,
+// older watch events are ignored.
+func TestRandomVideosExcludesRecentlyWatched(t *testing.T) {
+	s := newLibraryStore(t)
+	for _, id := range []string{"rule34video:1", "rule34video:2", "rule34video:3"} {
+		seedLibraryVideo(t, s, id, "rule34video", "completed", "https://img/x.jpg")
+	}
+	if _, err := s.DB.Exec("INSERT INTO watch_events(video_id,watched_at) VALUES(?,?)", "rule34video:1", Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec("INSERT INTO watch_events(video_id,watched_at) VALUES(?,?)", "rule34video:2", "2000-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := s.RandomVideos(50, VideoSearch{Language: "zh-CN", WatchedSince: "2020-01-01T00:00:00Z"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := randomIDs(items)
+	if ids["rule34video:1"] {
+		t.Fatalf("recently watched video surfaced: %v", ids)
+	}
+	if !ids["rule34video:2"] || !ids["rule34video:3"] {
+		t.Fatalf("older/unwatched videos should remain: %v", ids)
+	}
+}

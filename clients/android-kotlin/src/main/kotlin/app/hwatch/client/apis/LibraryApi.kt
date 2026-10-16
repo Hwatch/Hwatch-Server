@@ -111,11 +111,12 @@ interface LibraryApi {
      * @param creator  (optional)
      * @param codec  (optional)
      * @param minHeight  (optional)
+     * @param excludeWatchedDays 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤 (optional, default to 0)
      * @param language  (optional, default to "zh-CN")
      * @return [Call]<[kotlin.collections.Map<kotlin.String, kotlin.Any>]>
      */
     @GET("api/library/random")
-    fun libraryRandom(@Query("limit") limit: kotlin.Int? = 6, @Query("exclude") exclude: kotlin.String? = null, @Query("q") q: kotlin.String? = null, @Query("scope") scope: ScopeLibraryRandom? = null, @Query("tags") tags: kotlin.String? = null, @Query("exclude_tags") excludeTags: kotlin.String? = null, @Query("tag_mode") tagMode: TagModeLibraryRandom? = null, @Query("creator") creator: kotlin.String? = null, @Query("codec") codec: kotlin.String? = null, @Query("min_height") minHeight: kotlin.Int? = null, @Query("language") language: kotlin.String? = "zh-CN"): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
+    fun libraryRandom(@Query("limit") limit: kotlin.Int? = 6, @Query("exclude") exclude: kotlin.String? = null, @Query("q") q: kotlin.String? = null, @Query("scope") scope: ScopeLibraryRandom? = null, @Query("tags") tags: kotlin.String? = null, @Query("exclude_tags") excludeTags: kotlin.String? = null, @Query("tag_mode") tagMode: TagModeLibraryRandom? = null, @Query("creator") creator: kotlin.String? = null, @Query("codec") codec: kotlin.String? = null, @Query("min_height") minHeight: kotlin.Int? = null, @Query("exclude_watched_days") excludeWatchedDays: kotlin.Int? = 0, @Query("language") language: kotlin.String? = "zh-CN"): Call<kotlin.collections.Map<kotlin.String, kotlin.Any>>
 
     /**
      * GET api/media-integrity/plans

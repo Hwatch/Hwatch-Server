@@ -203,9 +203,10 @@ val tagMode : kotlin.String = tagMode_example // kotlin.String |
 val creator : kotlin.String = creator_example // kotlin.String | 
 val codec : kotlin.String = codec_example // kotlin.String | 
 val minHeight : kotlin.Int = 56 // kotlin.Int | 
+val excludeWatchedDays : kotlin.Int = 56 // kotlin.Int | 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤
 val language : kotlin.String = language_example // kotlin.String | 
 
-val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.libraryRandom(limit, exclude, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, language)
+val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.libraryRandom(limit, exclude, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, excludeWatchedDays, language)
 ```
 
 ### Parameters
@@ -219,6 +220,7 @@ val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = webService.libr
 | **creator** | **kotlin.String**|  | [optional] |
 | **codec** | **kotlin.String**|  | [optional] |
 | **minHeight** | **kotlin.Int**|  | [optional] |
+| **excludeWatchedDays** | **kotlin.Int**| 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤 | [optional] [default to 0] |
 | Name | Type | Description  | Notes |
 | ------------- | ------------- | ------------- | ------------- |
 | **language** | **kotlin.String**|  | [optional] [default to &quot;zh-CN&quot;] |

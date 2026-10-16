@@ -401,6 +401,22 @@ func csvValues(raw string) []string {
 	return out
 }
 
+// watchedCutoff returns the RFC 3339 UTC instant at the start of the local day
+// `days-1` days ago, so a value of N means "the last N calendar days including
+// today" in the configured timezone.
+func watchedCutoff(days int, timezone string) string {
+	if days <= 0 {
+		return ""
+	}
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -(days - 1))
+	return start.UTC().Format(time.RFC3339)
+}
+
 // libraryRandom serves a small, uniformly random sample of library media for
 // the "random discovery" panel. It is read-only: it reuses the library filter
 // semantics, never touches the database rows, never scans the NAS and never
@@ -422,6 +438,10 @@ func (a *App) libraryRandom(w http.ResponseWriter, r *http.Request) {
 		Tags:        csvValues(values.Get("tags")),
 		ExcludeTags: csvValues(values.Get("exclude_tags")),
 		MinHeight:   intParam(r, "min_height", 0, 0, 10000),
+	}
+	if days := intParam(r, "exclude_watched_days", 0, 0, 365); days > 0 {
+		cfg, _ := a.store.Settings()
+		opts.WatchedSince = watchedCutoff(days, cfg.Timezone)
 	}
 	exclude := csvValues(values.Get("exclude"))
 	if len(exclude) > store.MaxRandomExcludeIDs {

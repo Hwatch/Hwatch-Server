@@ -1087,6 +1087,15 @@ export function useHWatchApp() {
   const shortsError = ref("");
   const shortsBusy = ref(false);
   let shortSeq = 0;
+  // Random feed watched-window preference (calendar days, 0 = off).
+  const shortsWatchedDays = ref(
+    Math.max(0, Number(localStorage.getItem("hwatch-shorts-watched-days") || 0) || 0),
+  );
+  function setShortsWatchedDays(days: number) {
+    shortsWatchedDays.value = Math.max(0, Math.min(365, Math.floor(days) || 0));
+    localStorage.setItem("hwatch-shorts-watched-days", String(shortsWatchedDays.value));
+    if (view.value === "shorts") void loadShorts(false);
+  }
   async function loadShorts(append = false) {
     if (shortsBusy.value) return;
     shortsBusy.value = true;
@@ -1097,6 +1106,8 @@ export function useHWatchApp() {
           limit: "8",
           language: translationLanguage.value,
         });
+        if (shortsWatchedDays.value > 0)
+          p.set("exclude_watched_days", String(shortsWatchedDays.value));
         if (exclude && shorts.value.length)
           p.set(
             "exclude",
@@ -2321,6 +2332,8 @@ export function useHWatchApp() {
     shortsError,
     shortsBusy,
     loadShorts,
+    shortsWatchedDays,
+    setShortsWatchedDays,
     timeline,
     timelineTotal,
     timelineError,

@@ -1899,6 +1899,8 @@ export interface operations {
                 creator?: string;
                 codec?: string;
                 min_height?: number;
+                /** @description 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤 */
+                exclude_watched_days?: number;
                 language?: components["parameters"]["Language"];
             };
             header?: never;

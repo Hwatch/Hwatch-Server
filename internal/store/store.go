@@ -54,6 +54,9 @@ type VideoSearch struct {
 	Status, Query, Scope, Language, TagMode, Creator, Codec, Sort, Order string
 	Tags, ExcludeTags                                                    []string
 	MinHeight                                                            int
+	// WatchedSince, when set (RFC 3339 UTC), excludes videos with a watch
+	// event at or after this instant.
+	WatchedSince string
 }
 type VideoFacet struct {
 	Value string `json:"value"`
@@ -112,6 +115,7 @@ const schema = "PRAGMA journal_mode=WAL;" +
 	"CREATE TABLE IF NOT EXISTS playback_history (video_id TEXT PRIMARY KEY,play_count INTEGER NOT NULL DEFAULT 1,last_played_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE TABLE IF NOT EXISTS watch_events (id INTEGER PRIMARY KEY AUTOINCREMENT,video_id TEXT NOT NULL,watched_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
 	"CREATE INDEX IF NOT EXISTS idx_watch_events_time ON watch_events(watched_at DESC);" +
+	"CREATE INDEX IF NOT EXISTS idx_watch_events_video ON watch_events(video_id,watched_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,fingerprint TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT '');" +
 	"CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);" +
 	"CREATE TABLE IF NOT EXISTS media_fingerprints (video_id TEXT PRIMARY KEY,page_url_normalized TEXT NOT NULL DEFAULT '',cover_hash TEXT NOT NULL DEFAULT '',duration_seconds INTEGER NOT NULL DEFAULT 0,file_size INTEGER NOT NULL DEFAULT 0,quick_hash TEXT NOT NULL DEFAULT '',sha256 TEXT NOT NULL DEFAULT '',hash_status TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,FOREIGN KEY(video_id) REFERENCES videos(id) ON DELETE CASCADE);" +
@@ -562,6 +566,10 @@ func videoSearchWhere(opts VideoSearch) (string, []any) {
 	if opts.MinHeight > 0 {
 		where += " AND v.height>=?"
 		args = append(args, opts.MinHeight)
+	}
+	if opts.WatchedSince != "" {
+		where += " AND NOT EXISTS(SELECT 1 FROM watch_events w WHERE w.video_id=v.id AND w.watched_at>=?)"
+		args = append(args, opts.WatchedSince)
 	}
 	if len(opts.Tags) > 0 {
 		parts := []string{}

@@ -80,8 +80,9 @@ class LibraryApiTest : ShouldSpec() {
             //val creator : kotlin.String = creator_example // kotlin.String | 
             //val codec : kotlin.String = codec_example // kotlin.String | 
             //val minHeight : kotlin.Int = 56 // kotlin.Int | 
+            //val excludeWatchedDays : kotlin.Int = 56 // kotlin.Int | 大于 0 时排除最近 N 个自然日内（按设置时区）观看过的视频；0 表示不过滤
             //val language : kotlin.String = language_example // kotlin.String | 
-            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.libraryRandom(limit, exclude, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, language)
+            //val result : kotlin.collections.Map<kotlin.String, kotlin.Any> = apiInstance.libraryRandom(limit, exclude, q, scope, tags, excludeTags, tagMode, creator, codec, minHeight, excludeWatchedDays, language)
             //result shouldBe ("TODO")
         }
 

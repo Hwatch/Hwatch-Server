@@ -115,3 +115,24 @@ func TestExclusionReason(t *testing.T) {
 		t.Fatalf("expected allowed video, got %q", got)
 	}
 }
+
+func TestWatchedCutoff(t *testing.T) {
+	if got := watchedCutoff(0, "Asia/Shanghai"); got != "" {
+		t.Fatalf("days=0 cutoff = %q, want empty", got)
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, days := range []int{1, 3, 7, 30} {
+		cutoff, perr := time.Parse(time.RFC3339, watchedCutoff(days, "Asia/Shanghai"))
+		if perr != nil {
+			t.Fatalf("days=%d parse: %v", days, perr)
+		}
+		start := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -(days - 1))
+		if !cutoff.Equal(start.UTC()) {
+			t.Fatalf("days=%d cutoff = %s, want %s", days, cutoff, start.UTC())
+		}
+	}
+}

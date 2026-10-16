@@ -248,6 +248,7 @@ GET /api/videos?status=completed&language=zh-CN&q=银狼&scope=all&tags=iwara,so
 | `exclude` | 逗号分隔的 `video_id`，用于连续换一批时降低重复；最多 200 个 |
 | `q` | 复用 `/api/videos` 的搜索语义 |
 | `scope` / `tags` / `tag_mode` / `exclude_tags` / `creator` / `codec` / `min_height` | 复用 `/api/videos` 的筛选语义 |
+| `exclude_watched_days` | 0–365，默认 0。大于 0 时排除最近 N 个自然日内（按设置时区、含今天）观看过的视频，用于「随机浏览不推送最近看过的」；0 表示不过滤 |
 
 不传筛选参数时覆盖整个影视库；传入时随机范围收窄到当前有效筛选范围。响应中的 `items` 与 `/api/videos` 的 Video 结构一致。
 
