@@ -450,6 +450,11 @@ function onShortPlaying(v: any, e: Event) {
 }
 const activeShort = ref(-1);
 const shortBuffering = ref<Record<string, boolean>>({});
+function shortSrc(i: number, v: any): string | undefined {
+  return Math.abs(i - activeShort.value) <= 1
+    ? "/media/" + v.video_id
+    : undefined;
+}
 function primeShort(idx: number) {
   if (idx < 0) return;
   const video = document.querySelector(`.short[data-index="${idx}"] video`) as HTMLVideoElement | null;
@@ -482,10 +487,15 @@ function ensureShortsObserver() {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
           const idx = Number((entry.target as HTMLElement).dataset.index || 0);
           activeShort.value = idx;
-          video.preload = "auto";
-          if (video.readyState === 0) video.load();
-          video.play().catch(() => {});
-          primeShort(idx + 1);
+          nextTick(() => {
+            const el = document.querySelector(
+              `.short[data-index="${idx}"] video`,
+            ) as HTMLVideoElement | null;
+            if (!el) return;
+            if (el.readyState === 0) el.load();
+            el.play().catch(() => {});
+            primeShort(idx + 1);
+          });
           trimShorts();
           if (idx >= shorts.value.length - 2) {
             void loadShorts(true).then(() => nextTick(trimShorts));
@@ -505,7 +515,9 @@ function registerShort(el: unknown, i: number) {
   shortsObserver?.observe(el as Element);
 }
 function onShortError(e: Event) {
-  const slide = (e.currentTarget as HTMLVideoElement).closest(".short") as HTMLElement | null;
+  const el = e.currentTarget as HTMLVideoElement;
+  if (!el.getAttribute("src")) return;
+  const slide = el.closest(".short") as HTMLElement | null;
   if (!slide) return;
   const idx = Number(slide.dataset.index ?? -1);
   if (idx >= 0) shorts.value.splice(idx, 1);
@@ -1622,11 +1634,11 @@ async function copyLog(log: any) {
             :ref="(el) => registerShort(el, i)"
           >
             <video
-              :src="'/media/' + v.video_id"
+              :src="shortSrc(i, v)"
               :muted="shortsMuted"
               playsinline
               loop
-              :preload="Math.abs(i - activeShort) <= 1 ? 'auto' : 'none'"
+              :preload="i === activeShort || i === activeShort + 1 ? 'auto' : 'none'"
               @error="onShortError"
               @loadedmetadata="onShortMeta(v, $event)"
               @waiting="shortBuffering[v.video_id] = true"
