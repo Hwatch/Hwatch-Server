@@ -109,12 +109,83 @@ func (Hanime1) EnrichSubscription(ctx context.Context, sub store.Subscription, p
 	return sub
 }
 
-func (Hanime1) ListVideos(ctx context.Context, sub store.Subscription, proxy string) ([]store.Video, error) {
-	page, err := hanimeFetch(ctx, sub.URL, proxy)
+// hanimeMaxListingPages bounds how many listing pages a single check walks so a
+// large creator cannot make the check run unbounded.
+const hanimeMaxListingPages = 30
+
+// hanimeListingURL returns the listing URL for a given page. The first page
+// drops any page parameter so the canonical newest-first listing is used.
+func hanimeListingURL(raw string, page int) (string, error) {
+	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return hanimeParseListing(page, sub)
+	q := u.Query()
+	if page <= 1 {
+		q.Del("page")
+	} else {
+		q.Set("page", strconv.Itoa(page))
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// ListVideos walks the listing pages (`?page=N`) and merges them, since hanime1
+// only shows one page of a creator/playlist at a time. Pagination stops on the
+// first page that adds no new items (empty, repeated or past the end).
+func (Hanime1) ListVideos(ctx context.Context, sub store.Subscription, proxy string) ([]store.Video, error) {
+	base, err := url.Parse(sub.URL)
+	if err != nil {
+		return nil, store.ErrInvalidSource
+	}
+	seen := map[string]bool{}
+	out := make([]store.Video, 0, 64)
+	for page := 1; page <= hanimeMaxListingPages; page++ {
+		if page > 1 {
+			select {
+			case <-ctx.Done():
+				return out, nil
+			case <-time.After(350 * time.Millisecond):
+			}
+		}
+		listURL, urlErr := hanimeListingURL(base.String(), page)
+		if urlErr != nil {
+			if page == 1 {
+				return nil, urlErr
+			}
+			break
+		}
+		body, fetchErr := hanimeFetch(ctx, listURL, proxy)
+		if fetchErr != nil {
+			if page == 1 {
+				return nil, fetchErr
+			}
+			break
+		}
+		items, parseErr := hanimeParseListing(body, sub)
+		if parseErr != nil {
+			if page == 1 {
+				return nil, parseErr
+			}
+			break
+		}
+		added := 0
+		for _, it := range items {
+			if it.SourceID == "" || seen[it.SourceID] {
+				continue
+			}
+			seen[it.SourceID] = true
+			out = append(out, it)
+			added++
+		}
+		if added == 0 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil, &collector.TemplateError{Platform: "hanime1", Reason: "未解析出任何视频卡片（playlist-video-card / video-item-container 结构可能改变）"}
+	}
+	return out, nil
 }
 
 func hanimeParseListing(page string, sub store.Subscription) ([]store.Video, error) {

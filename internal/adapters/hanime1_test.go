@@ -69,6 +69,32 @@ func TestHanime1ParseListing(t *testing.T) {
 	}
 }
 
+func TestHanime1ListingURLPages(t *testing.T) {
+	base := "https://hanime1.me/user/609454/uploaded?sort=latest"
+	first, err := hanimeListingURL(base, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != "https://hanime1.me/user/609454/uploaded?sort=latest" {
+		t.Fatalf("page 1 = %q", first)
+	}
+	third, err := hanimeListingURL(base, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third != "https://hanime1.me/user/609454/uploaded?page=3&sort=latest" {
+		t.Fatalf("page 3 = %q", third)
+	}
+	withPage := "https://hanime1.me/user/609454/uploaded?page=3"
+	back, err := hanimeListingURL(withPage, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back != "https://hanime1.me/user/609454/uploaded" {
+		t.Fatalf("page param not dropped: %q", back)
+	}
+}
+
 // TestHanime1ListingTemplateChange ensures a changed or anti-bot page yields a
 // loud TemplateError rather than a silent empty listing.
 func TestHanime1ListingTemplateChange(t *testing.T) {
