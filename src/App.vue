@@ -457,6 +457,20 @@ function primeShort(idx: number) {
   video.preload = "auto";
   if (video.readyState === 0) video.load();
 }
+// iOS limits the number of live media elements (~16); recycle slides behind
+// the active one so the feed keeps only a small window.
+function trimShorts() {
+  const feed = shortsFeed.value;
+  if (!feed) return;
+  const removeCount = Math.min(activeShort.value - 2, shorts.value.length - 12);
+  if (removeCount <= 0) return;
+  const slideHeight = feed.clientHeight;
+  shorts.value.splice(0, removeCount);
+  activeShort.value -= removeCount;
+  nextTick(() => {
+    if (shortsFeed.value) shortsFeed.value.scrollTop -= removeCount * slideHeight;
+  });
+}
 let shortsObserver: IntersectionObserver | null = null;
 function ensureShortsObserver() {
   if (shortsObserver || typeof IntersectionObserver === "undefined") return;
@@ -472,7 +486,10 @@ function ensureShortsObserver() {
           if (video.readyState === 0) video.load();
           video.play().catch(() => {});
           primeShort(idx + 1);
-          if (idx >= shorts.value.length - 2) void loadShorts(true);
+          trimShorts();
+          if (idx >= shorts.value.length - 2) {
+            void loadShorts(true).then(() => nextTick(trimShorts));
+          }
         } else {
           video.pause();
         }
@@ -1600,7 +1617,7 @@ async function copyLog(log: any) {
         <div ref="shortsFeed" class="shorts-feed" :class="{ rotated: shortsRotated }">
           <div
             v-for="(v, i) in shorts"
-            :key="'short-' + i + ':' + v.video_id"
+            :key="v._k"
             class="short"
             :ref="(el) => registerShort(el, i)"
           >

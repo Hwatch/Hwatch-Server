@@ -1086,6 +1086,7 @@ export function useHWatchApp() {
   const shorts = ref<any[]>([]);
   const shortsError = ref("");
   const shortsBusy = ref(false);
+  let shortSeq = 0;
   async function loadShorts(append = false) {
     if (shortsBusy.value) return;
     shortsBusy.value = true;
@@ -1113,6 +1114,7 @@ export function useHWatchApp() {
         const retry = await api("/api/library/random?" + buildParams(false));
         items = retry.items || [];
       }
+      items = items.map((it: any) => ({ ...it, _k: ++shortSeq }));
       shorts.value = append ? shorts.value.concat(items) : items;
     } catch (e) {
       shortsError.value = String(e).replace(/^Error:\s*/, "");
